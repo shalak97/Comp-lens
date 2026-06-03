@@ -1,18 +1,11 @@
-"""
-Comp-Lens — Vercel Python entrypoint.
-
-Place this file at the REPOSITORY ROOT as `index.py`.
-Vercel's Python runtime auto-detects a top-level variable named `app`.
-Do NOT use Mangum — that's an AWS Lambda adapter and will break the build.
-No vercel.json is required for this to work.
-"""
-
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 import uuid
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 app = FastAPI(
@@ -24,37 +17,49 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # same-origin in practice; "*" is fine for a demo
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+_HTML = (Path(__file__).parent / "public" / "index.html").read_text()
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ── Dashboard ──────────────────────────────────────────────────────────────
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard():
+    return _HTML
+
+
+# ── Health ─────────────────────────────────────────────────────────────────
 @app.get("/api/health/live")
 async def liveness():
     return {"status": "alive", "platform": "Vercel", "time": _now()}
 
 
+# ── Root ───────────────────────────────────────────────────────────────────
 @app.get("/api")
 async def root():
     return {
         "service": "Comp-Lens GRC Platform",
         "version": "2.0.0",
-        "endpoints": ["/api/health/live", "/api/controls", "/api/connectors",
-                      "/api/assessments", "/api/findings", "/api/summary", "/api/docs"],
+        "endpoints": [
+            "/api/health/live", "/api/controls", "/api/connectors",
+            "/api/assessments", "/api/findings", "/api/summary", "/api/docs",
+        ],
     }
 
 
+# ── Controls ───────────────────────────────────────────────────────────────
 @app.get("/api/controls")
 async def controls(framework: Optional[str] = None):
     data = [
-        {"control_id": "SC-7",   "title": "No public exposure",      "frameworks": ["NIST", "ISO27001", "SOC2"]},
-        {"control_id": "SC-28",  "title": "Encryption at rest",      "frameworks": ["NIST", "ISO27001"]},
-        {"control_id": "AC-2-7", "title": "Privileged account MFA",  "frameworks": ["NIST", "SOC2"]},
+        {"control_id": "SC-7",   "title": "No public exposure",     "frameworks": ["NIST", "ISO27001", "SOC2"]},
+        {"control_id": "SC-28",  "title": "Encryption at rest",     "frameworks": ["NIST", "ISO27001"]},
+        {"control_id": "AC-2-7", "title": "Privileged account MFA", "frameworks": ["NIST", "SOC2"]},
     ]
     if framework:
         fw = framework.upper()
@@ -62,6 +67,7 @@ async def controls(framework: Optional[str] = None):
     return data
 
 
+# ── Connectors ─────────────────────────────────────────────────────────────
 @app.get("/api/connectors")
 async def connectors():
     return [
@@ -71,8 +77,7 @@ async def connectors():
     ]
 
 
-# POST body must be a model (or Body(...)) — bare args become QUERY params and
-# the JSON the browser sends is silently ignored. This was the original bug.
+# ── Assessments ────────────────────────────────────────────────────────────
 class AssessmentRequest(BaseModel):
     tenant_id: str = "default"
     control_id: str = "SC-7"
@@ -96,13 +101,21 @@ async def run_assessment(req: AssessmentRequest):
     }
 
 
+# ── Findings ───────────────────────────────────────────────────────────────
 @app.get("/api/findings")
 async def findings(tenant_id: str = "default"):
-    items = [{"id": "f-001", "control_id": "SC-7", "status": "OPEN", "severity": "HIGH"}]
-    return {"tenant_id": tenant_id, "findings": items,
-            "summary": {"total": len(items), "high": 1, "medium": 0, "low": 0, "critical": 0}}
+    items = [
+        {"id": "f-001", "control_id": "SC-7",  "status": "OPEN", "severity": "HIGH"},
+        {"id": "f-002", "control_id": "AC-2-7","status": "OPEN", "severity": "CRITICAL"},
+    ]
+    return {
+        "tenant_id": tenant_id,
+        "findings": items,
+        "summary": {"total": 2, "critical": 1, "high": 1, "medium": 0, "low": 0},
+    }
 
 
+# ── Summary ────────────────────────────────────────────────────────────────
 @app.get("/api/summary")
 async def summary(tenant_id: str = "default", framework: Optional[str] = None):
     return {
