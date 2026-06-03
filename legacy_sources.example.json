@@ -1,0 +1,55 @@
+[
+  {
+    "name": "mainframe-hr",
+    "type": "sql",
+    "url": "oracle+oracledb://readonly:pw@mainframe:1521/?service_name=HR",
+    "query": "SELECT mfa_flag, last_login, dept FROM users WHERE user_id = :asset_id",
+    "discovery_query": "SELECT user_id FROM users WHERE active = 'Y'",
+    "key_column": "user_id",
+    "field_map": {
+      "mfa_enforced":          {"from": "mfa_flag",   "coerce": "bool", "truthy": ["Y", "1"]},
+      "days_since_last_login": {"from": "last_login", "coerce": "days_since"},
+      "owner":                 {"from": "dept"}
+    }
+  },
+  {
+    "name": "host-export",
+    "type": "file",
+    "url": "sftp://svc@filedrop.corp:22/exports/hosts.csv",
+    "format": "csv",
+    "key_column": "hostname",
+    "field_map": { "disk_encrypted": {"from": "luks_on", "coerce": "bool", "truthy": ["yes", "true"]} }
+  },
+  {
+    "name": "fixed-width-batch",
+    "type": "file",
+    "url": "file:///data/legacy/audit.txt",
+    "format": "fixed",
+    "key_column": "id",
+    "fields": [
+      {"name": "id",      "start": 0,  "length": 10},
+      {"name": "logging", "start": 10, "length": 1}
+    ],
+    "field_map": { "logging_enabled": {"from": "logging", "coerce": "bool", "truthy": ["1"]} }
+  },
+  {
+    "name": "legacy-soap-svc",
+    "type": "soap",
+    "url": "https://legacy.corp/services/UserService",
+    "soap_action": "urn:GetUser",
+    "template": "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><GetUser xmlns=\"urn:hr\"><id>{asset_id}</id></GetUser></soap:Body></soap:Envelope>",
+    "namespaces": { "ns": "urn:hr" },
+    "field_paths": { "mfa": ".//{urn:hr}MfaEnabled" },
+    "field_map": { "mfa_enforced": {"from": "mfa", "coerce": "bool"} }
+  },
+  {
+    "name": "corp-ldap",
+    "type": "ldap",
+    "url": "ldap://dc01.corp:389",
+    "bind_dn": "CN=svc-grc,OU=Service,DC=corp,DC=com",
+    "bind_pw": "set-via-secret",
+    "base_dn": "OU=Users,DC=corp,DC=com",
+    "filter": "(sAMAccountName={asset_id})",
+    "field_map": { "days_since_last_login": {"from": "lastLogonTimestamp", "coerce": "days_since"} }
+  }
+]

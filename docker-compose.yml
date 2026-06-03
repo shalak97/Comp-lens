@@ -1,0 +1,30 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgresql+psycopg://complens:complens@db:5432/complens
+      EVIDENCE_BACKEND: local
+      # Add connector credentials here or via a .env file:
+      # AWS_REGION: us-east-1
+      # GITHUB_TOKEN: ...
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: complens
+      POSTGRES_PASSWORD: complens
+      POSTGRES_DB: complens
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
