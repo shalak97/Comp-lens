@@ -1,22 +1,2 @@
-# Core API
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-pydantic>=2.6.0
-pydantic-settings>=2.2.0
-
-# Database + migrations
-SQLAlchemy>=2.0.0
-psycopg[binary]>=3.1.0
-alembic>=1.13.0
-
-# HTTP + resilience
-requests>=2.31.0
-tenacity>=8.2.0
-
-# Reporting
-reportlab>=4.0.0
-
-# Connectors (install only what you use)
-boto3>=1.34.0
-paramiko>=3.4.0
-google-cloud-storage>=2.16.0
+fastapi
+pydantic

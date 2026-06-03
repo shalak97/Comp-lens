@@ -1,434 +1,89 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Comp-Lens | GRC Platform</title>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #0a0e1a; --surface: #111827; --surface2: #1a2235;
-      --border: #1e2d45; --accent: #00d4ff; --green: #00e676;
-      --amber: #ffab40; --red: #ff5252; --text: #e0e8f0; --muted: #5a7290;
-      --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
-
-    nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px;
-      border-bottom: 1px solid var(--border); position: sticky; top: 0;
-      background: rgba(10,14,26,.95); backdrop-filter: blur(12px); z-index: 100; flex-wrap: wrap; gap: 10px; }
-    .logo { font-family: var(--mono); font-size: 1rem; font-weight: 600; color: var(--accent); letter-spacing: .1em; }
-    .nav-tabs { display: flex; gap: 4px; }
-    .tab-btn { font-family: var(--mono); font-size: .75rem; padding: 7px 16px; border-radius: 6px;
-      border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; letter-spacing: .06em; transition: all .2s; }
-    .tab-btn:hover { color: var(--text); border-color: var(--border); }
-    .tab-btn.active { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
-    .api-status { font-family: var(--mono); font-size: .72rem; display: flex; align-items: center; gap: 6px; color: var(--muted); }
-    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-    .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    .status-dot.offline { background: var(--red); }
-
-    .view { display: none; } .view.active { display: block; }
-
-    /* LANDING */
-    .landing { max-width: 900px; margin: 0 auto; padding: 70px 28px 60px; }
-    .hero-tag { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; opacity: .8; }
-    h1 { font-family: var(--mono); font-size: clamp(1.7rem, 4vw, 2.8rem); font-weight: 600; line-height: 1.15; margin-bottom: 18px; letter-spacing: -.01em; }
-    h1 .hl { color: var(--accent); }
-    .hero-desc { font-size: 1rem; color: #7a95b0; max-width: 600px; line-height: 1.7; margin-bottom: 36px; }
-    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 56px; }
-    .btn { font-family: var(--mono); font-size: .78rem; letter-spacing: .06em; padding: 10px 20px; border-radius: 6px;
-      border: none; cursor: pointer; transition: all .2s; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
-    .btn-primary { background: var(--accent); color: #0a0e1a; font-weight: 600; }
-    .btn-primary:hover { box-shadow: 0 0 20px rgba(0,212,255,.35); transform: translateY(-1px); }
-    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
-    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-
-    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1px;
-      background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 44px; }
-    .feat { background: var(--surface); padding: 22px; transition: background .2s; }
-    .feat:hover { background: var(--surface2); }
-    .feat-icon { font-size: 1.3rem; margin-bottom: 10px; }
-    .feat h3 { font-family: var(--mono); font-size: .85rem; font-weight: 600; margin-bottom: 6px; }
-    .feat p { font-size: .83rem; color: var(--muted); line-height: 1.55; }
-
-    h2 { font-family: var(--mono); font-size: 1rem; font-weight: 600; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-
-    .conn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 44px; }
-    .conn-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: .78rem; }
-    .conn-chip .cat { font-size: .62rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; }
-    .conn-chip.prod { border-left: 3px solid var(--green); }
-    .conn-chip.beta { border-left: 3px solid var(--amber); }
-    .conn-chip.demo { border-left: 3px solid var(--accent); }
-
-    /* DASHBOARD */
-    .dashboard { padding: 22px 28px; max-width: 1200px; margin: 0 auto; }
-    .dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .dash-title { font-family: var(--mono); font-size: 1rem; font-weight: 600; }
-    .dash-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .api-input { font-family: var(--mono); font-size: .75rem; padding: 8px 12px; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 6px; color: var(--text); outline: none; transition: border-color .2s; }
-    .api-input:focus { border-color: var(--accent); }
-    .api-input::placeholder { color: var(--muted); }
-    #apiBase { width: 260px; } #apiKey { width: 170px; }
-
-    .dash-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
-    .dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
-    .dash-card-label { font-family: var(--mono); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
-    .dash-card-val { font-family: var(--mono); font-size: 1.5rem; font-weight: 600; }
-    .val-pass { color: var(--green); } .val-fail { color: var(--red); }
-    .val-neutral { color: var(--accent); } .val-amber { color: var(--amber); }
-
-    .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
-    @media (max-width: 820px) { .dash-grid { grid-template-columns: 1fr; } }
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
-    .panel-title { font-family: var(--mono); font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-    .panel-body { padding: 16px 18px; }
-
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-    .form-group label { font-family: var(--mono); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 5px; }
-    .form-group input, .form-group select { width: 100%; font-family: var(--mono); font-size: .8rem; padding: 8px 10px;
-      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); outline: none; transition: border-color .2s; }
-    .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
-    .form-group select option { background: var(--surface2); }
-    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
-    .submit-btn { width: 100%; font-family: var(--mono); font-size: .78rem; font-weight: 600; padding: 10px;
-      background: var(--accent); color: #0a0e1a; border: none; border-radius: 6px; cursor: pointer; letter-spacing: .06em; transition: all .2s; }
-    .submit-btn:hover { box-shadow: 0 0 16px rgba(0,212,255,.3); }
-    .submit-btn:disabled { opacity: .5; cursor: not-allowed; }
-
-    .result-box { background: #070c18; border: 1px solid var(--border); border-radius: 8px; padding: 14px;
-      font-family: var(--mono); font-size: .72rem; line-height: 1.7; color: #7a95b0; min-height: 70px;
-      white-space: pre-wrap; word-break: break-all; margin-top: 12px; overflow: auto; max-height: 200px; }
-
-    .conn-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
-    .conn-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px;
-      background: var(--surface2); border-radius: 6px; font-family: var(--mono); font-size: .72rem; }
-    .conn-item .nm { color: var(--text); }
-
-    .findings-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
-    .findings-table th { font-family: var(--mono); font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
-      color: var(--muted); padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-    .findings-table td { padding: 10px 12px; border-bottom: 1px solid rgba(30,45,69,.4); font-family: var(--mono); font-size: .72rem; }
-    .findings-table tr:last-child td { border-bottom: none; }
-
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .62rem; font-weight: 600; letter-spacing: .06em; }
-    .pill-pass { background: rgba(0,230,118,.15); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
-    .pill-fail { background: rgba(255,82,82,.15); color: var(--red); border: 1px solid rgba(255,82,82,.3); }
-    .pill-pending, .pill-error { background: rgba(255,171,64,.15); color: var(--amber); border: 1px solid rgba(255,171,64,.3); }
-    .pill-na { background: rgba(90,114,144,.15); color: var(--muted); border: 1px solid rgba(90,114,144,.3); }
-
-    .empty-state { text-align: center; padding: 30px; color: var(--muted); font-family: var(--mono); font-size: .8rem; }
-    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,212,255,.2);
-      border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 12px 18px; font-family: var(--mono); font-size: .75rem; color: var(--text);
-      z-index: 999; opacity: 0; transform: translateY(10px); transition: all .3s; pointer-events: none; }
-    .toast.show { opacity: 1; transform: none; }
-    .toast.success { border-color: rgba(0,230,118,.4); color: var(--green); }
-    .toast.error { border-color: rgba(255,82,82,.4); color: var(--red); }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comp-Lens Dashboard</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f5f7;min-height:100vh;padding:24px;color:#222}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{background:#fff;padding:24px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:24px}
+  h1{color:#5b4bd6;font-size:1.8rem;margin-bottom:4px}
+  .sub{color:#666}
+  .badge{display:inline-block;padding:8px 16px;border-radius:20px;margin-top:12px;font-weight:600;font-size:.9rem}
+  .badge.ok{background:#d4edda;color:#155724}
+  .badge.bad{background:#f8d7da;color:#721c24}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:20px}
+  .card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .card h2{color:#5b4bd6;font-size:1.2rem;margin-bottom:10px;border-bottom:2px solid #eee;padding-bottom:8px}
+  button{padding:10px 16px;background:#5b4bd6;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-top:10px;margin-right:8px;font-weight:600}
+  button:hover{background:#4a3cc0}
+  button.danger{background:#dc3545}
+  .resp{background:#f8f9fa;border-left:4px solid #5b4bd6;padding:12px;margin-top:12px;border-radius:4px;max-height:300px;overflow:auto;font-size:.85rem}
+  .resp.ok{border-left-color:#28a745;background:#f3fff4}
+  .resp.err{border-left-color:#dc3545;background:#fff5f5;color:#721c24}
+  pre{white-space:pre-wrap;word-wrap:break-word}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:.85rem}
+  th{background:#f5f5f5;padding:8px;text-align:left;border-bottom:2px solid #ddd}
+  td{padding:8px;border-bottom:1px solid #eee}
+  code{background:#eee;padding:2px 6px;border-radius:4px;font-size:.85rem}
+</style>
 </head>
 <body>
-
-<nav>
-  <div class="logo">COMP-LENS</div>
-  <div class="nav-tabs">
-    <button class="tab-btn active" onclick="showView('landing', this)">Overview</button>
-    <button class="tab-btn" onclick="showView('dashboard', this)">Dashboard</button>
-  </div>
-  <div class="api-status">
-    <div class="status-dot" id="navDot"></div>
-    <span id="navStatus">checking...</span>
-  </div>
-</nav>
-
-<!-- LANDING -->
-<div id="view-landing" class="view active">
-  <div class="landing">
-    <div class="hero-tag">// Production GRC Compliance-as-Code</div>
-    <h1>Assess compliance across<br><span class="hl">every system you run</span></h1>
-    <p class="hero-desc">
-      Vendor-agnostic GRC automation across cloud, identity, code, endpoint, ticketing,
-      on-prem, and SaaS. Real API connectors, immutable hashed evidence, findings with
-      remediation, and a PostgreSQL-backed audit trail.
-    </p>
-    <div class="hero-actions">
-      <button class="btn btn-primary" onclick="showView('dashboard', document.querySelectorAll('.tab-btn')[1])">→ Open Dashboard</button>
-      <a class="btn btn-outline" href="https://github.com/shalak97/Comp-lens" target="_blank">↗ GitHub</a>
-    </div>
-
-    <h2>What it does</h2>
-    <div class="features">
-      <div class="feat"><div class="feat-icon">🛡️</div><h3>12 Connectors</h3><p>Cloud, identity, code, endpoint, ticketing, on-prem, SaaS — one contract, vendor-agnostic.</p></div>
-      <div class="feat"><div class="feat-icon">📦</div><h3>Hashed Evidence</h3><p>Every assessment stored immutably with SHA-256 for tamper detection. S3 or local.</p></div>
-      <div class="feat"><div class="feat-icon">🔍</div><h3>Findings + Remediation</h3><p>Failed controls auto-generate findings with remediation and approval requirements.</p></div>
-      <div class="feat"><div class="feat-icon">⚡</div><h3>Idempotency</h3><p>Safe retries by design. Duplicate keys return the same finding, never a duplicate.</p></div>
-      <div class="feat"><div class="feat-icon">🔐</div><h3>API Auth</h3><p>API-key protected routes, constant-time comparison, HTTPS-ready for production.</p></div>
-      <div class="feat"><div class="feat-icon">🗄️</div><h3>Real Persistence</h3><p>PostgreSQL for findings, evidence, jobs, idempotency. SQLite for local dev.</p></div>
-    </div>
-
-    <h2>Connectors</h2>
-    <div class="conn-grid">
-      <div class="conn-chip demo">DEMO<div class="cat">testing</div></div>
-      <div class="conn-chip prod">AWS<div class="cat">cloud</div></div>
-      <div class="conn-chip prod">Okta<div class="cat">identity</div></div>
-      <div class="conn-chip prod">GitHub<div class="cat">code</div></div>
-      <div class="conn-chip prod">SSH/Linux<div class="cat">on-prem</div></div>
-      <div class="conn-chip prod">Jira<div class="cat">ticketing</div></div>
-      <div class="conn-chip beta">Azure<div class="cat">identity · beta</div></div>
-      <div class="conn-chip beta">GCP<div class="cat">cloud · beta</div></div>
-      <div class="conn-chip beta">GitLab<div class="cat">code · beta</div></div>
-      <div class="conn-chip beta">Slack<div class="cat">saas · beta</div></div>
-      <div class="conn-chip beta">ServiceNow<div class="cat">ticketing · beta</div></div>
-      <div class="conn-chip beta">Qualys<div class="cat">vuln · beta</div></div>
-      <div class="conn-chip beta">CrowdStrike<div class="cat">endpoint · beta</div></div>
-    </div>
+<div class="wrap">
+  <header>
+    <h1>Comp-Lens Dashboard</h1>
+    <p class="sub">Compliance & risk assessment — running on Vercel</p>
+    <div id="badge" class="badge bad">Checking…</div>
+  </header>
+  <div class="grid">
+    <div class="card"><h2>Connection</h2><p id="apiUrl"></p>
+      <button onclick="test()">Test connection</button><div id="r1" class="resp" hidden></div></div>
+    <div class="card"><h2>Controls</h2>
+      <button onclick="controls()">Load controls</button><div id="r2" class="resp" hidden></div></div>
+    <div class="card"><h2>Run assessment</h2>
+      <button onclick="run(false)">Demo (pass)</button>
+      <button class="danger" onclick="run(true)">Demo (fail)</button><div id="r3" class="resp" hidden></div></div>
+    <div class="card"><h2>Summary</h2>
+      <button onclick="summary()">Load summary</button><div id="r4" class="resp" hidden></div></div>
   </div>
 </div>
-
-<!-- DASHBOARD -->
-<div id="view-dashboard" class="view">
-  <div class="dashboard">
-    <div class="dash-header">
-      <div class="dash-title">// Live Dashboard</div>
-      <div class="dash-actions">
-        <input class="api-input" id="apiBase" placeholder="API base URL" value="https://comp-lens.onrender.com">
-        <input class="api-input" id="apiKey" placeholder="X-API-Key (if set)" type="password">
-        <button class="btn btn-outline" onclick="refreshAll()">⟳ Refresh</button>
-      </div>
-    </div>
-
-    <div class="dash-cards">
-      <div class="dash-card"><div class="dash-card-label">Compliance Score</div><div class="dash-card-val val-neutral" id="cardScore">—</div></div>
-      <div class="dash-card"><div class="dash-card-label">Total Findings</div><div class="dash-card-val val-neutral" id="cardTotal">—</div></div>
-      <div class="dash-card"><div class="dash-card-label">Passed</div><div class="dash-card-val val-pass" id="cardPass">—</div></div>
-      <div class="dash-card"><div class="dash-card-label">Failed</div><div class="dash-card-val val-fail" id="cardFail">—</div></div>
-      <div class="dash-card"><div class="dash-card-label">API Health</div><div class="dash-card-val val-neutral" id="cardHealth">—</div></div>
-    </div>
-
-    <div class="dash-grid">
-      <div class="panel">
-        <div class="panel-header"><span class="panel-title">Submit Assessment</span></div>
-        <div class="panel-body">
-          <div class="form-grid">
-            <div class="form-group"><label>Tenant ID</label><input id="fTenant" value="acme"></div>
-            <div class="form-group"><label>Framework</label><input id="fFramework" value="NIST"></div>
-            <div class="form-group"><label>Control</label><select id="fControl"></select></div>
-            <div class="form-group"><label>Source System</label><select id="fSource"></select></div>
-          </div>
-          <div class="form-group" style="margin-bottom:12px"><label>Asset ID</label><input id="fAsset" placeholder="bucket / user / owner/repo / host"></div>
-          <div class="checkbox-row"><input type="checkbox" id="fForceFail"><label for="fForceFail" style="margin:0;text-transform:none;letter-spacing:0;cursor:pointer">Force fail (DEMO only — test remediation)</label></div>
-          <button class="submit-btn" id="submitBtn" onclick="submitAssessment()">Run Assessment</button>
-          <div class="result-box" id="assessResult">// Results will appear here...</div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header"><span class="panel-title">Connectors</span><span style="font-family:var(--mono);font-size:.62rem;color:var(--muted)">prod • beta • demo</span></div>
-        <div class="panel-body">
-          <div class="conn-list" id="connList"><div class="empty-state">// Loading connectors...</div></div>
-          <div style="margin-top:14px">
-            <div class="panel-title" style="margin-bottom:8px">Query Findings</div>
-            <div style="display:flex;gap:8px">
-              <input class="api-input" id="queryTenant" placeholder="tenant_id" value="acme" style="flex:1">
-              <button class="btn btn-outline" style="font-size:.72rem;padding:8px 14px" onclick="refreshAll()">Fetch</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Findings</span><span class="pill pill-na" id="findingsCount" style="font-size:.62rem">0</span></div>
-      <div class="panel-body" style="padding:0">
-        <div id="findingsBody"><div class="empty-state">// No findings loaded. Submit an assessment or click Fetch.</div></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
 <script>
-  const API = () => document.getElementById('apiBase').value.replace(/\/$/, '');
-  const KEY = () => document.getElementById('apiKey').value.trim();
-  const authHeaders = () => KEY() ? { 'X-API-Key': KEY() } : {};
+  // Same-origin: the API is served by the same Vercel deployment.
+  const API = window.location.origin;
+  document.getElementById('apiUrl').innerHTML = 'API base: <code>' + API + '/api</code>';
 
-  function showView(name, btn) {
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('view-' + name).classList.add('active');
-    btn.classList.add('active');
-    if (name === 'dashboard') refreshAll();
+  async function call(path, opts){ const r = await fetch(API + path, opts);
+    if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+  function show(id, ok, html){ const d=document.getElementById(id);
+    d.hidden=false; d.className='resp '+(ok?'ok':'err'); d.innerHTML=html; }
+
+  async function test(){
+    try{ const d=await call('/api/health/live');
+      show('r1',true,'<strong>Connected</strong><pre>'+JSON.stringify(d,null,2)+'</pre>');
+      const b=document.getElementById('badge'); b.className='badge ok'; b.textContent='Connected';
+    }catch(e){ show('r1',false,'Failed: '+e.message);
+      const b=document.getElementById('badge'); b.className='badge bad'; b.textContent='Backend unavailable'; }
   }
-
-  function toast(msg, type = '') {
-    const t = document.getElementById('toast');
-    t.textContent = msg; t.className = 'toast show ' + type;
-    setTimeout(() => t.className = 'toast', 2800);
+  async function controls(){
+    try{ const d=await call('/api/controls'); let t='<table><tr><th>ID</th><th>Title</th><th>Frameworks</th></tr>';
+      d.forEach(c=>t+='<tr><td>'+c.control_id+'</td><td>'+c.title+'</td><td>'+c.frameworks.join(', ')+'</td></tr>');
+      show('r2',true,t+'</table>'); }catch(e){ show('r2',false,e.message); }
   }
-
-  async function loadMeta() {
-    try {
-      const r = await fetch(API() + '/', { signal: AbortSignal.timeout(8000) });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const d = await r.json();
-      const ctrlSel = document.getElementById('fControl');
-      const srcSel = document.getElementById('fSource');
-      if (d.controls && !ctrlSel.dataset.loaded) {
-        ctrlSel.innerHTML = d.controls.map(c => `<option>${c}</option>`).join('');
-        ctrlSel.dataset.loaded = '1';
-      }
-      if (d.connectors && !srcSel.dataset.loaded) {
-        srcSel.innerHTML = d.connectors.map(c => `<option>${c}</option>`).join('');
-        srcSel.value = 'DEMO';
-        srcSel.dataset.loaded = '1';
-      }
-      setNav(true, d.auth_required);
-      return true;
-    } catch (e) {
-      setNav(false);
-      return false;
-    }
+  async function run(fail){
+    try{ const d=await call('/api/assessments',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tenant_id:'demo',control_id:fail?'SC-28':'SC-7',source_system:'DEMO',fail})});
+      show('r3',true,'<strong>'+d.result+'</strong><pre>'+JSON.stringify(d,null,2)+'</pre>'); }
+    catch(e){ show('r3',false,e.message); }
   }
-
-  function setNav(online, authReq) {
-    document.getElementById('navDot').className = 'status-dot ' + (online ? 'online' : 'offline');
-    document.getElementById('navStatus').textContent = online
-      ? ('API online' + (authReq ? ' · auth on' : '')) : 'API offline';
-    document.getElementById('cardHealth').textContent = online ? '✓ UP' : '✗ DOWN';
-    document.getElementById('cardHealth').className = 'dash-card-val ' + (online ? 'val-pass' : 'val-fail');
+  async function summary(){
+    try{ const d=await call('/api/summary?tenant_id=demo');
+      const col=d.compliance_score>=80?'#28a745':'#dc3545';
+      show('r4',true,'<div style="font-size:2.5rem;font-weight:700;color:'+col+';text-align:center">'+d.compliance_score+'%</div><pre>'+JSON.stringify(d,null,2)+'</pre>'); }
+    catch(e){ show('r4',false,e.message); }
   }
-
-  async function loadConnectors() {
-    const el = document.getElementById('connList');
-    el.innerHTML = '<div class="conn-item"><span class="nm">checking...</span><span class="spinner"></span></div>';
-    try {
-      const r = await fetch(API() + '/connectors', { headers: authHeaders(), signal: AbortSignal.timeout(20000) });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
-      el.innerHTML = data.map(c => {
-        let pill;
-        if (c.healthy === true) pill = '<span class="pill pill-pass">healthy</span>';
-        else if (c.healthy === false) pill = '<span class="pill pill-fail">no creds</span>';
-        else pill = '<span class="pill pill-na">n/a</span>';
-        return `<div class="conn-item"><span class="nm">${c.source_system}</span>${pill}</div>`;
-      }).join('');
-    } catch (e) {
-      el.innerHTML = `<div class="empty-state">// ${e.message}</div>`;
-    }
-  }
-
-  async function loadFindings() {
-    const tenant = document.getElementById('queryTenant').value || 'acme';
-    try {
-      const r = await fetch(`${API()}/findings?tenant_id=${encodeURIComponent(tenant)}`,
-        { headers: authHeaders(), signal: AbortSignal.timeout(10000) });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      renderFindings(await r.json());
-      await loadSummary(tenant);
-    } catch (e) {
-      document.getElementById('findingsBody').innerHTML = `<div class="empty-state">// Error: ${e.message}</div>`;
-    }
-  }
-
-  async function loadSummary(tenant) {
-    try {
-      const r = await fetch(`${API()}/summary?tenant_id=${encodeURIComponent(tenant)}`,
-        { headers: authHeaders(), signal: AbortSignal.timeout(10000) });
-      if (!r.ok) return;
-      const s = await r.json();
-      document.getElementById('cardScore').textContent = (s.compliance_score ?? 0) + '%';
-      document.getElementById('cardTotal').textContent = s.total ?? 0;
-      document.getElementById('cardPass').textContent = s.by_status?.pass ?? 0;
-      document.getElementById('cardFail').textContent = s.by_status?.fail ?? 0;
-    } catch (e) {}
-  }
-
-  function pillClass(s) {
-    if (s === 'pass') return 'pill-pass';
-    if (s === 'fail') return 'pill-fail';
-    if (s === 'not_applicable') return 'pill-na';
-    if (s === 'error') return 'pill-error';
-    return 'pill-pending';
-  }
-
-  function renderFindings(findings) {
-    document.getElementById('findingsCount').textContent = findings.length;
-    if (!findings.length) {
-      document.getElementById('findingsBody').innerHTML = `<div class="empty-state">// No findings for this tenant.</div>`;
-      return;
-    }
-    const rows = findings.map(f => `
-      <tr>
-        <td>${f.control_id || '—'}</td>
-        <td>${f.source_system || '—'}</td>
-        <td><span class="pill ${pillClass(f.status)}">${f.status || '—'}</span></td>
-        <td>${f.severity || '—'}</td>
-        <td>${f.owner || '—'}</td>
-        <td>${f.asset_id || '—'}</td>
-      </tr>`).join('');
-    document.getElementById('findingsBody').innerHTML = `
-      <table class="findings-table">
-        <thead><tr><th>Control</th><th>Source</th><th>Status</th><th>Severity</th><th>Owner</th><th>Asset</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  }
-
-  async function submitAssessment() {
-    const btn = document.getElementById('submitBtn');
-    const out = document.getElementById('assessResult');
-    btn.disabled = true; btn.textContent = 'Running...';
-    out.textContent = '// Submitting...';
-
-    const params = {};
-    if (document.getElementById('fForceFail').checked) params.fail = true;
-
-    const payload = {
-      tenant_id: document.getElementById('fTenant').value,
-      framework: document.getElementById('fFramework').value,
-      control_id: document.getElementById('fControl').value,
-      source_system: document.getElementById('fSource').value,
-      asset_id: document.getElementById('fAsset').value || undefined,
-      params,
-      idempotency_key: 'ui-' + Date.now()
-    };
-
-    try {
-      const r = await fetch(`${API()}/assessments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(30000)
-      });
-      const data = await r.json();
-      out.textContent = JSON.stringify(data, null, 2);
-      if (r.status === 401 || r.status === 403) {
-        toast('Auth required — enter your X-API-Key', 'error');
-      } else {
-        toast(r.ok ? 'Assessment complete' : 'Returned error', r.ok ? 'success' : 'error');
-      }
-      document.getElementById('queryTenant').value = payload.tenant_id;
-      if (r.ok) loadFindings();
-    } catch (e) {
-      out.textContent = '// Error: ' + e.message;
-      toast('Request failed: ' + e.message, 'error');
-    } finally {
-      btn.disabled = false; btn.textContent = 'Run Assessment';
-    }
-  }
-
-  async function refreshAll() {
-    const ok = await loadMeta();
-    if (ok) await Promise.all([loadConnectors(), loadFindings()]);
-  }
-
-  loadMeta();
+  test();
 </script>
 </body>
 </html>
