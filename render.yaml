@@ -1,0 +1,54 @@
+# Render deployment configuration
+# Docs: https://render.com/docs/render-yaml-spec
+
+services:
+  - type: web
+    name: comp-lens
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: commit
+    healthCheckPath: /health/live
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PORT
+        value: 8000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: comp-lens-db
+          property: connectionString
+      - key: AUTO_CREATE_TABLES
+        value: false
+      - key: ENABLE_DEMO_CONNECTOR
+        value: true
+      - key: EVIDENCE_BACKEND
+        value: local
+      - key: EVIDENCE_LOCAL_PATH
+        value: /tmp/evidence_store
+      # Uncomment and fill in the connectors you use:
+      # - key: AWS_REGION
+      #   value: us-east-1
+      # - key: AWS_ACCESS_KEY_ID
+      #   sync: false          # prompts for value in Render dashboard
+      # - key: AWS_SECRET_ACCESS_KEY
+      #   sync: false
+      # - key: GITHUB_TOKEN
+      #   sync: false
+      # - key: OKTA_ORG_URL
+      #   sync: false
+      # - key: OKTA_API_TOKEN
+      #   sync: false
+      # - key: JIRA_URL
+      #   sync: false
+      # - key: JIRA_EMAIL
+      #   sync: false
+      # - key: JIRA_API_TOKEN
+      #   sync: false
+      # - key: COMP_LENS_API_KEYS
+      #   sync: false          # e.g. "adminkey:*"
+
+databases:
+  - name: comp-lens-db
+    plan: free
+    databaseName: complens
+    user: complens

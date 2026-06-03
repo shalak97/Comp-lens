@@ -1,0 +1,41 @@
+# Version control
+.git
+.gitignore
+
+# Local env files (never in image)
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Local databases (use PostgreSQL in production)
+*.db
+*.db-shm
+*.db-wal
+
+# Local evidence store
+evidence_store/
+
+# Tests
+tests/
+
+# Docs / misc
+*.md
+LICENSE
+*.html
+*.rego
+*.json
+!legacy_sources.example.json
+
+# IDE
+.vscode
+.idea
