@@ -10,13 +10,19 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# App source
 COPY app ./app
 
-# Non-root user (security best practice)
+# Alembic migrations (needed to run `alembic upgrade head` on startup)
+COPY alembic ./alembic
+COPY alembic.ini .
+
+# Non-root user
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
 EXPOSE 8000
 
-# $PORT is set by most PaaS; default to 8000 locally
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Run migrations first, then start the server.
+# `alembic upgrade head` is idempotent — safe to run on every deploy.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
