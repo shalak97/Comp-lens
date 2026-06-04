@@ -1,0 +1,58 @@
+name: Wire dashboard into API
+
+on:
+  workflow_dispatch:
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Move dashboard.html into app/static/
+        run: |
+          mkdir -p app/static
+          if [ -f dashboard.html ]; then
+            git mv -f dashboard.html app/static/dashboard.html
+            echo "moved dashboard.html -> app/static/"
+          elif [ -f app/static/dashboard.html ]; then
+            echo "already in app/static/ — ok"
+          else
+            echo "::error::dashboard.html not found at repo root. Upload it first."
+            exit 1
+          fi
+
+      - name: Add /dashboard route to main.py (idempotent)
+        run: |
+          if grep -q "_serve_dashboard" app/main.py; then
+            echo "route already present — skipping"
+          else
+            cat >> app/main.py << 'PYEOF'
+
+
+# ── static dashboard console ──
+import os as _os
+from fastapi.responses import FileResponse as _FileResponse
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_STATIC_DIR = _os.path.join(_os.path.dirname(__file__), "static")
+if _os.path.isdir(_STATIC_DIR):
+    app.mount("/static", _StaticFiles(directory=_STATIC_DIR), name="static")
+
+    @app.get("/dashboard", include_in_schema=False)
+    def _serve_dashboard():
+        return _FileResponse(_os.path.join(_STATIC_DIR, "dashboard.html"))
+PYEOF
+            echo "route appended to app/main.py"
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/main.py app/static/dashboard.html
+          git diff --cached --quiet || git commit -m "feat: serve compliance console at /dashboard"
+          git push
