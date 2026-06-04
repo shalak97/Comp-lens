@@ -19,7 +19,7 @@ jobs:
             git mv -f dashboard.html app/static/dashboard.html
             echo "moved dashboard.html -> app/static/"
           elif [ -f app/static/dashboard.html ]; then
-            echo "already in app/static/ — ok"
+            echo "already in app/static/ -- ok"
           else
             echo "::error::dashboard.html not found at repo root. Upload it first."
             exit 1
@@ -28,24 +28,9 @@ jobs:
       - name: Add /dashboard route to main.py (idempotent)
         run: |
           if grep -q "_serve_dashboard" app/main.py; then
-            echo "route already present — skipping"
+            echo "route already present -- skipping"
           else
-            cat >> app/main.py << 'PYEOF'
-
-
-# ── static dashboard console ──
-import os as _os
-from fastapi.responses import FileResponse as _FileResponse
-from fastapi.staticfiles import StaticFiles as _StaticFiles
-
-_STATIC_DIR = _os.path.join(_os.path.dirname(__file__), "static")
-if _os.path.isdir(_STATIC_DIR):
-    app.mount("/static", _StaticFiles(directory=_STATIC_DIR), name="static")
-
-    @app.get("/dashboard", include_in_schema=False)
-    def _serve_dashboard():
-        return _FileResponse(_os.path.join(_STATIC_DIR, "dashboard.html"))
-PYEOF
+            echo "CgojIOKUgOKUgCBzdGF0aWMgZGFzaGJvYXJkIGNvbnNvbGUg4pSA4pSACmltcG9ydCBvcyBhcyBfb3MKZnJvbSBmYXN0YXBpLnJlc3BvbnNlcyBpbXBvcnQgRmlsZVJlc3BvbnNlIGFzIF9GaWxlUmVzcG9uc2UKZnJvbSBmYXN0YXBpLnN0YXRpY2ZpbGVzIGltcG9ydCBTdGF0aWNGaWxlcyBhcyBfU3RhdGljRmlsZXMKCl9TVEFUSUNfRElSID0gX29zLnBhdGguam9pbihfb3MucGF0aC5kaXJuYW1lKF9fZmlsZV9fKSwgInN0YXRpYyIpCmlmIF9vcy5wYXRoLmlzZGlyKF9TVEFUSUNfRElSKToKICAgIGFwcC5tb3VudCgiL3N0YXRpYyIsIF9TdGF0aWNGaWxlcyhkaXJlY3Rvcnk9X1NUQVRJQ19ESVIpLCBuYW1lPSJzdGF0aWMiKQoKICAgIEBhcHAuZ2V0KCIvZGFzaGJvYXJkIiwgaW5jbHVkZV9pbl9zY2hlbWE9RmFsc2UpCiAgICBkZWYgX3NlcnZlX2Rhc2hib2FyZCgpOgogICAgICAgIHJldHVybiBfRmlsZVJlc3BvbnNlKF9vcy5wYXRoLmpvaW4oX1NUQVRJQ19ESVIsICJkYXNoYm9hcmQuaHRtbCIpKQo=" | base64 -d >> app/main.py
             echo "route appended to app/main.py"
           fi
 
