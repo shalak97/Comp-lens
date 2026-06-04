@@ -1,0 +1,51 @@
+name: Fix package structure
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-structure:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Move files into correct subpackages
+        run: |
+          mkdir -p app/connectors app/services app/policy app/legacy
+
+          # --- app/connectors/ ---
+          for f in base aws github jira mock okta registry secondary ssh_linux ai_governance legacy; do
+            [ -f "app/$f.py" ] && git mv "app/$f.py" "app/connectors/$f.py" && echo "  $f -> connectors/" || true
+          done
+
+          # --- app/services/ ---
+          for f in assessment forecast ingestion integrity inventory merkle policy_authoring remediation reporting scheduler trends waivers; do
+            [ -f "app/$f.py" ] && git mv "app/$f.py" "app/services/$f.py" && echo "  $f -> services/" || true
+          done
+
+          # --- app/policy/ ---
+          [ -f app/engine.py ] && git mv app/engine.py app/policy/engine.py && echo "  engine -> policy/" || true
+
+          # --- app/legacy/ ---
+          for f in mapping sources transports; do
+            [ -f "app/$f.py" ] && git mv "app/$f.py" "app/legacy/$f.py" && echo "  $f -> legacy/" || true
+          done
+
+          # --- package markers ---
+          for d in connectors services policy legacy; do
+            touch "app/$d/__init__.py"
+            git add "app/$d/__init__.py"
+          done
+
+      - name: Show resulting structure
+        run: find app -name '*.py' | sort
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --cached --quiet || git commit -m "fix: nest app into connectors/ services/ policy/ legacy/ subpackages"
+          git push
