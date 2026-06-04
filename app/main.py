@@ -435,3 +435,17 @@ def ingest_report(payload: dict, tenant_id: str = "default", source: str = "PROW
     from app.services.ingestion import IngestionService
     findings = payload.get("findings", payload if isinstance(payload, list) else [])
     return IngestionService(db).from_report(tenant_id, source, findings)
+
+
+# ── static dashboard console ──
+import os as _os
+from fastapi.responses import FileResponse as _FileResponse
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_STATIC_DIR = _os.path.join(_os.path.dirname(__file__), "static")
+if _os.path.isdir(_STATIC_DIR):
+    app.mount("/static", _StaticFiles(directory=_STATIC_DIR), name="static")
+
+    @app.get("/dashboard", include_in_schema=False)
+    def _serve_dashboard():
+        return _FileResponse(_os.path.join(_STATIC_DIR, "dashboard.html"))
