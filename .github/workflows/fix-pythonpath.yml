@@ -1,0 +1,28 @@
+name: Fix Dockerfile PYTHONPATH
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add PYTHONPATH to Dockerfile
+        run: |
+          # Add ENV PYTHONPATH=/app line after the WORKDIR line
+          sed -i 's|^WORKDIR /app|WORKDIR /app\nENV PYTHONPATH=/app|' Dockerfile
+          echo "=== Updated Dockerfile ==="
+          cat Dockerfile
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile
+          git diff --cached --quiet || git commit -m "fix: set PYTHONPATH=/app so alembic can import app.*"
+          git push
