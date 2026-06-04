@@ -1,0 +1,57 @@
+name: Reorganize repo structure
+
+on:
+  workflow_dispatch:   # run manually from the Actions tab
+
+jobs:
+  reorganize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move source files into app/
+        run: |
+          mkdir -p app
+          for f in \
+            __init__.py ai_governance.py assessment.py auth.py aws.py base.py \
+            config.py database.py engine.py evidence.py forecast.py frameworks.py \
+            github.py ingestion.py integrity.py inventory.py jira.py legacy.py \
+            main.py mapping.py merkle.py mock.py models.py notifications.py \
+            okta.py policy_authoring.py registry.py remediation.py reporting.py \
+            retry.py risk.py scheduler.py secondary.py sources.py ssh_linux.py \
+            transports.py trends.py waivers.py; do
+            [ -f "$f" ] && git mv "$f" "app/$f" && echo "  $f → app/" || true
+          done
+
+      - name: Move alembic files into alembic/
+        run: |
+          mkdir -p alembic/versions
+          [ -f env.py ]         && git mv env.py         alembic/env.py         || true
+          [ -f script.py.mako ] && git mv script.py.mako alembic/script.py.mako || true
+          for f in [0-9a-f]*_*.py; do
+            [ -f "$f" ] && git mv "$f" "alembic/versions/$f" || true
+          done
+
+      - name: Move test files into tests/
+        run: |
+          mkdir -p tests
+          for f in test_*.py; do
+            [ -f "$f" ] && git mv "$f" "tests/$f" || true
+          done
+
+      - name: Remove junk files
+        run: |
+          [ -f vercel.json ] && git rm -f vercel.json || true
+          [ -f index.py ]    && git rm -f index.py    || true
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --cached --quiet || git commit -m "fix: reorganize into app/ and alembic/ packages"
+          git push
