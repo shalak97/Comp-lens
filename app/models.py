@@ -379,6 +379,8 @@ class EvidenceDocument(Base):
     model: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     prompt_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signature: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

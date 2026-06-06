@@ -1,0 +1,117 @@
+"""Export evidence + attestations as an OSCAL Assessment Results document.
+
+OSCAL (NIST's Open Security Controls Assessment Language) is the interoperable
+standard auditors and FedRAMP/CMMC tooling consume. We emit a minimal but valid
+assessment-results object: each evidence concept hit becomes an `observation`
+(with its verbatim quote as the relevant-evidence), and each control's policy
+determination becomes a `finding`.
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import ControlAttestation, EvidenceConceptHit, EvidenceDocument
+from app.services import evidence_policy
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _ctrl_to_oscal(control_id: str) -> str:
+    # OSCAL control ids are lowercase, e.g. AC-2(7) -> ac-2.7 ; A.8.5 -> a.8.5
+    return control_id.lower().replace("(", ".").replace(")", "")
+
+
+def export_assessment_results(db: Session, tenant_id: str, framework: str) -> Dict[str, Any]:
+    docs = {d.doc_id: d for d in db.execute(select(EvidenceDocument).where(
+        EvidenceDocument.tenant_id == tenant_id)).scalars().all()}
+    hits = list(db.execute(select(EvidenceConceptHit).where(
+        EvidenceConceptHit.tenant_id == tenant_id)).scalars().all())
+    atts = list(db.execute(select(ControlAttestation).where(
+        ControlAttestation.tenant_id == tenant_id,
+        ControlAttestation.framework == framework)).scalars().all())
+
+    observations: List[Dict[str, Any]] = []
+    hit_obs: Dict[str, str] = {}
+    for h in hits:
+        oid = str(uuid.uuid4())
+        hit_obs[h.id] = oid
+        d = docs.get(h.doc_id)
+        observations.append({
+            "uuid": oid,
+            "title": f"Evidence: {h.concept_id}",
+            "description": f"Concept '{h.concept_id}' detected via {h.method} "
+                           f"(confidence {h.confidence:.2f}, "
+                           f"{'confirmed' if h.confirmed else 'unconfirmed'}).",
+            "methods": ["EXAMINE" if h.method != "llm" else "TEST"],
+            "relevant-evidence": [{
+                "description": (h.quote or "")[:600],
+                "props": [
+                    {"name": "source-document", "value": d.name if d else h.doc_id},
+                    {"name": "confidence", "value": f"{h.confidence:.2f}"},
+                    {"name": "confirmed", "value": str(bool(h.confirmed)).lower()},
+                ] + ([{"name": "document-signature", "value": d.signature}] if d and d.signature else []),
+            }],
+            "collected": (h.created_at.isoformat() if h.created_at else _now()),
+        })
+
+    # findings: one per control that has evidence or an attestation
+    candidate = {a.control_id for a in atts}
+    # derive controls that any hit concept maps to (via the lexicon)
+    from app.services import evidence_graph as evg
+    concept_to_controls: Dict[str, list] = {}
+    for c in evg.lexicon():
+        for m in c.get("controls", []):
+            if m["framework"] == framework:
+                concept_to_controls.setdefault(c["id"], []).append(m["control_id"])
+    for h in hits:
+        for cid in concept_to_controls.get(h.concept_id, []):
+            candidate.add(cid)
+
+    findings: List[Dict[str, Any]] = []
+    for cid in sorted(candidate):
+        decision = evidence_policy.evaluate(db, tenant_id, framework, cid)
+        rel_obs = [hit_obs[h.id] for h in hits
+                   if cid in concept_to_controls.get(h.concept_id, [])]
+        findings.append({
+            "uuid": str(uuid.uuid4()),
+            "title": f"{cid} — {decision['status']}",
+            "description": decision["reason"],
+            "target": {
+                "type": "objective-id",
+                "target-id": _ctrl_to_oscal(cid),
+                "status": {"state": "satisfied" if decision["satisfied"] else "not-satisfied"},
+                "props": [{"name": "policy-status", "value": decision["status"]},
+                          {"name": "engine", "value": decision.get("engine", "builtin")}],
+            },
+            "related-observations": [{"observation-uuid": o} for o in rel_obs],
+        })
+
+    return {
+        "assessment-results": {
+            "uuid": str(uuid.uuid4()),
+            "metadata": {
+                "title": f"Comp-Lens Evidence Assessment — {framework}",
+                "last-modified": _now(),
+                "version": "1.0",
+                "oscal-version": "1.1.2",
+                "props": [{"name": "tenant", "value": tenant_id},
+                          {"name": "framework", "value": framework}],
+            },
+            "import-ap": {"href": "#comp-lens-assessment-plan"},
+            "results": [{
+                "uuid": str(uuid.uuid4()),
+                "title": "Automated evidence + attestation assessment",
+                "description": "Generated by Comp-Lens compliance-as-code evidence engine.",
+                "start": _now(),
+                "observations": observations,
+                "findings": findings,
+            }],
+        }
+    }

@@ -552,6 +552,41 @@ def evidence_compliance(control_id: str, framework: str = "NIST_800_53",
     return evidence_policy.evaluate(db, tenant_id, framework, control_id)
 
 
+@app.get("/evidence/documents/{doc_id}/verify", tags=["evidence-graph"])
+def verify_evidence_document(doc_id: str, tenant_id: str = "default",
+                            db: Session = Depends(get_db),
+                            p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.models import EvidenceDocument
+    from app.services.evidence_sign import verify
+    doc = db.get(EvidenceDocument, doc_id)
+    if not doc or doc.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="document not found")
+    ok = verify(doc.content_hash, doc.tenant_id, doc.doc_id, doc.signed_at, doc.signature or "")
+    return {"doc_id": doc_id, "signed": bool(doc.signature),
+            "verified": ok, "signed_at": doc.signed_at,
+            "detail": "Signature valid — content unchanged since ingestion." if ok
+                      else ("No signature on record." if not doc.signature
+                            else "SIGNATURE MISMATCH — document may have been altered.")}
+
+
+@app.get("/evidence/crosswalk", tags=["evidence-graph"])
+def control_crosswalk(control_id: str, framework: str = "NIST_800_53",
+                      p: Principal = Depends(require_principal)) -> dict:
+    from app.services.crosswalk import mapped_controls
+    return {"control_id": control_id, "framework": framework,
+            "mapped": mapped_controls(control_id, framework)}
+
+
+@app.get("/evidence/export/oscal", tags=["evidence-graph"])
+def export_oscal(framework: str = "NIST_800_53", tenant_id: str = "default",
+                 db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services.oscal_export import export_assessment_results
+    return export_assessment_results(db, tenant_id, framework)
+
+
 @app.post("/evidence/documents", tags=["evidence-graph"])
 def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
                           p: Principal = Depends(require_principal)) -> dict:

@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # "builtin" = in-process rule catalog; "opa" = delegate to an OPA server.
     policy_engine: str = Field(default="builtin")
     opa_url: Optional[str] = Field(default=None)            # e.g. http://opa:8181
+    evidence_signing_key: Optional[str] = Field(default=None)  # HMAC key for evidence chain of custody
     opa_decision_path: str = Field(default="/v1/data/complens/decision")
 
     # ── Policy engine ──

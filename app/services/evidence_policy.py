@@ -82,7 +82,14 @@ def evaluate(db: Session, tenant_id: str, framework: str, control_id: str) -> Di
         if d:
             return {**d, "facts": facts, "engine": "opa"}
 
-    return {**_evaluate_builtin(control_id, framework, hits, att), "engine": "builtin"}
+    result = {**_evaluate_builtin(control_id, framework, hits, att), "engine": "builtin"}
+    try:
+        from app.services.crosswalk import mapped_controls
+        if result.get("satisfied"):
+            result["propagated_to"] = mapped_controls(control_id, framework)[:10]
+    except Exception:
+        pass
+    return result
 
 
 def _facts(control_id, framework, hits, att):
@@ -102,11 +109,17 @@ def _evaluate_builtin(control_id, framework, hits, att) -> Dict[str, Any]:
     for h in hits:
         r = _effective_rules(control_id, framework, h.concept_id)
         age = _age_days(h_updated(h))
+        decay = _decay_factor(age)
+        eff_conf = float(h.confidence or 0) * decay
         ok = True
         if r["require_confirmation"] and not h.confirmed:
             ok = False; reasons.append(f"{h.concept_id}: hit not confirmed")
-        if float(h.confidence or 0) < r["min_confidence"]:
-            ok = False; reasons.append(f"{h.concept_id}: confidence {h.confidence:.2f} < {r['min_confidence']}")
+        if eff_conf < r["min_confidence"]:
+            if decay < 1.0:
+                reasons.append(f"{h.concept_id}: decayed confidence {eff_conf:.2f} (age {age:.0f}d) < {r['min_confidence']}")
+            else:
+                reasons.append(f"{h.concept_id}: confidence {h.confidence:.2f} < {r['min_confidence']}")
+            ok = False
         if r["max_age_days"] is not None and age is not None and age > r["max_age_days"]:
             ok = False; reasons.append(f"{h.concept_id}: evidence is {age:.0f} days old (> {r['max_age_days']})")
         if ok:
@@ -134,8 +147,22 @@ def _evaluate_builtin(control_id, framework, hits, att) -> Dict[str, Any]:
 
 
 def h_updated(h):
-    # EvidenceConceptHit has no explicit timestamp; fall back to its document's.
+    # ingestion timestamp = the hit's created_at
     return getattr(h, "created_at", None)
+
+
+def _decay_factor(age_days):
+    """Temporal decay: full weight until full_until_days, linear to 0 at zero_at_days."""
+    cfg = policy().get("decay", {})
+    if not cfg.get("enabled") or age_days is None:
+        return 1.0
+    full = cfg.get("full_until_days", 180)
+    zero = cfg.get("zero_at_days", 365)
+    if age_days <= full:
+        return 1.0
+    if age_days >= zero:
+        return 0.0
+    return max(0.0, 1.0 - (age_days - full) / float(zero - full))
 
 
 def _evaluate_opa(opa_url: str, facts: dict) -> Optional[dict]:
