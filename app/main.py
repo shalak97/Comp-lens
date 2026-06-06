@@ -630,3 +630,15 @@ def list_routing_decisions(tenant_id: str = "default", control_id: str | None = 
              "executed": d.executed, "skipped": d.skipped, "finding_id": d.finding_id,
              "created_at": d.created_at.isoformat()}
             for d in _resolver.list_decisions(db, tenant_id, control_id)]
+
+
+# ── evidence mindmap ──
+import os as _os_evm
+from fastapi.responses import FileResponse as _FileResponse_evm
+
+_EVMAP_FILE = _os_evm.path.join(_os_evm.path.dirname(__file__), "static", "evidence-map.html")
+
+
+@app.get("/evidence-map", include_in_schema=False)
+def _serve_evidence_map():
+    return _FileResponse_evm(_EVMAP_FILE)
