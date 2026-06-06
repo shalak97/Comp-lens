@@ -141,12 +141,17 @@ def resolve(db: Session, tenant_id: str, framework: str, control_id: str,
                                 "reason": "no evidence hits for mapped concepts"})
                 continue
             confirmed = [h for h in hits if h.confirmed]
-            chosen = {"type": stype, "plane": s["plane"], "signal": s["signal"], "module": "EVIDENCE",
+            chosen = {"type": stype, "plane": s["plane"], "signal": s["signal"], "module": "EVIDENCE (policy)",
                       "concepts": sorted({h.concept_id for h in hits})}
             if not dry_run:
-                status = "compliant" if confirmed else "pending_review"
-                reason = f"{len(confirmed)} confirmed / {len(hits)} total evidence hit(s)"
-                extra = {"evidence_hits": [{"concept": h.concept_id, "confirmed": bool(h.confirmed),
+                from app.services import evidence_policy
+                decision = evidence_policy.evaluate(db, tenant_id, framework, control_id)
+                status = decision["status"]
+                reason = decision["reason"]
+                extra = {"evidence_policy": {"satisfied": decision["satisfied"],
+                            "qualifying_concepts": decision.get("qualifying_concepts", []),
+                            "notes": decision.get("notes", []), "engine": decision.get("engine")},
+                         "evidence_hits": [{"concept": h.concept_id, "confirmed": bool(h.confirmed),
                                             "quote": (h.quote or "")[:160]} for h in hits[:8]]}
             break
 

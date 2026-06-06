@@ -1,0 +1,19 @@
+{
+  "version": "evidence-policy-v1",
+  "default": {
+    "require_confirmation": true,
+    "min_confidence": 0.6,
+    "max_age_days": 365,
+    "require_attestation_owner": false
+  },
+  "by_concept": {
+    "mfa":                {"min_confidence": 0.7},
+    "encryption_at_rest": {"min_confidence": 0.7, "max_age_days": 365},
+    "incident_response_plan": {"require_attestation_owner": true},
+    "business_continuity":    {"require_attestation_owner": true, "max_age_days": 365},
+    "disaster_recovery":      {"require_attestation_owner": true}
+  },
+  "by_control": {
+    "NIST_800_53:AU-9": {"require_confirmation": true, "min_confidence": 0.75}
+  }
+}

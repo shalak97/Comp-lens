@@ -524,8 +524,9 @@ from app.services import llm_client as _llm
 
 class _DocumentRequest(_BaseModel):
     tenant_id: str = "default"
-    name: str
-    content: str
+    name: str | None = None
+    content: str | None = None
+    url: str | None = None
     source_type: str = "text"
 
 
@@ -542,13 +543,30 @@ def evidence_lexicon(_: Principal = Depends(require_principal)) -> dict:
             "items": [{"id": c["id"], "label": c["label"], "controls": len(c["controls"])} for c in lex]}
 
 
+@app.get("/evidence/compliance", tags=["evidence-graph"])
+def evidence_compliance(control_id: str, framework: str = "NIST_800_53",
+                        tenant_id: str = "default", db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services import evidence_policy
+    return evidence_policy.evaluate(db, tenant_id, framework, control_id)
+
+
 @app.post("/evidence/documents", tags=["evidence-graph"])
 def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
                           p: Principal = Depends(require_principal)) -> dict:
     authorize_tenant(p, req.tenant_id)
-    if not req.content.strip():
-        raise HTTPException(status_code=400, detail="content is empty")
-    return _EvidenceService(db).add_document(req.tenant_id, req.name, req.content, req.source_type)
+    content, name, stype = req.content, req.name, req.source_type
+    if req.url:
+        from app.services.doc_fetch import fetch_url_text, FetchError
+        try:
+            content, stype = fetch_url_text(req.url.strip())
+        except FetchError as e:
+            raise HTTPException(status_code=400, detail=f"URL fetch failed: {e}")
+        name = name or req.url.strip()[:120]
+    if not content or not content.strip():
+        raise HTTPException(status_code=400, detail="No content (provide 'content' or a fetchable 'url').")
+    return _EvidenceService(db).add_document(req.tenant_id, name or "document", content, stype)
 
 
 @app.get("/evidence/documents", tags=["evidence-graph"])
