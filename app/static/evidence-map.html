@@ -64,6 +64,9 @@ svg{width:100%;height:100%;display:block;cursor:grab}svg.drag{cursor:grabbing}
 .inp{width:100%;font-family:var(--mono);font-size:12px;color:var(--hi);background:rgba(120,140,175,.07);border:1px solid var(--line2);border-radius:8px;padding:9px 11px;outline:none}
 .inp:focus{border-color:var(--doc)}textarea.inp{min-height:160px;resize:vertical;font-size:12.5px;line-height:1.5}
 .row-end{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content}
+.seg button{font-family:var(--mono);font-size:11px;color:var(--dim);background:transparent;border:0;padding:7px 14px;cursor:pointer}
+.seg button.on{background:rgba(124,156,255,.16);color:var(--doc)}
 .hint{font-size:12px;color:var(--mid);margin:-4px 0 14px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:11px 18px;font-family:var(--mono);font-size:12px;opacity:0;transition:.3s;z-index:40;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
@@ -107,9 +110,13 @@ svg{width:100%;height:100%;display:block;cursor:grab}svg.drag{cursor:grabbing}
 <!-- upload modal -->
 <div class="modal" id="upModal"><div class="sheet">
   <h3>Add evidence document</h3>
-  <p class="hint">Paste a policy, procedure, config, or report. It's analyzed (LLM when configured, else keyword fallback) and connected to the controls it evidences.</p>
+  <p class="hint">Paste text or give a link. It's analyzed (LLM when configured, else keyword fallback) and connected to the controls it evidences.</p>
   <div class="fld"><label>Document name</label><input class="inp" id="upName" placeholder="e.g. Information Security Policy v3"></div>
-  <div class="fld"><label>Content</label><textarea class="inp" id="upBody" placeholder="Paste document text here…"></textarea></div>
+  <div class="seg" id="upMode" style="margin:0 0 10px">
+    <button class="on" data-m="paste">Paste text</button><button data-m="url">From link</button>
+  </div>
+  <div class="fld" id="upPasteFld"><label>Content</label><textarea class="inp" id="upBody" placeholder="Paste document text here…"></textarea></div>
+  <div class="fld" id="upUrlFld" style="display:none"><label>Document URL</label><input class="inp" id="upUrl" placeholder="https://example.com/security-policy  (web page, .txt, .md, or .pdf)"><p class="hint" style="margin-top:6px">Fetched server-side and the text extracted — nothing is downloaded to your device. Internal/private addresses are blocked.</p></div>
   <div class="row-end"><button class="btn" id="upCancel">Cancel</button><button class="btn primary" id="upSave">Analyze & connect</button></div>
 </div></div>
 
@@ -318,14 +325,23 @@ function boot(){
   tn.innerHTML=tenants.map(t=>`<option ${t===CFG.tenant?'selected':''}>${t}</option>`).join('');
   tn.onchange=()=>{CFG.tenant=tn.value;save();load();};
   $('#fw').onchange=load;$('#refresh').onclick=()=>{toast('Refreshing…');load();};
-  $('#upload').onclick=()=>{$('#upName').value='';$('#upBody').value='';$('#upModal').classList.add('on');};
+  $('#upload').onclick=()=>{$('#upName').value='';$('#upBody').value='';if($('#upUrl'))$('#upUrl').value='';$('#upModal').classList.add('on');};
+  let upMode='paste';
+  $('#upMode').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    $('#upMode').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    upMode=b.dataset.m;
+    $('#upPasteFld').style.display=upMode==='paste'?'':'none';
+    $('#upUrlFld').style.display=upMode==='url'?'':'none';});
   $('#upCancel').onclick=()=>$('#upModal').classList.remove('on');
   $('#upModal').onclick=e=>{if(e.target===$('#upModal'))$('#upModal').classList.remove('on');};
-  $('#upSave').onclick=async()=>{const name=$('#upName').value.trim()||'Untitled document';const body=$('#upBody').value.trim();
-    if(!body){toast('Paste some content first');return;}
+  $('#upSave').onclick=async()=>{const name=$('#upName').value.trim();
+    const body=$('#upBody').value.trim();const url=($('#upUrl')?$('#upUrl').value.trim():'');
+    if(upMode==='url'){if(!url){toast('Enter a URL first');return;}}
+    else if(!body){toast('Paste some content first');return;}
     if(G&&G._demo){toast('Demo mode — connect API to analyze real docs');$('#upModal').classList.remove('on');return;}
-    toast('Analyzing…');$('#upModal').classList.remove('on');
-    try{const r=await api('/evidence/documents',{method:'POST',body:JSON.stringify({tenant_id:CFG.tenant,name,content:body})});
+    toast(upMode==='url'?'Fetching & analyzing…':'Analyzing…');$('#upModal').classList.remove('on');
+    const payload=upMode==='url'?{tenant_id:CFG.tenant,url,name:name||undefined}:{tenant_id:CFG.tenant,name:name||'Untitled document',content:body};
+    try{const r=await api('/evidence/documents',{method:'POST',body:JSON.stringify(payload)});
       toast(`${r.method==='llm'?'LLM':'Keyword'} analysis: ${r.concepts_found} concepts found`);await load();}
     catch(e){toast('Failed: '+e.message);}};
   $('#gear').onclick=()=>{$('#cfgBase').value=CFG.base;$('#cfgKey').value=CFG.key;$('#cfgModal').classList.add('on');};
