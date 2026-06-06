@@ -673,6 +673,15 @@ function rControls(){
   _cb.innerHTML='These '+DATA.controls.length+' checks run automatically via connectors and return live pass/fail status. For the full 1,289-control catalog with attestation and evidence tracking, go to <a id="go2cat">Catalog →</a>';
   _cb.querySelector('#go2cat').onclick=()=>{ACTIVE='catalog';buildRail();renderActive();};
   v.appendChild(_cb);
+  // status summary strip
+  const byStat=DATA.controls.reduce((a,c)=>{const s=(c.status||'pending');a[s]=(a[s]||0)+1;return a;},{});
+  const strip=el('div');strip.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px';
+  [['pass','Passing','var(--pass)'],['fail','Failing','var(--fail)'],['error','Errored','var(--warn)'],['not_applicable','N/A','var(--dim)'],['pending','Pending','var(--mid)']].forEach(([k,lbl,col])=>{
+    if(!byStat[k])return;
+    const chip=el('div');chip.style.cssText=`display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-left:3px solid ${col};border-radius:8px;padding:8px 13px`;
+    chip.innerHTML=`<span style="font-family:var(--mono);font-size:18px;font-weight:600;color:${col}">${byStat[k]}</span><span style="font-size:12px;color:var(--mid)">${lbl}</span>`;
+    strip.appendChild(chip);});
+  v.appendChild(strip);
   const card=el('div','card');
   const tools=el('div','tools');tools.innerHTML=`<input class="inp" id="cf" placeholder="Filter controls…">`;
   card.appendChild(tools);
@@ -909,25 +918,41 @@ async function renderCatalog(host){
   g.appendChild(cF);
 
   // controls table (filterable)
-  const cC=el('div','card');cC.innerHTML='<h3>Controls</h3><div class="sub">click a control to set its attestation status</div>';
-  const tools=el('div','tools');tools.innerHTML='<input class="inp" id="catf" placeholder="Filter by id, title, family…">';
-  cC.appendChild(tools);
-  const tHost=el('div');cC.appendChild(tHost);
+  const cC=el('div','card');cC.innerHTML='<h3>Controls</h3><div class="sub">search, filter by status or family, sort — click any control to set its attestation</div>';
   const att=d.att||{};
   function statusOf(c){ if(c.automated)return {s:'auto',label:'Automated'}; const a=att[c.id];
     return a?{s:a.status,label:cap(a.status)}:{s:'not_assessed',label:'Not assessed'}; }
   const badge=st=>{const map={auto:'st-pass',compliant:'st-pass',non_compliant:'st-fail',not_applicable:'st-na',in_progress:'st-error',not_assessed:'st-na'};
     return `<span class="bdg ${map[st.s]||'st-na'}">${st.label}</span>`;};
+  const famList=[...new Set(d.controls.map(c=>c.family))].sort();
+  const tools=el('div','tools');
+  tools.innerHTML=`
+    <input class="inp" id="catf" placeholder="Search id, title…" style="min-width:180px">
+    <select class="inp" id="catFam"><option value="">All families (${famList.length})</option>${famList.map(f=>`<option value="${f}">${f}</option>`).join('')}</select>
+    <select class="inp" id="catSort"><option value="id">Sort: Control ID</option><option value="status">Sort: Status</option><option value="family">Sort: Family</option><option value="title">Sort: Title</option></select>
+    <div class="seg" id="catStatus"><button class="on" data-v="">All</button><button data-v="auto">Auto</button><button data-v="compliant">Compliant</button><button data-v="non_compliant">Non-compliant</button><button data-v="not_assessed">Unassessed</button></div>`;
+  cC.appendChild(tools);
+  const cnt=el('div');cnt.style.cssText='font-family:var(--mono);font-size:11px;color:var(--dim);margin:2px 2px 8px';cC.appendChild(cnt);
+  const tHost=el('div');cC.appendChild(tHost);
   const cols=[
-    {k:'id',label:'Control',cls:'mono',render:c=>`<b>${c.id}</b>`},
+    {k:'id',label:'Control',cls:'mono',render:c=>`<b>${c.id}</b>`,sortVal:c=>c.id},
     {k:'title',label:'Title'},
     {k:'family',label:'Family',render:c=>`<span class="tag">${c.family}</span>`},
-    {k:'_status',label:'Status',render:c=>badge(statusOf(c)),sortVal:c=>statusOf(c).s},
+    {k:'_status',label:'Status',render:c=>badge(statusOf(c)),sortVal:c=>({auto:0,non_compliant:1,in_progress:2,compliant:3,not_applicable:4,not_assessed:5})[statusOf(c).s]??9},
   ];
-  let q='';
-  function rebuild(){const rows=d.controls.filter(c=>!q||(c.id+' '+c.title+' '+c.family).toLowerCase().includes(q));
-    tHost.innerHTML='';tHost.appendChild(sortableTable(rows,cols,{sort:'id',onRow:c=>openAttest(CAT.cur,c,statusOf(c),host)}));}
+  let q='',fam='',sortBy='id',stf='';
+  function rebuild(){
+    const rows=d.controls.filter(c=>{
+      if(q&&!(c.id+' '+c.title+' '+c.family).toLowerCase().includes(q))return false;
+      if(fam&&c.family!==fam)return false;
+      if(stf&&statusOf(c).s!==stf)return false;
+      return true;});
+    cnt.textContent=`${rows.length} of ${d.controls.length} controls`;
+    tHost.innerHTML='';tHost.appendChild(sortableTable(rows,cols,{sort:sortBy==='status'?'_status':sortBy,onRow:c=>openAttest(CAT.cur,c,statusOf(c),host)}));}
   tools.querySelector('#catf').oninput=e=>{q=e.target.value.toLowerCase();rebuild();};
+  tools.querySelector('#catFam').onchange=e=>{fam=e.target.value;rebuild();};
+  tools.querySelector('#catSort').onchange=e=>{sortBy=e.target.value;rebuild();};
+  tools.querySelectorAll('#catStatus button').forEach(b=>b.onclick=()=>{tools.querySelectorAll('#catStatus button').forEach(x=>x.classList.remove('on'));b.classList.add('on');stf=b.dataset.v;rebuild();});
   rebuild();g.appendChild(cC);body.appendChild(g);
 }
 function openAttest(framework,ctrl,cur,host){
@@ -988,6 +1013,11 @@ function rResolver(){
 }
 function _drawResolver(host,planes){
   host.innerHTML='';
+  // Plain-English explainer
+  const ex=el('div','callout');
+  ex.style.cssText='background:rgba(139,124,255,.06);border-color:rgba(139,124,255,.2);margin-bottom:18px';
+  ex.innerHTML='<b>What is this?</b> Every control can be proven in more than one way — by reading live config from a connector (telemetry), by a document you uploaded (evidence), or by a person signing off (attestation). The resolver looks at a control + what you have connected, then <b>automatically picks the best available proof and runs it</b>. Below: the proof sources it can use (planes), a tool to try it on any control, and a log of every decision it made.';
+  host.appendChild(ex);
   // Plane cards
   const ph=el('div');ph.innerHTML='<h3 style="margin-bottom:10px">Telemetry Planes</h3><p class="muted" style="margin-bottom:14px">The resolver walks these in preference order and picks the first plane where a healthy producer is available for the asset.</p>';
   host.appendChild(ph);
