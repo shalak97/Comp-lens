@@ -1,0 +1,2168 @@
+[
+ {
+  "id": "mfa",
+  "label": "Multi-factor authentication",
+  "aliases": [
+   "MFA",
+   "multi-factor",
+   "multi factor",
+   "2fa",
+   "two-factor",
+   "two factor",
+   "otp",
+   "authenticator app"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-2(1)"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-2(2)"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.5"
+   }
+  ]
+ },
+ {
+  "id": "sso",
+  "label": "Single sign-on / federation",
+  "aliases": [
+   "SSO",
+   "single sign-on",
+   "single sign on",
+   "federation",
+   "saml",
+   "oidc",
+   "federated identity"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.5"
+   }
+  ]
+ },
+ {
+  "id": "password_policy",
+  "label": "Password policy",
+  "aliases": [
+   "password policy",
+   "password complexity",
+   "password length",
+   "credential policy",
+   "passphrase"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-5"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-5(1)"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.17"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.5"
+   }
+  ]
+ },
+ {
+  "id": "privileged_access",
+  "label": "Privileged access management",
+  "aliases": [
+   "privileged access",
+   "privileged account",
+   "admin access",
+   "administrative access",
+   "pam",
+   "superuser",
+   "root access"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-2(7)"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-5"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.2"
+   }
+  ]
+ },
+ {
+  "id": "least_privilege",
+  "label": "Least privilege",
+  "aliases": [
+   "least privilege",
+   "minimum necessary",
+   "need to know",
+   "need-to-know"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.3"
+   }
+  ]
+ },
+ {
+  "id": "rbac",
+  "label": "Role-based access control",
+  "aliases": [
+   "rbac",
+   "role-based access",
+   "role based access",
+   "access roles"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-3"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.15"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.18"
+   }
+  ]
+ },
+ {
+  "id": "account_management",
+  "label": "Account provisioning",
+  "aliases": [
+   "account management",
+   "provisioning",
+   "user provisioning",
+   "account creation",
+   "joiner process"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.16"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.18"
+   }
+  ]
+ },
+ {
+  "id": "offboarding",
+  "label": "Account deprovisioning / offboarding",
+  "aliases": [
+   "offboarding",
+   "deprovisioning",
+   "leaver process",
+   "account removal",
+   "disable account",
+   "revoke access"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PS-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.11"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.5"
+   }
+  ]
+ },
+ {
+  "id": "access_review",
+  "label": "Access review / recertification",
+  "aliases": [
+   "access review",
+   "access recertification",
+   "entitlement review",
+   "periodic review of access",
+   "review of access rights"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-6(7)"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.18"
+   }
+  ]
+ },
+ {
+  "id": "session_timeout",
+  "label": "Session management & timeout",
+  "aliases": [
+   "session timeout",
+   "session lock",
+   "idle timeout",
+   "auto logoff",
+   "session termination"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-11"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-12"
+   }
+  ]
+ },
+ {
+  "id": "remote_access",
+  "label": "Remote access",
+  "aliases": [
+   "remote access",
+   "remote working",
+   "work from home",
+   "teleworking"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-17"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.7"
+   }
+  ]
+ },
+ {
+  "id": "vpn",
+  "label": "VPN / secure tunnel",
+  "aliases": [
+   "vpn",
+   "virtual private network",
+   "secure tunnel"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-17"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-8"
+   }
+  ]
+ },
+ {
+  "id": "separation_of_duties",
+  "label": "Separation of duties",
+  "aliases": [
+   "separation of duties",
+   "segregation of duties",
+   "sod",
+   "conflicting duties"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.3"
+   }
+  ]
+ },
+ {
+  "id": "access_control_policy",
+  "label": "Access control policy",
+  "aliases": [
+   "access control policy",
+   "access policy"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-1"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.15"
+   }
+  ]
+ },
+ {
+  "id": "identity_management",
+  "label": "Identity lifecycle management",
+  "aliases": [
+   "identity management",
+   "identity lifecycle",
+   "identifier management"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IA-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.16"
+   }
+  ]
+ },
+ {
+  "id": "encryption_at_rest",
+  "label": "Encryption at rest",
+  "aliases": [
+   "encryption at rest",
+   "encrypted at rest",
+   "data at rest",
+   "aes-256",
+   "aes 256",
+   "disk encryption",
+   "storage encryption"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-28"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.24"
+   }
+  ]
+ },
+ {
+  "id": "encryption_in_transit",
+  "label": "Encryption in transit",
+  "aliases": [
+   "encryption in transit",
+   "data in transit",
+   "in-transit encryption",
+   "wire encryption"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-8"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-8(1)"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.24"
+   }
+  ]
+ },
+ {
+  "id": "tls",
+  "label": "TLS / HTTPS",
+  "aliases": [
+   "tls",
+   "ssl",
+   "https",
+   "transport layer security"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-8"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-13"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.24"
+   }
+  ]
+ },
+ {
+  "id": "key_management",
+  "label": "Cryptographic key management",
+  "aliases": [
+   "key management",
+   "kms",
+   "key rotation",
+   "encryption keys",
+   "cryptographic keys"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-12"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-13"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.24"
+   }
+  ]
+ },
+ {
+  "id": "cryptography",
+  "label": "Use of cryptography",
+  "aliases": [
+   "cryptography",
+   "cryptographic",
+   "encryption standard",
+   "cipher"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-13"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.24"
+   }
+  ]
+ },
+ {
+  "id": "certificate_management",
+  "label": "Certificate management",
+  "aliases": [
+   "certificate management",
+   "pki",
+   "x.509",
+   "tls certificate",
+   "certificate authority"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-12"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-17"
+   }
+  ]
+ },
+ {
+  "id": "data_masking",
+  "label": "Data masking / tokenization",
+  "aliases": [
+   "data masking",
+   "masking",
+   "tokenization",
+   "redaction",
+   "pseudonymization"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.11"
+   }
+  ]
+ },
+ {
+  "id": "audit_logging",
+  "label": "Audit logging",
+  "aliases": [
+   "audit logging",
+   "audit logs",
+   "logging enabled",
+   "event logging",
+   "security logs"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-3"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-12"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.15"
+   }
+  ]
+ },
+ {
+  "id": "log_retention",
+  "label": "Log retention",
+  "aliases": [
+   "log retention",
+   "retain logs",
+   "log storage period"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-11"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.15"
+   }
+  ]
+ },
+ {
+  "id": "log_review",
+  "label": "Log review & analysis",
+  "aliases": [
+   "log review",
+   "log analysis",
+   "review logs",
+   "audit review"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.15"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.16"
+   }
+  ]
+ },
+ {
+  "id": "siem",
+  "label": "SIEM / centralized logging",
+  "aliases": [
+   "siem",
+   "centralized logging",
+   "log aggregation",
+   "splunk",
+   "log management"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-6"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.16"
+   }
+  ]
+ },
+ {
+  "id": "security_monitoring",
+  "label": "Security monitoring",
+  "aliases": [
+   "security monitoring",
+   "continuous monitoring",
+   "system monitoring"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.16"
+   }
+  ]
+ },
+ {
+  "id": "intrusion_detection",
+  "label": "Intrusion detection/prevention",
+  "aliases": [
+   "intrusion detection",
+   "intrusion prevention",
+   "ids",
+   "ips",
+   "idps"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-4"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-7"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.16"
+   }
+  ]
+ },
+ {
+  "id": "file_integrity_monitoring",
+  "label": "File integrity monitoring",
+  "aliases": [
+   "file integrity monitoring",
+   "fim",
+   "integrity checking",
+   "tamper detection"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-7"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.16"
+   }
+  ]
+ },
+ {
+  "id": "time_synchronization",
+  "label": "Clock synchronization",
+  "aliases": [
+   "time synchronization",
+   "clock sync",
+   "ntp",
+   "time source"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.17"
+   }
+  ]
+ },
+ {
+  "id": "audit_log_protection",
+  "label": "Audit log protection",
+  "aliases": [
+   "audit log protection",
+   "protect logs",
+   "log tampering",
+   "immutable logs"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AU-9"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.15"
+   }
+  ]
+ },
+ {
+  "id": "vulnerability_management",
+  "label": "Vulnerability management",
+  "aliases": [
+   "vulnerability management",
+   "vulnerability scanning",
+   "vuln scan",
+   "vulnerability assessment",
+   "cve"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "RA-5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.8"
+   }
+  ]
+ },
+ {
+  "id": "penetration_testing",
+  "label": "Penetration testing",
+  "aliases": [
+   "penetration testing",
+   "pen test",
+   "pentest",
+   "red team",
+   "ethical hacking"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CA-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.29"
+   }
+  ]
+ },
+ {
+  "id": "patch_management",
+  "label": "Patch management",
+  "aliases": [
+   "patch management",
+   "patching",
+   "security updates",
+   "software updates"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.8"
+   }
+  ]
+ },
+ {
+  "id": "flaw_remediation",
+  "label": "Flaw remediation",
+  "aliases": [
+   "flaw remediation",
+   "remediate vulnerabilities",
+   "fix vulnerabilities"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.8"
+   }
+  ]
+ },
+ {
+  "id": "configuration_management",
+  "label": "Configuration management",
+  "aliases": [
+   "configuration management",
+   "config management",
+   "baseline configuration"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.9"
+   }
+  ]
+ },
+ {
+  "id": "hardening",
+  "label": "Secure baseline / hardening",
+  "aliases": [
+   "hardening",
+   "secure baseline",
+   "cis benchmark",
+   "security configuration",
+   "harden"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-6"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-7"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.9"
+   }
+  ]
+ },
+ {
+  "id": "change_management",
+  "label": "Change management",
+  "aliases": [
+   "change management",
+   "change control",
+   "configuration change control",
+   "rfc"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-3"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.32"
+   }
+  ]
+ },
+ {
+  "id": "asset_inventory",
+  "label": "Asset inventory",
+  "aliases": [
+   "asset inventory",
+   "asset management",
+   "inventory of assets",
+   "hardware inventory",
+   "software inventory",
+   "cmdb"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.9"
+   }
+  ]
+ },
+ {
+  "id": "malware_protection",
+  "label": "Malware protection",
+  "aliases": [
+   "malware protection",
+   "antivirus",
+   "anti-malware",
+   "anti malware",
+   "endpoint protection",
+   "edr",
+   "virus scan"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-3"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.7"
+   }
+  ]
+ },
+ {
+  "id": "email_security",
+  "label": "Email security / anti-phishing",
+  "aliases": [
+   "email security",
+   "phishing",
+   "spam filter",
+   "anti-phishing",
+   "email gateway"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.23"
+   }
+  ]
+ },
+ {
+  "id": "mobile_device_management",
+  "label": "Mobile device management",
+  "aliases": [
+   "mobile device management",
+   "mdm",
+   "byod",
+   "mobile devices",
+   "endpoint devices"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-19"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.1"
+   }
+  ]
+ },
+ {
+  "id": "least_functionality",
+  "label": "Least functionality",
+  "aliases": [
+   "least functionality",
+   "disable unnecessary services",
+   "remove unused",
+   "minimal services"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CM-7"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.9"
+   }
+  ]
+ },
+ {
+  "id": "firewall",
+  "label": "Firewall",
+  "aliases": [
+   "firewall",
+   "waf",
+   "packet filtering",
+   "acl",
+   "network acl"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-7"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.20"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.21"
+   }
+  ]
+ },
+ {
+  "id": "network_segmentation",
+  "label": "Network segmentation",
+  "aliases": [
+   "network segmentation",
+   "segmentation",
+   "vlan",
+   "micro-segmentation",
+   "network isolation"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-7"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.22"
+   }
+  ]
+ },
+ {
+  "id": "boundary_protection",
+  "label": "Boundary protection",
+  "aliases": [
+   "boundary protection",
+   "perimeter security",
+   "network boundary",
+   "dmz"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-7"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.20"
+   }
+  ]
+ },
+ {
+  "id": "dos_protection",
+  "label": "Denial of service protection",
+  "aliases": [
+   "denial of service",
+   "dos protection",
+   "ddos",
+   "rate limiting"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-5"
+   }
+  ]
+ },
+ {
+  "id": "wireless_security",
+  "label": "Wireless security",
+  "aliases": [
+   "wireless security",
+   "wifi security",
+   "wpa2",
+   "wpa3",
+   "wireless access"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-18"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.20"
+   }
+  ]
+ },
+ {
+  "id": "dns_security",
+  "label": "DNS security",
+  "aliases": [
+   "dns security",
+   "dnssec",
+   "secure dns",
+   "name resolution"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-20"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-21"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-22"
+   }
+  ]
+ },
+ {
+  "id": "data_loss_prevention",
+  "label": "Data loss prevention",
+  "aliases": [
+   "data loss prevention",
+   "dlp",
+   "data leakage",
+   "exfiltration prevention"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AC-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.12"
+   }
+  ]
+ },
+ {
+  "id": "data_classification",
+  "label": "Data classification",
+  "aliases": [
+   "data classification",
+   "information classification",
+   "data sensitivity",
+   "classify data"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "RA-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.12"
+   }
+  ]
+ },
+ {
+  "id": "data_labeling",
+  "label": "Information labeling",
+  "aliases": [
+   "data labeling",
+   "information labeling",
+   "data labelling",
+   "handling labels"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.13"
+   }
+  ]
+ },
+ {
+  "id": "data_retention",
+  "label": "Data retention",
+  "aliases": [
+   "data retention",
+   "retention policy",
+   "information retention",
+   "retention schedule"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-12"
+   }
+  ]
+ },
+ {
+  "id": "data_disposal",
+  "label": "Secure data disposal",
+  "aliases": [
+   "data disposal",
+   "secure deletion",
+   "data destruction",
+   "sanitization",
+   "wipe data",
+   "secure erase"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "MP-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.10"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.14"
+   }
+  ]
+ },
+ {
+  "id": "media_protection",
+  "label": "Media protection",
+  "aliases": [
+   "media protection",
+   "removable media",
+   "usb control",
+   "storage media"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "MP-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "MP-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.10"
+   }
+  ]
+ },
+ {
+  "id": "backup",
+  "label": "Backup",
+  "aliases": [
+   "backup",
+   "backups",
+   "data backup",
+   "snapshot"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CP-9"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.13"
+   }
+  ]
+ },
+ {
+  "id": "backup_testing",
+  "label": "Backup restore testing",
+  "aliases": [
+   "backup testing",
+   "restore testing",
+   "recovery testing",
+   "test backups"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CP-9"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CP-10"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.13"
+   }
+  ]
+ },
+ {
+  "id": "data_integrity",
+  "label": "Information integrity",
+  "aliases": [
+   "data integrity",
+   "information integrity",
+   "integrity protection",
+   "checksum"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SI-7"
+   }
+  ]
+ },
+ {
+  "id": "privacy",
+  "label": "Privacy / PII protection",
+  "aliases": [
+   "privacy",
+   "pii",
+   "personal data",
+   "personally identifiable",
+   "data protection",
+   "gdpr"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PT-2"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PT-3"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.34"
+   }
+  ]
+ },
+ {
+  "id": "data_transfer",
+  "label": "Secure information transfer",
+  "aliases": [
+   "data transfer",
+   "information transfer",
+   "secure transfer",
+   "file transfer",
+   "sftp"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SC-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.14"
+   }
+  ]
+ },
+ {
+  "id": "incident_response",
+  "label": "Incident response",
+  "aliases": [
+   "incident response",
+   "incident handling",
+   "security incident",
+   "breach response"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IR-4"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IR-5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.26"
+   }
+  ]
+ },
+ {
+  "id": "incident_response_plan",
+  "label": "Incident response plan",
+  "aliases": [
+   "incident response plan",
+   "ir plan",
+   "incident management plan",
+   "playbook"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IR-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.24"
+   }
+  ]
+ },
+ {
+  "id": "incident_reporting",
+  "label": "Incident reporting",
+  "aliases": [
+   "incident reporting",
+   "report incident",
+   "security event reporting",
+   "escalation"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IR-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.8"
+   }
+  ]
+ },
+ {
+  "id": "forensics",
+  "label": "Forensics / evidence collection",
+  "aliases": [
+   "forensics",
+   "evidence collection",
+   "digital forensics",
+   "chain of custody"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "IR-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.28"
+   }
+  ]
+ },
+ {
+  "id": "business_continuity",
+  "label": "Business continuity",
+  "aliases": [
+   "business continuity",
+   "bcp",
+   "continuity plan",
+   "continuity of operations"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CP-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.29"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.30"
+   }
+  ]
+ },
+ {
+  "id": "disaster_recovery",
+  "label": "Disaster recovery",
+  "aliases": [
+   "disaster recovery",
+   "dr plan",
+   "dr site",
+   "failover"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CP-10"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.30"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.14"
+   }
+  ]
+ },
+ {
+  "id": "contingency_plan",
+  "label": "Contingency planning",
+  "aliases": [
+   "contingency plan",
+   "contingency planning",
+   "emergency plan"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CP-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.29"
+   }
+  ]
+ },
+ {
+  "id": "redundancy",
+  "label": "Redundancy / high availability",
+  "aliases": [
+   "redundancy",
+   "high availability",
+   "ha",
+   "fault tolerance",
+   "failover capacity"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CP-10"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.14"
+   }
+  ]
+ },
+ {
+  "id": "risk_assessment",
+  "label": "Risk assessment",
+  "aliases": [
+   "risk assessment",
+   "risk analysis",
+   "risk evaluation"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "RA-3"
+   }
+  ]
+ },
+ {
+  "id": "risk_management",
+  "label": "Risk management",
+  "aliases": [
+   "risk management",
+   "risk treatment",
+   "risk register",
+   "risk framework"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "RA-1"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PM-9"
+   }
+  ]
+ },
+ {
+  "id": "threat_intelligence",
+  "label": "Threat intelligence",
+  "aliases": [
+   "threat intelligence",
+   "threat intel",
+   "threat feed",
+   "ioc"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PM-16"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.7"
+   }
+  ]
+ },
+ {
+  "id": "security_policy",
+  "label": "Information security policy",
+  "aliases": [
+   "security policy",
+   "information security policy",
+   "isms policy",
+   "policies"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PL-1"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.1"
+   }
+  ]
+ },
+ {
+  "id": "acceptable_use",
+  "label": "Acceptable use",
+  "aliases": [
+   "acceptable use",
+   "aup",
+   "acceptable use policy",
+   "appropriate use"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PL-4"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.10"
+   }
+  ]
+ },
+ {
+  "id": "security_awareness",
+  "label": "Security awareness training",
+  "aliases": [
+   "security awareness",
+   "awareness training",
+   "security training",
+   "phishing training",
+   "education"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AT-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.3"
+   }
+  ]
+ },
+ {
+  "id": "role_based_training",
+  "label": "Role-based security training",
+  "aliases": [
+   "role-based training",
+   "role based training",
+   "specialized training"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "AT-3"
+   }
+  ]
+ },
+ {
+  "id": "security_roles",
+  "label": "Security roles & responsibilities",
+  "aliases": [
+   "security roles",
+   "roles and responsibilities",
+   "security responsibilities",
+   "raci"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.2"
+   }
+  ]
+ },
+ {
+  "id": "governance",
+  "label": "Security governance program",
+  "aliases": [
+   "governance",
+   "security program",
+   "isms",
+   "program management"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PM-1"
+   }
+  ]
+ },
+ {
+  "id": "compliance_management",
+  "label": "Compliance management",
+  "aliases": [
+   "compliance",
+   "regulatory compliance",
+   "legal requirements",
+   "statutory requirements"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.31"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.36"
+   }
+  ]
+ },
+ {
+  "id": "independent_review",
+  "label": "Independent security review",
+  "aliases": [
+   "independent review",
+   "internal audit",
+   "external audit",
+   "security audit"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CA-2"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.35"
+   }
+  ]
+ },
+ {
+  "id": "documented_procedures",
+  "label": "Documented operating procedures",
+  "aliases": [
+   "documented procedures",
+   "operating procedures",
+   "sop",
+   "runbook",
+   "standard operating procedure"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.37"
+   }
+  ]
+ },
+ {
+  "id": "vendor_risk",
+  "label": "Third-party / vendor risk management",
+  "aliases": [
+   "vendor risk",
+   "third party risk",
+   "third-party risk",
+   "supplier risk",
+   "vendor management",
+   "tprm"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SA-9"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SR-3"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.19"
+   }
+  ]
+ },
+ {
+  "id": "supplier_agreements",
+  "label": "Supplier security agreements",
+  "aliases": [
+   "supplier agreement",
+   "vendor contract",
+   "security in contracts",
+   "dpa"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SA-9"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.20"
+   }
+  ]
+ },
+ {
+  "id": "supply_chain_security",
+  "label": "Supply chain security",
+  "aliases": [
+   "supply chain",
+   "supply chain security",
+   "ict supply chain",
+   "software supply chain"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SR-3"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SR-5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.21"
+   }
+  ]
+ },
+ {
+  "id": "cloud_security",
+  "label": "Cloud security",
+  "aliases": [
+   "cloud security",
+   "cloud services",
+   "saas security",
+   "iaas",
+   "cloud provider"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.23"
+   }
+  ]
+ },
+ {
+  "id": "secure_development",
+  "label": "Secure development lifecycle",
+  "aliases": [
+   "secure development",
+   "sdlc",
+   "secure sdlc",
+   "development lifecycle",
+   "ssdlc"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SA-3"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SA-15"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.25"
+   }
+  ]
+ },
+ {
+  "id": "secure_coding",
+  "label": "Secure coding",
+  "aliases": [
+   "secure coding",
+   "coding standards",
+   "owasp",
+   "input validation",
+   "sast"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SA-15"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.28"
+   }
+  ]
+ },
+ {
+  "id": "code_review",
+  "label": "Code review",
+  "aliases": [
+   "code review",
+   "peer review",
+   "pull request review",
+   "security code review"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SA-11"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.28"
+   }
+  ]
+ },
+ {
+  "id": "application_security",
+  "label": "Application security requirements",
+  "aliases": [
+   "application security",
+   "appsec",
+   "security requirements"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.26"
+   }
+  ]
+ },
+ {
+  "id": "security_testing",
+  "label": "Security testing in development",
+  "aliases": [
+   "security testing",
+   "dast",
+   "sast",
+   "dynamic testing",
+   "static analysis"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "SA-11"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "CA-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.29"
+   }
+  ]
+ },
+ {
+  "id": "separation_environments",
+  "label": "Separate dev/test/prod",
+  "aliases": [
+   "separation of environments",
+   "dev test prod",
+   "environment separation",
+   "non-production data"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.31"
+   }
+  ]
+ },
+ {
+  "id": "source_code_protection",
+  "label": "Source code access control",
+  "aliases": [
+   "source code protection",
+   "source code access",
+   "repository access",
+   "code repository"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.4"
+   }
+  ]
+ },
+ {
+  "id": "dependency_management",
+  "label": "Dependency / SCA management",
+  "aliases": [
+   "dependency management",
+   "software composition analysis",
+   "sca",
+   "third-party libraries",
+   "open source components"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "RA-5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.8.8"
+   }
+  ]
+ },
+ {
+  "id": "physical_security",
+  "label": "Physical security",
+  "aliases": [
+   "physical security",
+   "physical access",
+   "facility security",
+   "secure area"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PE-3"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.1"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.2"
+   }
+  ]
+ },
+ {
+  "id": "visitor_management",
+  "label": "Visitor management",
+  "aliases": [
+   "visitor management",
+   "visitor log",
+   "visitor access",
+   "escort"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PE-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.2"
+   }
+  ]
+ },
+ {
+  "id": "environmental_controls",
+  "label": "Environmental controls",
+  "aliases": [
+   "environmental controls",
+   "fire suppression",
+   "hvac",
+   "temperature control",
+   "power protection",
+   "ups"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PE-13"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PE-14"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PE-15"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.11"
+   }
+  ]
+ },
+ {
+  "id": "clear_desk",
+  "label": "Clear desk & screen",
+  "aliases": [
+   "clear desk",
+   "clean desk",
+   "clear screen",
+   "screen lock"
+  ],
+  "controls": [
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.7.7"
+   }
+  ]
+ },
+ {
+  "id": "personnel_screening",
+  "label": "Personnel screening",
+  "aliases": [
+   "personnel screening",
+   "background check",
+   "background verification",
+   "vetting"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PS-3"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.1"
+   }
+  ]
+ },
+ {
+  "id": "termination_process",
+  "label": "Termination process",
+  "aliases": [
+   "termination",
+   "personnel termination",
+   "exit process",
+   "return of assets"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PS-4"
+   },
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PS-5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.5"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.5.11"
+   }
+  ]
+ },
+ {
+  "id": "nda",
+  "label": "Confidentiality / NDA",
+  "aliases": [
+   "nda",
+   "non-disclosure",
+   "confidentiality agreement",
+   "non disclosure"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PS-6"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.6"
+   }
+  ]
+ },
+ {
+  "id": "disciplinary_process",
+  "label": "Disciplinary process",
+  "aliases": [
+   "disciplinary process",
+   "disciplinary action",
+   "sanctions"
+  ],
+  "controls": [
+   {
+    "framework": "NIST_800_53",
+    "control_id": "PS-8"
+   },
+   {
+    "framework": "ISO_27001_2022",
+    "control_id": "A.6.4"
+   }
+  ]
+ }
+]

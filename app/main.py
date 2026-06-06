@@ -514,3 +514,68 @@ def framework_coverage(framework: str, tenant_id: str = "default",
                        db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
     authorize_tenant(p, tenant_id)
     return _AttestationService(db).coverage(tenant_id, framework)
+
+
+# ── evidence graph (LLM-grounded document → concept → control mindmap) ──
+from app.services.evidence_graph import EvidenceService as _EvidenceService
+from app.services import evidence_graph as _evg
+from app.services import llm_client as _llm
+
+
+class _DocumentRequest(_BaseModel):
+    tenant_id: str = "default"
+    name: str
+    content: str
+    source_type: str = "text"
+
+
+class _ConfirmRequest(_BaseModel):
+    confirmed: bool = True
+    auto_attest: bool = False
+    approver: str | None = None
+
+
+@app.get("/evidence/lexicon", tags=["evidence-graph"])
+def evidence_lexicon(_: Principal = Depends(require_principal)) -> dict:
+    lex = _evg.lexicon()
+    return {"concepts": len(lex), "llm_available": _llm.available(),
+            "items": [{"id": c["id"], "label": c["label"], "controls": len(c["controls"])} for c in lex]}
+
+
+@app.post("/evidence/documents", tags=["evidence-graph"])
+def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
+                          p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    if not req.content.strip():
+        raise HTTPException(status_code=400, detail="content is empty")
+    return _EvidenceService(db).add_document(req.tenant_id, req.name, req.content, req.source_type)
+
+
+@app.get("/evidence/documents", tags=["evidence-graph"])
+def list_evidence_documents(tenant_id: str = "default", db: Session = Depends(get_db),
+                            p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _EvidenceService(db).list_documents(tenant_id)
+
+
+@app.get("/evidence/graph", tags=["evidence-graph"])
+def evidence_graph(tenant_id: str = "default", framework: str | None = None,
+                   db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _EvidenceService(db).graph(tenant_id, framework)
+
+
+@app.post("/evidence/hits/{hit_id}/confirm", tags=["evidence-graph"])
+def confirm_evidence_hit(hit_id: str, req: _ConfirmRequest, db: Session = Depends(get_db),
+                         p: Principal = Depends(require_principal)) -> dict:
+    try:
+        return _EvidenceService(db).confirm_hit(hit_id, req.confirmed, req.auto_attest, req.approver)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.delete("/evidence/documents/{doc_id}", tags=["evidence-graph"])
+def delete_evidence_document(doc_id: str, db: Session = Depends(get_db),
+                             p: Principal = Depends(require_principal)) -> dict:
+    _EvidenceService(db).delete_document(doc_id)
+    return {"deleted": doc_id}

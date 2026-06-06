@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
-from sqlalchemy import (JSON, Boolean, DateTime, Enum, Index, Integer, String,
+from sqlalchemy import (JSON, Boolean, DateTime, Enum, Float, Index, Integer, String,
                         Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -358,3 +358,43 @@ class ControlAttestation(Base):
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     evidence_ref: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class EvidenceDocument(Base):
+    """An uploaded evidence document and its extraction state."""
+    __tablename__ = "evidence_documents"
+    __table_args__ = (
+        Index("ix_evidence_docs_tenant", "tenant_id"),
+        UniqueConstraint("tenant_id", "content_hash", name="uq_evidence_doc_hash"),
+    )
+    doc_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    name: Mapped[str] = mapped_column(String(512))
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    char_count: Mapped[int] = mapped_column(Integer, default=0)
+    source_type: Mapped[str] = mapped_column(String(32), default="text")
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    method: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    prompt_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class EvidenceConceptHit(Base):
+    """A detected concept in a document, grounded by a verbatim quote (provenance)."""
+    __tablename__ = "evidence_concept_hits"
+    __table_args__ = (
+        Index("ix_evidence_hits_tenant", "tenant_id"),
+        Index("ix_evidence_hits_doc", "doc_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    doc_id: Mapped[str] = mapped_column(String(36), index=True)
+    concept_id: Mapped[str] = mapped_column(String(64), index=True)
+    quote: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.6)
+    method: Mapped[str] = mapped_column(String(16), default="lexicon")
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
