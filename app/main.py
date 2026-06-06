@@ -659,4 +659,4 @@ _EVMAP_FILE = _os_evm.path.join(_os_evm.path.dirname(__file__), "static", "evide
 
 @app.get("/evidence-map", include_in_schema=False)
 def _serve_evidence_map():
-    return _FileResponse_evm(_EVMAP_FILE)
+    return _FileResponse_evm(_EVMAP_FILE, headers={"Cache-Control":"no-cache,no-store,must-revalidate","Pragma":"no-cache","Expires":"0"})
