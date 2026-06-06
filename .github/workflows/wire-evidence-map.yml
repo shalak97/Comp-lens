@@ -1,0 +1,42 @@
+name: Wire evidence mindmap into API
+
+on:
+  workflow_dispatch:
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Move evidence-map.html into app/static/
+        run: |
+          mkdir -p app/static
+          if [ -f evidence-map.html ]; then
+            git mv -f evidence-map.html app/static/evidence-map.html
+            echo "moved evidence-map.html -> app/static/"
+          elif [ -f app/static/evidence-map.html ]; then
+            echo "already in app/static/ -- ok"
+          else
+            echo "::error::evidence-map.html not found at repo root. Upload it first."
+            exit 1
+          fi
+
+      - name: Add /evidence-map route to main.py (idempotent)
+        run: |
+          if grep -q "_serve_evidence_map" app/main.py; then
+            echo "route already present -- skipping"
+          else
+            echo "CgojIOKUgOKUgCBldmlkZW5jZSBtaW5kbWFwIOKUgOKUgAppbXBvcnQgb3MgYXMgX29zX2V2bQpmcm9tIGZhc3RhcGkucmVzcG9uc2VzIGltcG9ydCBGaWxlUmVzcG9uc2UgYXMgX0ZpbGVSZXNwb25zZV9ldm0KCl9FVk1BUF9GSUxFID0gX29zX2V2bS5wYXRoLmpvaW4oX29zX2V2bS5wYXRoLmRpcm5hbWUoX19maWxlX18pLCAic3RhdGljIiwgImV2aWRlbmNlLW1hcC5odG1sIikKCgpAYXBwLmdldCgiL2V2aWRlbmNlLW1hcCIsIGluY2x1ZGVfaW5fc2NoZW1hPUZhbHNlKQpkZWYgX3NlcnZlX2V2aWRlbmNlX21hcCgpOgogICAgcmV0dXJuIF9GaWxlUmVzcG9uc2VfZXZtKF9FVk1BUF9GSUxFKQo=" | base64 -d >> app/main.py
+            echo "route appended to app/main.py"
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/main.py app/static/evidence-map.html
+          git diff --cached --quiet || git commit -m "feat: serve evidence mindmap at /evidence-map"
+          git push
