@@ -1,0 +1,49 @@
+name: Fix HTML cache headers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add no-store cache headers to dashboard + evidence-map routes
+        run: |
+          python3 - << 'PY'
+          import re
+
+          with open("app/main.py") as f:
+              s = f.read()
+
+          HEADERS = 'headers={"Cache-Control":"no-cache,no-store,must-revalidate","Pragma":"no-cache","Expires":"0"}'
+
+          # dashboard
+          s = s.replace(
+              "return _FileResponse(_DASH)",
+              f"return _FileResponse(_DASH, {HEADERS})"
+          )
+          # evidence-map
+          s = s.replace(
+              "return _FileResponse_evm(_EVMAP_FILE)",
+              f"return _FileResponse_evm(_EVMAP_FILE, {HEADERS})"
+          )
+
+          with open("app/main.py", "w") as f:
+              f.write(s)
+
+          # verify both patches landed
+          assert 'no-store' in open("app/main.py").read(), "patch failed"
+          print("cache headers patched in main.py")
+          PY
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/main.py
+          git diff --cached --quiet && echo "already patched, nothing to commit" || \
+            git commit -m "fix: no-store cache headers for dashboard and evidence-map" && git push
