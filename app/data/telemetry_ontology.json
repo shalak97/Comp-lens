@@ -1,0 +1,239 @@
+{
+ "version": "telemetry-ontology-v1",
+ "planes": {
+  "configuration": {
+   "label": "Configuration / Posture",
+   "shape": "snapshot",
+   "trust": "high",
+   "cadence": "periodic",
+   "producers": [
+    "AWS",
+    "AZURE",
+    "GCP"
+   ]
+  },
+  "identity_access": {
+   "label": "Identity & Access",
+   "shape": "snapshot",
+   "trust": "high",
+   "cadence": "periodic",
+   "producers": [
+    "OKTA",
+    "AZURE",
+    "AWS"
+   ]
+  },
+  "activity_audit": {
+   "label": "Activity & Audit",
+   "shape": "timeseries",
+   "trust": "high",
+   "cadence": "streaming",
+   "producers": [
+    "AWS",
+    "OKTA"
+   ]
+  },
+  "vulnerability_threat": {
+   "label": "Vulnerability & Threat",
+   "shape": "scan",
+   "trust": "high",
+   "cadence": "scan-driven",
+   "producers": [
+    "QUALYS",
+    "CROWDSTRIKE",
+    "SSH"
+   ]
+  },
+  "change_delivery": {
+   "label": "Change & Delivery",
+   "shape": "event",
+   "trust": "medium",
+   "cadence": "event-driven",
+   "producers": [
+    "JIRA",
+    "SERVICENOW",
+    "GITHUB",
+    "GITLAB"
+   ]
+  },
+  "host_runtime": {
+   "label": "Host / Runtime",
+   "shape": "pull",
+   "trust": "high",
+   "cadence": "on-demand",
+   "producers": [
+    "SSH"
+   ]
+  },
+  "ai_governance": {
+   "label": "AI Governance",
+   "shape": "metadata",
+   "trust": "medium",
+   "cadence": "on-change",
+   "producers": [
+    "AIGOV"
+   ]
+  },
+  "attestation_document": {
+   "label": "Attestation & Document",
+   "shape": "document",
+   "trust": "asserted",
+   "cadence": "human",
+   "producers": [
+    "EVIDENCE",
+    "ATTEST"
+   ]
+  }
+ },
+ "capabilities": {
+  "AWS": {
+   "plane": [
+    "configuration",
+    "identity_access",
+    "activity_audit"
+   ],
+   "asset_types": [
+    "cloud-account",
+    "data-store"
+   ],
+   "role": "producer"
+  },
+  "AZURE": {
+   "plane": [
+    "configuration",
+    "identity_access"
+   ],
+   "asset_types": [
+    "cloud-account"
+   ],
+   "role": "producer"
+  },
+  "GCP": {
+   "plane": [
+    "configuration"
+   ],
+   "asset_types": [
+    "cloud-account"
+   ],
+   "role": "producer"
+  },
+  "OKTA": {
+   "plane": [
+    "identity_access",
+    "activity_audit"
+   ],
+   "asset_types": [
+    "identity"
+   ],
+   "role": "producer"
+  },
+  "GITHUB": {
+   "plane": [
+    "change_delivery"
+   ],
+   "asset_types": [
+    "repo"
+   ],
+   "role": "producer"
+  },
+  "GITLAB": {
+   "plane": [
+    "change_delivery"
+   ],
+   "asset_types": [
+    "repo"
+   ],
+   "role": "producer"
+  },
+  "JIRA": {
+   "plane": [
+    "change_delivery"
+   ],
+   "asset_types": [
+    "change"
+   ],
+   "role": "producer"
+  },
+  "SERVICENOW": {
+   "plane": [
+    "change_delivery"
+   ],
+   "asset_types": [
+    "change"
+   ],
+   "role": "producer"
+  },
+  "QUALYS": {
+   "plane": [
+    "vulnerability_threat"
+   ],
+   "asset_types": [
+    "host",
+    "cloud-account"
+   ],
+   "role": "producer"
+  },
+  "CROWDSTRIKE": {
+   "plane": [
+    "vulnerability_threat"
+   ],
+   "asset_types": [
+    "host"
+   ],
+   "role": "producer"
+  },
+  "SSH": {
+   "plane": [
+    "host_runtime",
+    "vulnerability_threat"
+   ],
+   "asset_types": [
+    "host"
+   ],
+   "role": "producer"
+  },
+  "AIGOV": {
+   "plane": [
+    "ai_governance"
+   ],
+   "asset_types": [
+    "ai-system"
+   ],
+   "role": "producer"
+  },
+  "DEMO": {
+   "plane": [
+    "configuration",
+    "identity_access",
+    "activity_audit",
+    "vulnerability_threat",
+    "change_delivery",
+    "host_runtime",
+    "ai_governance",
+    "attestation_document"
+   ],
+   "asset_types": [
+    "*"
+   ],
+   "role": "producer-simulation"
+  },
+  "EVIDENCE": {
+   "plane": [
+    "attestation_document"
+   ],
+   "asset_types": [
+    "*"
+   ],
+   "role": "extractor"
+  },
+  "ATTEST": {
+   "plane": [
+    "attestation_document"
+   ],
+   "asset_types": [
+    "*"
+   ],
+   "role": "human"
+  }
+ }
+}

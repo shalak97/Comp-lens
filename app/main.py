@@ -579,3 +579,54 @@ def delete_evidence_document(doc_id: str, db: Session = Depends(get_db),
                              p: Principal = Depends(require_principal)) -> dict:
     _EvidenceService(db).delete_document(doc_id)
     return {"deleted": doc_id}
+
+
+# ── ontology-driven resolver (telemetry / document / attestation routing) ──
+from app.services import resolver as _resolver
+
+
+class _ResolveRequest(_BaseModel):
+    tenant_id: str = "default"
+    framework: str = "NIST_800_53"
+    control_id: str
+    asset: dict | None = None
+    available_connectors: list[str] = []
+    dry_run: bool = False
+
+
+@app.get("/ontology/planes", tags=["ontology"])
+def ontology_planes(_: Principal = Depends(require_principal)) -> dict:
+    return _resolver.ontology()
+
+
+@app.get("/ontology/bindings", tags=["ontology"])
+def ontology_bindings(control_id: str, framework: str = "NIST_800_53",
+                      _: Principal = Depends(require_principal)) -> dict:
+    b = _resolver.control_binding(framework, control_id)
+    if not b:
+        raise HTTPException(status_code=404, detail=f"No binding for {control_id} in {framework}")
+    return {"framework": framework, "control_id": control_id, **b}
+
+
+@app.post("/resolve", tags=["ontology"])
+def resolve_control(req: _ResolveRequest, db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    try:
+        return _resolver.resolve(db, req.tenant_id, req.framework, req.control_id,
+                                 req.asset, req.available_connectors, req.dry_run)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/resolve/decisions", tags=["ontology"])
+def list_routing_decisions(tenant_id: str = "default", control_id: str | None = None,
+                           db: Session = Depends(get_db),
+                           p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return [{"decision_id": d.id, "control_id": d.control_id, "framework": d.framework,
+             "asset_type": d.asset_type, "plane": d.plane, "strategy_type": d.strategy_type,
+             "module": d.module, "status": d.status, "reason": d.reason,
+             "executed": d.executed, "skipped": d.skipped, "finding_id": d.finding_id,
+             "created_at": d.created_at.isoformat()}
+            for d in _resolver.list_decisions(db, tenant_id, control_id)]

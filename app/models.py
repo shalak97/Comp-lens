@@ -398,3 +398,28 @@ class EvidenceConceptHit(Base):
     method: Mapped[str] = mapped_column(String(16), default="lexicon")
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class RoutingDecision(Base):
+    """Audit record of an ontology resolver decision: which plane/module satisfied
+    a control on a given occasion, the resulting status, and why others were skipped."""
+    __tablename__ = "routing_decisions"
+    __table_args__ = (
+        Index("ix_routing_tenant_control", "tenant_id", "control_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    framework: Mapped[str] = mapped_column(String(64))
+    control_id: Mapped[str] = mapped_column(String(128), index=True)
+    asset_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    asset_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    plane: Mapped[str] = mapped_column(String(64))
+    strategy_type: Mapped[str] = mapped_column(String(32))
+    module: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    executed: Mapped[bool] = mapped_column(Boolean, default=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
+    skipped: Mapped[list] = mapped_column(JSON, default=list)
+    finding_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
