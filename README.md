@@ -1,4 +1,4 @@
-# Comp-Lens — Production-Grade GRC Compliance-as-Code Platform
+# Comp-Lens — GRC Compliance-as-Code Platform
 
 Vendor-agnostic cybersecurity GRC automation. Assess controls across cloud,
 identity, code, endpoint, ticketing, on-prem, and SaaS systems through real API
