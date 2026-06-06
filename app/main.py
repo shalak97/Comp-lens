@@ -449,3 +449,68 @@ if _os.path.isdir(_STATIC_DIR):
     @app.get("/dashboard", include_in_schema=False)
     def _serve_dashboard():
         return _FileResponse(_os.path.join(_STATIC_DIR, "dashboard.html"))
+
+
+# ── framework catalog + attestation (full coverage) ──
+from pydantic import BaseModel as _BaseModel
+from app.services import framework_catalog as _catalog
+from app.services.attestation import AttestationService as _AttestationService
+
+
+class _AttestationRequest(_BaseModel):
+    tenant_id: str = "default"
+    framework: str
+    control_id: str
+    status: str
+    owner: str | None = None
+    approver: str | None = None
+    note: str | None = None
+    evidence_ref: str | None = None
+
+
+@app.get("/catalog/frameworks", tags=["catalog"])
+def catalog_frameworks(_: Principal = Depends(require_principal)) -> list[dict]:
+    return _catalog.frameworks()
+
+
+@app.get("/catalog/families", tags=["catalog"])
+def catalog_families(framework: str, _: Principal = Depends(require_principal)) -> list[dict]:
+    return _catalog.families(framework)
+
+
+@app.get("/catalog", tags=["catalog"])
+def catalog_controls(framework: str, family: str | None = None,
+                     _: Principal = Depends(require_principal)) -> list[dict]:
+    return _catalog.controls(framework, family)
+
+
+@app.post("/attestations", tags=["catalog"])
+def upsert_attestation(req: _AttestationRequest, db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    try:
+        row = _AttestationService(db).upsert(req.tenant_id, req.framework, req.control_id,
+                                             req.status, req.owner, req.approver, req.note, req.evidence_ref)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"id": row.id, "tenant_id": row.tenant_id, "framework": row.framework,
+            "control_id": row.control_id, "status": row.status.value, "owner": row.owner,
+            "approver": row.approver, "note": row.note, "evidence_ref": row.evidence_ref,
+            "updated_at": row.updated_at.isoformat()}
+
+
+@app.get("/attestations", tags=["catalog"])
+def list_attestations(tenant_id: str = "default", framework: str | None = None,
+                      db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return [{"control_id": a.control_id, "framework": a.framework, "status": a.status.value,
+             "owner": a.owner, "approver": a.approver, "note": a.note,
+             "evidence_ref": a.evidence_ref, "updated_at": a.updated_at.isoformat()}
+            for a in _AttestationService(db).list(tenant_id, framework)]
+
+
+@app.get("/coverage", tags=["catalog"])
+def framework_coverage(framework: str, tenant_id: str = "default",
+                       db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _AttestationService(db).coverage(tenant_id, framework)

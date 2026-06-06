@@ -330,3 +330,31 @@ class PolicyDraftRequest(BaseModel):
     tenant_id: str = Field(default="default")
     description: str
     control_id: Optional[str] = None
+
+
+class AttestationStatus(str, enum.Enum):
+    compliant = "compliant"
+    non_compliant = "non_compliant"
+    not_applicable = "not_applicable"
+    in_progress = "in_progress"
+    not_assessed = "not_assessed"
+
+
+class ControlAttestation(Base):
+    """Human-attested status for a framework control (the ~90% of controls that
+    are procedural and cannot be auto-evaluated). One row per tenant+framework+control."""
+    __tablename__ = "control_attestations"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "framework", "control_id", name="uq_attestation"),
+        Index("ix_attestation_tenant_fw", "tenant_id", "framework"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    framework: Mapped[str] = mapped_column(String(64), index=True)
+    control_id: Mapped[str] = mapped_column(String(128), index=True)
+    status: Mapped[AttestationStatus] = mapped_column(Enum(AttestationStatus), default=AttestationStatus.not_assessed)
+    owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    approver: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evidence_ref: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
