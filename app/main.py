@@ -552,6 +552,46 @@ def evidence_compliance(control_id: str, framework: str = "NIST_800_53",
     return evidence_policy.evaluate(db, tenant_id, framework, control_id)
 
 
+class _SimChange(_BaseModel):
+    control_id: str
+    state: str = "failed"
+
+
+class _SimRequest(_BaseModel):
+    framework: str = "NIST_800_53"
+    changes: list[_SimChange]
+    max_depth: int = 3
+    min_weight: float = 0.0
+    exclude_edges: list[list[str]] | None = None
+
+
+@app.post("/simulate", tags=["simulation"])
+def simulate_blast_radius(req: _SimRequest,
+                          p: Principal = Depends(require_principal)) -> dict:
+    from app.services.simulator import simulate
+    return simulate(req.framework, [c.model_dump() for c in req.changes],
+                    max_depth=req.max_depth, min_weight=req.min_weight,
+                    exclude_edges=req.exclude_edges)
+
+
+@app.get("/controls/{control_id}/dependencies", tags=["simulation"])
+def control_dependencies(control_id: str, p: Principal = Depends(require_principal)) -> dict:
+    from app.services import dependency_graph as dg
+    return {"control_id": control_id,
+            "depends_on": dg.in_edges(control_id),
+            "affects": dg.out_edges(control_id),
+            "graph_stats": dg.stats()}
+
+
+@app.get("/controls/{control_id}/fragility", tags=["simulation"])
+def control_fragility(control_id: str, framework: str = "NIST_800_53",
+                      tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services.simulator import fragility
+    return fragility(db, tenant_id, framework, control_id)
+
+
 @app.get("/evidence/documents/{doc_id}/verify", tags=["evidence-graph"])
 def verify_evidence_document(doc_id: str, tenant_id: str = "default",
                             db: Session = Depends(get_db),

@@ -1,0 +1,36 @@
+{
+  "version": "control-deps-v1",
+  "note": "Curated HARD dependencies. Edge source->target means: if `source` fails, `target` is structurally impacted because its effectiveness or evidence logically depends on `source`. Weights are dependency strength (0-1). These are the only edges that propagate FAILURE; NIST-related and shared-concept edges are treated as soft.",
+  "edges": [
+    {"source": "SC-12", "target": "SC-28", "weight": 0.9, "rationale": "Encryption at rest depends on cryptographic key management."},
+    {"source": "SC-12", "target": "SC-8",  "weight": 0.9, "rationale": "Transmission confidentiality depends on key management."},
+    {"source": "SC-28", "target": "AU-9",  "weight": 0.8, "rationale": "Protection of audit information relies on encryption at rest."},
+    {"source": "AC-3",  "target": "AU-9",  "weight": 0.7, "rationale": "Audit log protection relies on access enforcement limiting who can read/alter logs."},
+    {"source": "SC-28", "target": "CP-9",  "weight": 0.7, "rationale": "System backups must be encrypted at rest to be protected."},
+    {"source": "AC-2",  "target": "AC-3",  "weight": 0.85,"rationale": "Access enforcement cannot be correct without managed accounts."},
+    {"source": "AC-2",  "target": "AC-6",  "weight": 0.8, "rationale": "Least privilege depends on account management defining who exists and their roles."},
+    {"source": "IA-5",  "target": "IA-2",  "weight": 0.85,"rationale": "Identification & authentication depends on authenticator (credential) management."},
+    {"source": "IA-2",  "target": "AC-3",  "weight": 0.6, "rationale": "Access enforcement presumes identities are authenticated."},
+    {"source": "IA-2",  "target": "AC-17", "weight": 0.7, "rationale": "Remote access security depends on user authentication."},
+    {"source": "SC-8",  "target": "AC-17", "weight": 0.7, "rationale": "Remote access confidentiality depends on transmission protection."},
+    {"source": "AU-2",  "target": "AU-6",  "weight": 0.9, "rationale": "Audit review is impossible without event logging."},
+    {"source": "AU-3",  "target": "AU-6",  "weight": 0.6, "rationale": "Meaningful audit review depends on sufficient audit record content."},
+    {"source": "AU-2",  "target": "SI-4",  "weight": 0.7, "rationale": "System monitoring depends on events being logged."},
+    {"source": "AU-2",  "target": "AU-9",  "weight": 0.5, "rationale": "There is nothing to protect under AU-9 unless events are logged."},
+    {"source": "SI-4",  "target": "IR-4",  "weight": 0.75,"rationale": "Incident handling depends on system monitoring to detect incidents."},
+    {"source": "AU-6",  "target": "IR-4",  "weight": 0.6, "rationale": "Incident detection depends on audit review."},
+    {"source": "SI-4",  "target": "CA-7",  "weight": 0.7, "rationale": "Continuous monitoring depends on system monitoring telemetry."},
+    {"source": "AU-6",  "target": "CA-7",  "weight": 0.6, "rationale": "Continuous monitoring depends on ongoing audit review."},
+    {"source": "CM-8",  "target": "RA-5",  "weight": 0.8, "rationale": "Vulnerability scanning can only cover assets present in the component inventory."},
+    {"source": "CM-2",  "target": "CM-3",  "weight": 0.8, "rationale": "Configuration change control depends on an established baseline configuration."},
+    {"source": "CM-2",  "target": "CM-6",  "weight": 0.7, "rationale": "Configuration settings enforcement depends on a baseline to enforce against."},
+    {"source": "RA-5",  "target": "SI-2",  "weight": 0.7, "rationale": "Flaw remediation depends on vulnerability scanning to identify flaws."},
+    {"source": "CP-9",  "target": "CP-10", "weight": 0.8, "rationale": "System recovery/reconstitution depends on the existence of backups."},
+    {"source": "AC-2",  "target": "AC-17", "weight": 0.55,"rationale": "Remote access authorization depends on managed accounts."},
+    {"source": "SC-13", "target": "SC-28", "weight": 0.7, "rationale": "Encryption at rest depends on approved cryptographic implementation."},
+    {"source": "SC-13", "target": "SC-8",  "weight": 0.7, "rationale": "Transmission confidentiality depends on approved cryptographic implementation."}
+  ],
+  "iso_bridge": {
+    "note": "Curated edges use NIST IDs; impact propagates to mapped ISO controls automatically via the shared-concept crosswalk."
+  }
+}
