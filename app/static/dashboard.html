@@ -122,6 +122,48 @@ body{
 
 /* metric cards */
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:20px}
+/* home: workflow stepper */
+.workflow{display:flex;margin-top:8px;flex-wrap:wrap}
+.wf-step{flex:1;min-width:130px;position:relative;padding:0 6px;text-align:center}
+.wf-step:not(:last-child)::after{content:'';position:absolute;top:20px;left:50%;width:100%;height:2px;background:var(--line);z-index:0}
+.wf-step.done:not(:last-child)::after{background:var(--pass)}
+.wf-ic{width:40px;height:40px;border-radius:50%;border:2px solid var(--line);background:var(--bg);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;position:relative;z-index:1;font-family:var(--mono);font-size:15px;color:var(--dim)}
+.wf-step.done .wf-ic{border-color:var(--pass);color:var(--pass);background:rgba(51,224,100,.08)}
+.wf-step.active .wf-ic{border-color:var(--teal);color:var(--teal);background:rgba(51,224,200,.1)}
+.wf-label{font-size:13px;font-weight:600;color:var(--hi)}
+.wf-stat{font-size:11px;color:var(--dim);font-family:var(--mono);margin:2px 0 5px;min-height:14px}
+.wf-go{font-size:11px;color:var(--teal);cursor:pointer;background:none;border:0;padding:2px}
+.wf-go:hover{text-decoration:underline}
+/* simulator */
+.sim-scenario{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px}
+.sim-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1}
+.sim-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.25);border-radius:8px;padding:5px 11px;font-family:var(--mono);font-size:12px;color:var(--fail)}
+.sim-tag button{background:none;border:0;color:var(--fail);cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px}
+.blast-summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.blast-chip{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 14px}
+.blast-chip .bc-n{font-family:var(--mono);font-size:20px;font-weight:700}
+.blast-chip .bc-l{font-size:11px;color:var(--dim)}
+.cascade-group{margin-bottom:16px}
+.cascade-group h4{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+.cascade-row{display:flex;align-items:flex-start;gap:12px;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.cascade-row:first-child{border-top:0}
+.cascade-path{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--mid);margin-top:4px}
+.cascade-path .pa{color:var(--teal)}.cascade-path .sep{color:var(--dim)}
+.cascade-path .ph{color:var(--fail);font-weight:600}
+.frag-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.frag-row:first-child{border-top:0}
+
+.qa-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:4px}
+.qa-btn{display:flex;align-items:center;gap:11px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;text-align:left;transition:.14s;color:var(--hi);width:100%}
+.qa-btn:hover{border-color:var(--teal);background:rgba(51,224,200,.05)}
+.qa-ic{font-size:19px;flex:none}
+.qa-t{font-size:13px;font-weight:600}
+.qa-d{font-size:11px;color:var(--dim)}
+.gap-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.gap-item:first-of-type{border-top:0}
+.gap-fix{font-size:11px;color:var(--teal);cursor:pointer;background:none;border:0;white-space:nowrap}
+.gap-fix:hover{text-decoration:underline}
+
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;position:relative;overflow:hidden}
 .kpi::after{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--accent,var(--teal));opacity:.7}
 .kpi .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;color:var(--dim);text-transform:uppercase}
@@ -458,13 +500,14 @@ const ICON={
   schedules:'M12 6v6l4 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   catalog:'M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z',
   resolver:'M22 3H2l8 9.46V19l4 2v-8.54L22 3',
+  simulator:'M9 3H5a2 2 0 00-2 2v4h6V3zm0 0h6M9 3v8m6-8h4a2 2 0 012 2v4h-6V3zm0 8v8m-6 0H5a2 2 0 01-2-2v-4h6v6zm0 0h6m0 0h4a2 2 0 002-2v-4h-6v6z',
   evmap:'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14'
 };
 const TABS=[
-  ['overview','Overview'],['findings','Findings'],
+  ['overview','Home'],['findings','Findings'],
   ['controls','Auto Checks'],['catalog','Catalog'],
   ['waivers','Waivers'],
-  ['resolver','Resolver'],['remediation','Remediation'],
+  ['resolver','Resolver'],['simulator','Simulator'],['remediation','Remediation'],
   ['connectors','Connectors'],['inventory','Inventory'],['schedules','Schedules'],['trends','Trends'],
   ['evmap','Evidence Map'],
 ];
@@ -472,7 +515,7 @@ const EXTERNAL={evmap:'/evidence-map'};
 const GROUPS=[
   ['MONITOR',    ['overview','findings']],
   ['GOVERN',     ['controls','catalog','waivers']],
-  ['RESOLVE',    ['resolver','remediation']],
+  ['RESOLVE',    ['resolver','simulator','remediation']],
   ['OPERATE',    ['connectors','inventory','schedules','trends']],
   ['EVIDENCE',   ['evmap']],
 ];
@@ -537,11 +580,11 @@ function renderActive(){
   setCount('waivers',DATA.waivers.length); setCount('schedules',DATA.schedules.length);
   setCount('remediation',(DATA.remediation.queue||[]).length);
   ({overview:rOverview,findings:rFindings,controls:rControls,connectors:rConnectors,remediation:rRemediation,
-    trends:rTrends,inventory:rInventory,waivers:rWaivers,schedules:rSchedules,catalog:rCatalog,resolver:rResolver})[ACTIVE]();
+    trends:rTrends,inventory:rInventory,waivers:rWaivers,schedules:rSchedules,catalog:rCatalog,resolver:rResolver,simulator:rSimulator})[ACTIVE]();
 }
 
 function rOverview(){
-  const m=main(),v=view('Posture Overview','Risk-weighted compliance across all connected control planes');
+  const m=main(),v=view('Home','Your compliance posture, what needs attention, and what to do next');
   const s=DATA.summary,bs=s.by_status||{}; const f=DATA.findings;
   const open=f.filter(x=>x.lifecycle==='open').length;
   const kpis=[
@@ -555,6 +598,77 @@ function rOverview(){
   const kp=el('div','kpis'); kpis.forEach(k=>{const c=el('div','kpi');c.style.setProperty('--accent',k[3]);
     c.innerHTML=`<div class="k">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div>`;kp.appendChild(c);});
   v.appendChild(kp);
+
+  // ===== navigation helper =====
+  const goTab=(id)=>{if(EXTERNAL[id]){window.open(EXTERNAL[id],'_blank');return;}ACTIVE=id;buildRail();renderActive();};
+
+  // ===== GUIDED WORKFLOW STEPPER =====
+  const conns=DATA.connectors||[];
+  const healthy=conns.filter(c=>c.status==='healthy'||c.status==='ok'||c.connected).length;
+  const assessed=DATA.controls.filter(c=>c.status&&c.status!=='pending').length;
+  const failing=DATA.controls.filter(c=>c.status==='fail').length;
+  const steps=[
+    {id:'connect',label:'Connect',tab:'connectors',n:'1',done:healthy>0,
+     stat:conns.length?`${healthy}/${conns.length} healthy`:'no sources yet',cta:'Manage sources'},
+    {id:'assess',label:'Assess',tab:'controls',n:'2',done:assessed>0,
+     stat:assessed?`${assessed} checked · ${failing} failing`:'not run yet',cta:'View auto checks'},
+    {id:'resolve',label:'Resolve',tab:'resolver',n:'3',done:false,active:assessed>0,
+     stat:'8 planes ready',cta:'Open resolver'},
+    {id:'attest',label:'Attest',tab:'catalog',n:'4',done:false,
+     stat:'sign off gaps',cta:'Open catalog'},
+    {id:'evidence',label:'Evidence',tab:'evmap',n:'5',done:false,
+     stat:'attach proof',cta:'Open evidence map'},
+  ];
+  const wfCard=el('div','card');wfCard.style.marginBottom='16px';
+  wfCard.innerHTML='<h3>Getting to compliance</h3><div class="sub">Five steps from connecting data to defensible evidence — your progress and what to do next</div>';
+  const wf=el('div','workflow');
+  steps.forEach(st=>{
+    const stp=el('div','wf-step'+(st.done?' done':st.active?' active':''));
+    stp.innerHTML=`<div class="wf-ic">${st.done?'✓':st.n}</div><div class="wf-label">${st.label}</div><div class="wf-stat">${st.stat}</div>`;
+    const b=el('button','wf-go');b.textContent=st.cta+' →';b.onclick=()=>goTab(st.tab);
+    stp.appendChild(b);wf.appendChild(stp);});
+  wfCard.appendChild(wf);v.appendChild(wfCard);
+
+  // enrich attest/evidence/resolve stats live
+  if(!DATA._demo){
+    Promise.allSettled([
+      api('/resolve/decisions?tenant_id='+CFG.tenant).catch(()=>[]),
+      api('/evidence/documents?tenant_id='+CFG.tenant).catch(()=>[]),
+    ]).then(([rd,ev])=>{
+      const decs=rd.value||[],docs=ev.value||[];
+      const stp=wf.children;
+      if(decs.length){stp[2].classList.add('done');stp[2].querySelector('.wf-stat').textContent=decs.length+' decisions';}
+      if(docs.length){stp[4].classList.add('done');stp[4].querySelector('.wf-stat').textContent=docs.length+' document(s)';}
+    });
+  }
+
+  // ===== TOP GAPS + QUICK ACTIONS =====
+  const g0=el('div','grid g-2');g0.style.marginBottom='16px';
+  // gaps
+  const gapCard=el('div','card');gapCard.innerHTML='<h3>Top gaps</h3><div class="sub">controls that need attention first</div>';
+  const failChecks=DATA.controls.filter(c=>c.status==='fail').map(c=>({id:c.control_id||c.id,title:c.title,sev:c.severity||'high',kind:'check'}));
+  const sevFindings=(DATA.findings||[]).filter(x=>x.status==='fail').map(x=>({id:x.control_id,title:x.title||x.control_id,sev:x.severity||'medium',kind:'finding'}));
+  const seen=new Set();const gaps=[...failChecks,...sevFindings].filter(g=>{if(seen.has(g.id))return false;seen.add(g.id);return true;});
+  const sevW={critical:0,high:1,medium:2,low:3};gaps.sort((a,b)=>(sevW[a.sev]??4)-(sevW[b.sev]??4));
+  if(gaps.length){gaps.slice(0,6).forEach(g=>{
+    const r=el('div','gap-item');
+    r.innerHTML=`<div style="min-width:0"><span class="mono" style="color:var(--hi)">${g.id}</span> <span class="bdg st-fail" style="font-size:9px">${g.sev}</span><div class="dim" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.title||''}</div></div>`;
+    const fx=el('button','gap-fix');fx.textContent='Investigate →';fx.onclick=()=>goTab('findings');
+    r.appendChild(fx);gapCard.appendChild(r);});
+  } else {gapCard.appendChild(el('div','empty dim','Nothing failing right now — clean posture.'));}
+  g0.appendChild(gapCard);
+  // quick actions
+  const qaCard=el('div','card');qaCard.innerHTML='<h3>Quick actions</h3><div class="sub">jump straight to a task</div>';
+  const qg=el('div','qa-grid');
+  [['⚡','Resolve a control','pick the best proof & run it','resolver'],
+   ['📎','Add evidence','attach a doc or link','evmap'],
+   ['◎','Review findings','triage what failed','findings'],
+   ['✓','Attest a control','sign off manually','catalog']].forEach(([ic,t,d,tab])=>{
+    const b=el('button','qa-btn');b.innerHTML=`<span class="qa-ic">${ic}</span><span><div class="qa-t">${t}</div><div class="qa-d">${d}</div></span>`;
+    b.onclick=()=>goTab(tab);qg.appendChild(b);});
+  qaCard.appendChild(qg);g0.appendChild(qaCard);
+  v.appendChild(g0);
+
 
   // row: status donut + trend
   const g1=el('div','grid g-2');
@@ -954,6 +1068,55 @@ async function renderCatalog(host){
   tools.querySelector('#catSort').onchange=e=>{sortBy=e.target.value;rebuild();};
   tools.querySelectorAll('#catStatus button').forEach(b=>b.onclick=()=>{tools.querySelectorAll('#catStatus button').forEach(x=>x.classList.remove('on'));b.classList.add('on');stf=b.dataset.v;rebuild();});
   rebuild();g.appendChild(cC);body.appendChild(g);
+  // --- Evidence Compliance panel ---
+  const evCard=el('div','card');
+  evCard.innerHTML='<h3>Evidence Compliance</h3><div class="sub">For controls with uploaded evidence, the policy engine evaluates whether it meets the configured thresholds — confirmation required, minimum confidence, attestation owner rules.</div>';
+  const evRow=el('div');evRow.style.cssText='display:flex;gap:8px;margin-top:10px;flex-wrap:wrap';
+  const evBtn=el('button','btn');evBtn.textContent='Load evidence compliance';
+  const oscalBtn=el('button','btn');oscalBtn.innerHTML='⬇ Export OSCAL';oscalBtn.title='Download an auditor-ready OSCAL 1.1.2 assessment-results file';
+  oscalBtn.onclick=()=>downloadOscal(CAT.cur);
+  evRow.appendChild(evBtn);evRow.appendChild(oscalBtn);
+  const evBody=el('div');evCard.appendChild(evRow);evCard.appendChild(evBody);
+  evBtn.onclick=async()=>{evBtn.disabled=true;evBtn.textContent='Loading…';evBody.innerHTML='<div class="empty">Fetching…</div>';
+    if(DATA._demo||CAT._demo){_renderEvComp(evBody,[
+      {control_id:'IA-2',status:'insufficient_evidence',satisfied:false,reason:'Evidence found but confidence 0.50 < 0.70 (MFA floor)',qualifying_concepts:[],notes:['mfa: hit not confirmed','mfa: confidence 0.50 < 0.70']},
+      {control_id:'SC-28',status:'compliant',satisfied:true,reason:'Evidence satisfies control via: encryption_at_rest',qualifying_concepts:['encryption_at_rest'],notes:[],propagated_to:[{framework:'ISO_27001_2022',control_id:'A.8.24',shared_concepts:['encryption_at_rest']}]},
+      {control_id:'A.8.5',status:'not_assessed',satisfied:false,reason:'No evidence or attestation on record',qualifying_concepts:[],notes:[]},
+    ]);evBtn.textContent='Reload';evBtn.disabled=false;return;}
+    try{
+      const g2=await api('/evidence/graph?tenant_id='+CFG.tenant);
+      const ctrlIds=[...new Set((g2.edges||[]).filter(e=>e.to&&e.type==='evidences').map(e=>e.to))].slice(0,40);
+      if(!ctrlIds.length){evBody.innerHTML='<div class="empty dim">No evidence uploaded yet. Add documents via the Evidence Map to see compliance results here.</div>';evBtn.textContent='Reload';evBtn.disabled=false;return;}
+      const results=await Promise.all(ctrlIds.map(cid=>
+        api('/evidence/compliance?control_id='+encodeURIComponent(cid)+'&framework='+CAT.cur+'&tenant_id='+CFG.tenant)
+          .then(r=>({control_id:cid,...r})).catch(()=>null)));
+      _renderEvComp(evBody,results.filter(Boolean));
+    }catch(e){evBody.innerHTML=`<div class="empty" style="color:var(--fail)">Failed: ${e.message}</div>`;}
+    evBtn.textContent='Reload';evBtn.disabled=false;};
+  body.appendChild(evCard);
+
+  // --- Evidence Documents (freshness + integrity) ---
+  const docCard=el('div','card');
+  docCard.innerHTML='<h3>Evidence Documents</h3><div class="sub">Freshness (evidence decays after 180 days) and cryptographic integrity — each document is signed at ingestion and can be verified as untampered.</div>';
+  const docBtn=el('button','btn');docBtn.textContent='Load documents';docBtn.style.cssText='margin-top:10px';
+  const docBody=el('div');docCard.appendChild(docBtn);docCard.appendChild(docBody);
+  docBtn.onclick=async()=>{docBtn.disabled=true;docBtn.textContent='Loading…';docBody.innerHTML='<div class="empty">Fetching…</div>';
+    if(DATA._demo||CAT._demo){_renderDocs(docBody,[
+      {name:'Information Security Policy v3',method:'llm',concepts_found:7,created_at:new Date(Date.now()-40*864e5).toISOString(),_verify:{verified:true,signed:true}},
+      {name:'Encryption Standard (2024)',method:'lexicon',concepts_found:3,created_at:new Date(Date.now()-250*864e5).toISOString(),_verify:{verified:true,signed:true}},
+      {name:'Legacy DR Plan',method:'lexicon',concepts_found:2,created_at:new Date(Date.now()-420*864e5).toISOString(),_verify:{verified:true,signed:true}},
+    ]);docBtn.textContent='Reload';docBtn.disabled=false;return;}
+    try{
+      const docs=await api('/evidence/documents?tenant_id='+CFG.tenant);
+      if(!docs.length){docBody.innerHTML='<div class="empty dim">No documents yet — add evidence via the Evidence Map.</div>';docBtn.textContent='Reload';docBtn.disabled=false;return;}
+      // verify each (cryptographic integrity check) in parallel
+      await Promise.all(docs.slice(0,25).map(d=>
+        api('/evidence/documents/'+d.doc_id+'/verify?tenant_id='+CFG.tenant)
+          .then(v=>{d._verify=v;}).catch(()=>{d._verify=null;})));
+      _renderDocs(docBody,docs);
+    }catch(e){docBody.innerHTML=`<div class="empty" style="color:var(--fail)">Failed: ${e.message}</div>`;}
+    docBtn.textContent='Reload';docBtn.disabled=false;};
+  body.appendChild(docCard);
 }
 function openAttest(framework,ctrl,cur,host){
   let mod=$('#attestModal');
@@ -973,8 +1136,22 @@ function openAttest(framework,ctrl,cur,host){
       <select class="inp" id="atSt" style="width:100%">${opts.map(o=>`<option value="${o}" ${cur.s===o?'selected':''}>${cap(o)}</option>`).join('')}</select></div>
     <div class="fld"><label>Owner</label><input class="inp" id="atOwn" placeholder="e.g. ciso@org.com"></div>
     <div class="fld"><label>Evidence note / justification</label><input class="inp" id="atNote" placeholder="link or short note"></div>
+    <div id="evPolBox" style="border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin:8px 0;font-size:12px;min-height:36px;color:var(--dim)">Loading evidence policy…</div>
     <div class="row-end"><button class="btn" id="atCancel">Cancel</button><button class="btn primary" id="atSave">Save attestation</button></div></div>`;
   mod.classList.add('on');
+  (()=>{
+    if(DATA._demo||CAT._demo){
+      const b=document.getElementById('evPolBox');if(b)b.innerHTML='<b style="color:var(--warn)">Demo</b> — evidence policy visible in live mode.';return;}
+    api('/evidence/compliance?control_id='+encodeURIComponent(ctrl.id)+'&framework='+(framework||CAT.cur||'NIST_800_53')+'&tenant_id='+CFG.tenant)
+      .then(d=>{const b=document.getElementById('evPolBox');if(!b)return;
+        const col={compliant:'var(--pass)',insufficient_evidence:'var(--warn)',not_assessed:'var(--dim)'}[d.status]||'var(--mid)';
+        let h=`<b style="color:${col}">Evidence: ${(d.status||'').replace(/_/g,' ')}</b><span class="dim"> · ${d.engine||'builtin'}</span>`;
+        if((d.qualifying_concepts||[]).length)h+=`<br><span class="dim">Qualifying: </span>${d.qualifying_concepts.map(c=>`<span class="tag">${c.replace(/_/g,' ')}</span>`).join(' ')}`;
+        if((d.propagated_to||[]).length)h+=`<br><span class="dim">Also satisfies: </span>${d.propagated_to.slice(0,3).map(p=>`<span class="tag" style="background:rgba(139,124,255,.12);color:var(--violet)">${p.framework.replace('_',' ').replace('27001 2022','27001')} ${p.control_id}</span>`).join(' ')}`;
+        if((d.notes||[]).length)h+=`<ul style="margin:4px 0 0 14px;color:var(--dim)">${d.notes.slice(0,3).map(n=>`<li>${n}</li>`).join('')}</ul>`;
+        b.innerHTML=h;b.style.borderColor=col.includes('pass')?'rgba(51,224,100,.25)':col.includes('warn')?'rgba(255,184,0,.2)':'var(--line)';})
+      .catch(()=>{const b=document.getElementById('evPolBox');if(b)b.style.display='none';});
+  })();
   mod.querySelector('#atCancel').onclick=()=>mod.classList.remove('on');
   mod.querySelector('#atSave').onclick=async()=>{
     const payload={tenant_id:CFG.tenant,framework,control_id:ctrl.id,status:mod.querySelector('#atSt').value,
@@ -989,6 +1166,24 @@ function openAttest(framework,ctrl,cur,host){
     catch(e){toast('Save failed: '+e.message);}
   };
 }
+
+
+const DEMO_SIM_RESULT = {
+  blast_radius:{total_affected:9,by_impact:{failed:5,weakened:2,at_risk:2}},
+  directly_changed:[{control_id:'SC-12',state:'failed'}],
+  cascade:[
+    {control_id:'SC-28',impact:'failed',severity:0.9,via:['SC-12','SC-28'],edge_type:'hard',provenance:'curated',rationale:'Encryption at rest depends on cryptographic key management.'},
+    {control_id:'SC-8', impact:'failed',severity:0.9,via:['SC-12','SC-8'], edge_type:'hard',provenance:'curated',rationale:'Transmission confidentiality depends on key management.'},
+    {control_id:'AU-9', impact:'failed',severity:0.72,via:['SC-12','SC-28','AU-9'],edge_type:'hard',provenance:'curated',rationale:'Audit log protection relies on encryption at rest.'},
+    {control_id:'AC-17',impact:'failed',severity:0.63,via:['SC-12','SC-8','AC-17'],edge_type:'hard',provenance:'curated',rationale:'Remote access security depends on transmission protection.'},
+    {control_id:'CP-9', impact:'failed',severity:0.63,via:['SC-12','SC-28','CP-9'],edge_type:'hard',provenance:'curated',rationale:'Backups must be encrypted at rest.'},
+    {control_id:'SC-13',impact:'weakened',severity:0.38,via:['SC-12','SC-28','SC-13'],edge_type:'soft',provenance:'shared_concept',rationale:'Both map to evidence concept encryption_at_rest.'},
+    {control_id:'SA-9', impact:'weakened',severity:0.31,via:['SC-12','SC-8','SA-9'], edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+    {control_id:'CP-2', impact:'at_risk',severity:0.2,via:['SC-12','SC-28','CP-9','CP-2'],edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+    {control_id:'SI-12',impact:'at_risk',severity:0.18,via:['SC-12','SC-8','SI-12'],edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+  ],
+  explanation:'Changing SC-12 structurally affects 9 control(s). Hard-dependent and likely INVALIDATED even if their own test stays green: SC-28, SC-8, AU-9, AC-17, CP-9. Weakened / at-risk: SC-13, SA-9, CP-2, SI-12.'
+};
 
 /* ============================ RESOLVER / ONTOLOGY ============================ */
 const DEMO_PLANES_DATA={
@@ -1108,6 +1303,7 @@ function _renderDecision(node,d){
     <div class="rr-row"><b>Reason:</b> ${d.reason||'—'}</div>
     ${d.chosen?.signal?`<div class="rr-row"><b>Signal:</b> <code>${d.chosen.signal}</code>${d.chosen.eval_control?` &nbsp; <b>Eval:</b> <code>${d.chosen.eval_control}</code>`:''}</div>`:''}
     ${(d.skipped||[]).length?`<details style="font-size:12px;color:var(--dim);margin-top:8px"><summary style="cursor:pointer">${d.skipped.length} alternative(s) skipped</summary><ul style="margin:6px 0 0 16px">${d.skipped.map(s=>`<li>${(s.plane||s.type||'?').replace(/_/g,' ')}: ${s.reason||'?'}</li>`).join('')}</ul></details>`:''}
+    ${d.evidence_policy?`<details style="font-size:12px;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px 11px"><summary style="cursor:pointer;color:var(--mid)">Evidence policy — <b style="color:${d.evidence_policy.satisfied?'var(--pass)':'var(--warn)'}">${d.evidence_policy.satisfied?'✓ satisfied':'✗ insufficient'}</b> <span class="dim">(${d.evidence_policy.engine||'builtin'})</span></summary>${(d.evidence_policy.qualifying_concepts||[]).length?`<div style="margin-top:6px">${d.evidence_policy.qualifying_concepts.map(c=>`<span class="tag">${c.replace(/_/g,' ')}</span>`).join(' ')}</div>`:''} ${(d.evidence_policy.notes||[]).length?`<ul style="margin:4px 0 0 14px;color:var(--dim)">${d.evidence_policy.notes.map(n=>`<li>${n}</li>`).join('')}</ul>`:''}</details>`:''}
   </div>`;
 }
 async function _loadHistory(node){
@@ -1126,6 +1322,198 @@ async function _loadHistory(node){
     ];
     node.innerHTML='';node.appendChild(sortableTable(decs,cols,{sort:'created_at'}));
   }catch(e){node.innerHTML=`<div class="empty" style="color:var(--fail)">Failed: ${e.message}</div>`;}
+}
+
+
+function _renderEvComp(node,results){
+  if(!results.length){node.innerHTML='<div class="empty dim">No compliance results.</div>';return;}
+  const ord={compliant:0,insufficient_evidence:1,not_assessed:2};
+  results.sort((a,b)=>(ord[a.status]??9)-(ord[b.status]??9));
+  const cols=[
+    {k:'control_id',label:'Control',cls:'mono',render:r=>`<b>${r.control_id}</b>`},
+    {k:'status',label:'Policy',render:r=>stBadge(r.status)},
+    {k:'satisfied',label:'✓',render:r=>r.satisfied?'<span style="color:var(--pass)">✓</span>':'<span style="color:var(--fail)">✗</span>'},
+    {k:'qualifying_concepts',label:'Qualifying evidence',render:r=>(r.qualifying_concepts||[]).length?r.qualifying_concepts.map(c=>`<span class="tag">${c.replace(/_/g,' ')}</span>`).join(' '):'<span class="dim">—</span>'},
+    {k:'propagated_to',label:'Also satisfies',render:r=>(r.propagated_to||[]).length?r.propagated_to.slice(0,3).map(p=>`<span class="tag" style="background:rgba(139,124,255,.12);color:var(--violet)" title="via ${(p.shared_concepts||[]).join(', ')}">${p.framework.replace('_',' ').replace('27001 2022','27001')} ${p.control_id}</span>`).join(' '):'<span class="dim">—</span>'},
+    {k:'reason',label:'Reason',render:r=>`<span style="font-size:12px;color:var(--dim)">${r.reason||'—'}</span>`},
+  ];
+  node.innerHTML='';node.appendChild(sortableTable(results,cols,{sort:'status'}));
+}
+
+function freshness(createdAt){
+  if(!createdAt)return{label:'unknown',color:'var(--dim)',days:null};
+  const days=(Date.now()-new Date(createdAt).getTime())/864e5;
+  if(days<180)return{label:'Fresh',color:'var(--pass)',days};
+  if(days<365)return{label:'Aging',color:'var(--warn)',days};
+  return{label:'Stale',color:'var(--fail)',days};
+}
+async function downloadOscal(framework){
+  if(DATA._demo||CAT._demo){toast('Connect the API to export OSCAL');return;}
+  toast('Generating OSCAL…');
+  try{
+    const o=await api('/evidence/export/oscal?framework='+framework+'&tenant_id='+CFG.tenant);
+    const blob=new Blob([JSON.stringify(o,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=url;a.download='oscal-assessment-'+framework+'.json';document.body.appendChild(a);a.click();
+    a.remove();URL.revokeObjectURL(url);toast('OSCAL assessment exported');
+  }catch(e){toast('Export failed: '+e.message);}
+}
+function _renderDocs(node,docs){
+  if(!docs.length){node.innerHTML='<div class="empty dim">No documents.</div>';return;}
+  const cols=[
+    {k:'name',label:'Document',render:d=>`<b>${d.name||'untitled'}</b>`},
+    {k:'_fresh',label:'Freshness',render:d=>{const f=freshness(d.created_at);return `<span class="bdg" style="background:transparent;border:1px solid ${f.color};color:${f.color}">${f.label}</span>${f.days!=null?` <span class="dim" style="font-size:11px">${Math.round(f.days)}d</span>`:''}`;},sortVal:d=>freshness(d.created_at).days??-1},
+    {k:'method',label:'Analysis',render:d=>`<span class="tag">${d.method==='llm'?'LLM':'keyword'}</span>`},
+    {k:'concepts_found',label:'Concepts',cls:'mono',render:d=>d.concepts_found??'—'},
+    {k:'_integrity',label:'Integrity',render:d=>{const v=d._verify;if(!v)return '<span class="dim">—</span>';
+      if(!v.signed)return '<span class="dim" title="No signature on record">unsigned</span>';
+      return v.verified?'<span style="color:var(--pass)" title="Cryptographically verified — content unchanged since ingestion">🛡 Verified</span>':'<span style="color:var(--fail)" title="Signature mismatch — content may have been altered">⚠ Altered</span>';}},
+  ];
+  node.innerHTML='';node.appendChild(sortableTable(docs,cols,{sort:'_fresh'}));
+}
+
+/* ============================ BLAST RADIUS SIMULATOR ============================ */
+const DEMO_BLAST={
+  framework:'NIST_800_53',
+  directly_changed:[{control_id:'SC-12',state:'failed'}],
+  blast_radius:{total_affected:8,by_impact:{failed:6,weakened:1,at_risk:1},max_depth:3},
+  cascade:[
+    {control_id:'SC-28',impact:'failed',severity:0.9,via:['SC-12','SC-28'],edge_type:'hard',provenance:'curated',rationale:'Encryption at rest depends on cryptographic key management.'},
+    {control_id:'SC-8',impact:'failed',severity:0.9,via:['SC-12','SC-8'],edge_type:'hard',provenance:'curated',rationale:'Transmission confidentiality depends on key management.'},
+    {control_id:'AU-9',impact:'failed',severity:0.72,via:['SC-12','SC-28','AU-9'],edge_type:'hard',provenance:'curated',rationale:'Protection of audit information relies on encryption at rest.'},
+    {control_id:'AC-17',impact:'failed',severity:0.63,via:['SC-12','SC-8','AC-17'],edge_type:'hard',provenance:'curated',rationale:'Remote access confidentiality depends on transmission protection.'},
+    {control_id:'CP-9',impact:'failed',severity:0.63,via:['SC-12','SC-28','CP-9'],edge_type:'hard',provenance:'curated',rationale:'System backups must be encrypted at rest to be protected.'},
+    {control_id:'CP-10',impact:'failed',severity:0.5,via:['SC-12','SC-28','CP-9','CP-10'],edge_type:'hard',provenance:'curated',rationale:'System recovery depends on the existence of backups.'},
+    {control_id:'SI-7',impact:'weakened',severity:0.36,via:['SC-12','SC-28','SI-7'],edge_type:'soft',provenance:'shared_concept',rationale:'Both map to evidence concept encryption_at_rest.'},
+    {control_id:'MP-4',impact:'at_risk',severity:0.22,via:['SC-12','SC-28','MP-4'],edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+  ],
+  explanation:'Changing SC-12 structurally affects 8 control(s). Hard-dependent and likely INVALIDATED even if their own test stays green: SC-28, SC-8, AU-9, AC-17, CP-9, CP-10. Weakened / at-risk (related or shared-evidence): SI-7, MP-4.'
+};
+const _IMPACT_COL={failed:'#ff5a5a',weakened:'#ffb800',at_risk:'#7c8aa5'};
+
+function rSimulator(){
+  const m=main(),v=view('Blast Radius','What-if analysis — simulate a control failing and see which others structurally collapse, even if their own check still shows green');
+  const host=el('div');v.appendChild(host);m.appendChild(v);
+  const ex=el('div','callout');
+  ex.innerHTML='<b>What is this?</b> Every other tool tests each control on its own. This models how controls <b>depend on each other</b>: simulate one failing and watch the cascade. A control can be green on its own test yet be structurally invalid because something it relies on broke.';
+  host.appendChild(ex);
+
+  // scenario builder
+  const sc=el('div','card');
+  sc.innerHTML='<h3>Build a scenario</h3><div class="sub">Mark one or more controls as failing, then run the simulation.</div>';
+  let selected=[];
+  const row=el('div','sim-scenario');
+  row.innerHTML=`
+    <div class="fld" style="flex:1;min-width:150px"><label>Control to fail</label>
+      <input class="inp" id="simCtrl" placeholder="e.g. SC-12, AC-2, IA-5" list="simSug">
+      <datalist id="simSug">${['SC-12','SC-28','SC-8','AC-2','AC-3','IA-2','IA-5','AU-2','AU-9','CM-2','CM-8','RA-5'].map(x=>`<option value="${x}">`).join('')}</datalist></div>
+    <div class="fld" style="flex:0 0 auto"><label>State</label>
+      <select class="inp" id="simState"><option value="failed">Failed</option><option value="degraded">Degraded</option></select></div>
+    <div class="fld" style="flex:0 0 auto"><label>Max depth</label>
+      <select class="inp" id="simDepth"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div>
+    <button class="btn" id="simAdd">+ Add</button>`;
+  sc.appendChild(row);
+  const tags=el('div');tags.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 12px';sc.appendChild(tags);
+  const runBtn=el('button','btn primary');runBtn.textContent='⚡ Run simulation';runBtn.disabled=true;sc.appendChild(runBtn);
+  host.appendChild(sc);
+  const out=el('div');host.appendChild(out);
+
+  function renderTags(){
+    tags.innerHTML='';
+    selected.forEach((s,i)=>{const t=el('span','sim-tag');t.innerHTML=`${s.control_id} <span style="opacity:.65">${s.state}</span>`;
+      const x=el('button');x.textContent='×';x.onclick=()=>{selected.splice(i,1);renderTags();};t.appendChild(x);tags.appendChild(t);});
+    runBtn.disabled=!selected.length;
+  }
+  sc.querySelector('#simAdd').onclick=()=>{const cid=sc.querySelector('#simCtrl').value.trim().toUpperCase();
+    if(!cid)return;const st=sc.querySelector('#simState').value;
+    if(!selected.some(s=>s.control_id===cid))selected.push({control_id:cid,state:st});
+    sc.querySelector('#simCtrl').value='';renderTags();};
+  runBtn.onclick=async()=>{
+    const depth=+sc.querySelector('#simDepth').value;
+    out.innerHTML='<div class="empty">Computing blast radius…</div>';
+    if(DATA._demo){renderBlast(out,DEMO_BLAST,selected);return;}
+    try{
+      const r=await fetch((CFG.base||'').replace(/\/$/,'')+'/simulate',{method:'POST',
+        headers:Object.assign({'Content-Type':'application/json'},CFG.key?{'X-API-Key':CFG.key}:{}),
+        body:JSON.stringify({framework:'NIST_800_53',changes:selected,max_depth:depth})});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      renderBlast(out,await r.json(),selected);
+    }catch(e){out.innerHTML=`<div class="empty" style="color:var(--fail)">Error: ${e.message}</div>`;}
+  };
+  if(DATA._demo){selected=[{control_id:'SC-12',state:'failed'}];renderTags();renderBlast(out,DEMO_BLAST,selected);}
+
+  // fragility checker
+  const fc=el('div','card');fc.style.marginTop='16px';
+  fc.innerHTML='<h3>Structural fragility check</h3><div class="sub">Is a control green on its own test but secretly resting on failing prerequisites?</div>';
+  const fr=el('div','sim-scenario');
+  fr.innerHTML=`<div class="fld" style="flex:1;min-width:150px"><label>Control</label><input class="inp" id="fragCtrl" placeholder="e.g. AU-9" list="simSug2"><datalist id="simSug2">${['AU-9','AU-6','IR-4','AC-3','AC-17','SC-28','RA-5','CA-7'].map(x=>`<option value="${x}">`).join('')}</datalist></div><button class="btn" id="fragRun">Check</button>`;
+  fc.appendChild(fr);const fout=el('div');fout.id='fragOut';fc.appendChild(fout);host.appendChild(fc);
+  fc.querySelector('#fragRun').onclick=async()=>{
+    const cid=fc.querySelector('#fragCtrl').value.trim().toUpperCase();if(!cid)return;
+    fout.innerHTML='<div class="empty">Checking…</div>';
+    if(DATA._demo){renderFrag(fout,{control_id:cid,structurally_at_risk:cid==='AU-9',weak_prerequisites:cid==='AU-9'?[{prereq:'SC-28',status:'insufficient_evidence',weight:0.8,rationale:'Protection of audit information relies on encryption at rest.'},{prereq:'AC-3',status:'not_assessed',weight:0.7,rationale:'Audit log protection relies on access enforcement.'}]:[],detail:cid==='AU-9'?'This control depends on 2 unsatisfied prerequisite(s); its own evidence may not hold even if its direct test passes.':'All hard prerequisites are satisfied.'});return;}
+    try{const r=await api(`/controls/${encodeURIComponent(cid)}/fragility?framework=NIST_800_53&tenant_id=${CFG.tenant}`);renderFrag(fout,r);}
+    catch(e){fout.innerHTML=`<div class="empty" style="color:var(--fail)">Error: ${e.message}</div>`;}
+  };
+}
+
+function _blastSvg(data,scenario){
+  const W=660,H=460,cx=W/2,cy=H/2;
+  const epi=(scenario&&scenario.length?scenario:data.directly_changed||[]).map(s=>s.control_id);
+  const nodes=data.cascade||[];
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:460px">`;
+  [0.28,0.52,0.76,1].forEach(r=>{s+=`<circle cx="${cx}" cy="${cy}" r="${36+r*176}" fill="none" stroke="rgba(120,140,175,.13)" stroke-dasharray="3 5"/>`;});
+  const place=nodes.map((n,i)=>{const ang=(i/Math.max(nodes.length,1))*Math.PI*2-Math.PI/2;
+    const rad=46+(1-Math.min(n.severity,1))*180;return {...n,x:cx+Math.cos(ang)*rad,y:cy+Math.sin(ang)*rad};});
+  place.forEach(p=>{const c=_IMPACT_COL[p.impact]||'#7c8aa5';
+    s+=`<line x1="${cx}" y1="${cy}" x2="${p.x}" y2="${p.y}" stroke="${c}" stroke-opacity="${p.impact==='failed'?.45:.18}" stroke-width="${p.impact==='failed'?1.6:1}"/>`;});
+  place.forEach(p=>{const c=_IMPACT_COL[p.impact]||'#7c8aa5';const r=p.impact==='failed'?9:p.impact==='weakened'?7:5;
+    s+=`<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${c}" fill-opacity=".88"/>`;
+    s+=`<text x="${p.x}" y="${p.y-r-4}" text-anchor="middle" font-size="10" font-family="ui-monospace,monospace" fill="#e8eef7">${p.control_id}</text>`;});
+  s+=`<circle cx="${cx}" cy="${cy}" r="24" fill="rgba(255,90,90,.16)" stroke="#ff5a5a" stroke-width="2"/>`;
+  s+=`<circle cx="${cx}" cy="${cy}" r="14" fill="#ff5a5a"/>`;
+  s+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="9" font-family="ui-monospace,monospace" fill="#fff" font-weight="700">${epi[0]||'?'}</text>`;
+  if(epi.length>1)s+=`<text x="${cx}" y="${cy+36}" text-anchor="middle" font-size="9" fill="#7c8aa5">+${epi.length-1} more</text>`;
+  s+=`</svg>`;return s;
+}
+
+function renderBlast(out,data,scenario){
+  const bi=(data.blast_radius&&data.blast_radius.by_impact)||{};
+  out.innerHTML='';
+  const card=el('div','card');card.innerHTML='<h3>Blast radius</h3>';
+  const sum=el('div','blast-summary');
+  sum.innerHTML=[['Total affected',(data.blast_radius||{}).total_affected||0,'var(--hi)'],
+    ['Failed',bi.failed||0,'var(--fail)'],['Weakened',bi.weakened||0,'var(--warn)'],['At risk',bi.at_risk||0,'var(--mid)']]
+    .map(([l,n,c])=>`<div class="blast-chip"><span class="bc-n" style="color:${c}">${n}</span><span class="bc-l">${l}</span></div>`).join('');
+  card.appendChild(sum);
+  if(data.explanation){const e=el('div');e.style.cssText='font-size:13px;color:var(--mid);margin-bottom:12px';e.textContent=data.explanation;card.appendChild(e);}
+  const viz=el('div');viz.innerHTML=_blastSvg(data,scenario);card.appendChild(viz);
+  out.appendChild(card);
+  if(!(data.cascade||[]).length){const n=el('div','empty dim','No downstream controls structurally depend on the changed control(s).');out.appendChild(n);return;}
+  const detail=el('div','card');detail.innerHTML='<h3>Affected controls</h3><div class="sub">grouped by impact, with the dependency path and the reason for each link</div>';
+  [['failed','Failed — evidence invalidated','var(--fail)'],['weakened','Weakened','var(--warn)'],['at_risk','At risk','var(--mid)']].forEach(([lvl,label,col])=>{
+    const rows=data.cascade.filter(c=>c.impact===lvl);if(!rows.length)return;
+    const grp=el('div','cascade-group');grp.innerHTML=`<h4 style="color:${col}">${label} (${rows.length})</h4>`;
+    rows.forEach(c=>{const r=el('div','cascade-row');
+      const path=(c.via||[]).map((p,i)=>i===0?`<span class="pa">${p}</span>`:`<span class="sep">→</span><span class="${i===c.via.length-1?'ph':''}">${p}</span>`).join('');
+      r.innerHTML=`<div style="min-width:58px"><b class="mono">${c.control_id}</b></div>
+        <div style="flex:1;min-width:200px"><div style="font-size:12px;color:var(--mid)">${c.rationale||''}</div><div class="cascade-path">${path}</div></div>
+        <div style="text-align:right;min-width:80px"><span class="tag">${c.provenance}</span><div class="dim" style="font-size:11px;margin-top:3px">sev ${(c.severity||0).toFixed(2)}</div></div>`;
+      grp.appendChild(r);});
+    detail.appendChild(grp);});
+  out.appendChild(detail);
+}
+
+function renderFrag(out,d){
+  out.innerHTML='';
+  const col=d.structurally_at_risk?'var(--warn)':'var(--pass)';
+  const head=el('div');head.style.cssText='margin:10px 0 6px;font-size:14px;color:'+col+';font-weight:600';
+  head.textContent=d.structurally_at_risk?`⚠ ${d.control_id} is structurally at risk`:`✓ ${d.control_id} is structurally sound`;
+  out.appendChild(head);
+  const det=el('div');det.style.cssText='font-size:13px;color:var(--mid);margin-bottom:8px';det.textContent=d.detail||'';out.appendChild(det);
+  (d.weak_prerequisites||[]).forEach(w=>{const r=el('div','frag-row');
+    r.innerHTML=`<b class="mono">${w.prereq}</b> ${stBadge(w.status)} <span style="flex:1;min-width:160px;font-size:12px;color:var(--dim)">${w.rationale||''}</span><span class="dim" style="font-size:11px">weight ${(w.weight||0).toFixed(2)}</span>`;
+    out.appendChild(r);});
 }
 
 /* ============================ SELECTORS + BOOT ============================ */
