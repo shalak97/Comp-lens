@@ -592,6 +592,31 @@ def control_fragility(control_id: str, framework: str = "NIST_800_53",
     return fragility(db, tenant_id, framework, control_id)
 
 
+class _RemediationRequest(_BaseModel):
+    framework: str = "NIST_800_53"
+    failing_controls: list[str] | None = None
+    available_connectors: list[str] | None = None
+    tenant_id: str = "default"
+
+
+@app.post("/remediation/plan", tags=["simulation"])
+def remediation_plan(req: _RemediationRequest, db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    from app.services import remediation_optimizer
+    return remediation_optimizer.plan(db, req.tenant_id, req.framework,
+                                      req.failing_controls, req.available_connectors)
+
+
+@app.get("/controls/{control_id}/remediation", tags=["simulation"])
+def control_remediation(control_id: str, framework: str = "NIST_800_53",
+                        tenant_id: str = "default", db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services import remediation_optimizer
+    return remediation_optimizer.detail(db, tenant_id, framework, control_id)
+
+
 @app.get("/evidence/documents/{doc_id}/verify", tags=["evidence-graph"])
 def verify_evidence_document(doc_id: str, tenant_id: str = "default",
                             db: Session = Depends(get_db),

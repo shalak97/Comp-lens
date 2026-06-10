@@ -1,0 +1,22 @@
+{
+  "note": "Heuristic base effort by NIST 800-53 family. 1=low, 2=medium, 3=high. These are GENERIC estimates; real effort is organisation-specific. Connector availability and baseline tier adjust these at runtime.",
+  "family_effort": {
+    "AC": 2, "AT": 3, "AU": 2, "CA": 2, "CM": 2, "CP": 3, "IA": 2,
+    "IR": 2, "MA": 2, "MP": 2, "PE": 3, "PL": 3, "PM": 3, "PS": 3,
+    "PT": 2, "RA": 2, "SA": 3, "SC": 2, "SI": 2, "SR": 3, "AR": 3, "AP": 3
+  },
+  "family_automatable": {
+    "AC": true, "AU": true, "CM": true, "IA": true, "SC": true, "SI": true, "RA": true,
+    "AT": false, "CP": false, "PE": false, "PL": false, "PM": false, "PS": false, "SA": false, "SR": false
+  },
+  "connector_families": {
+    "AWS": ["AC","AU","CM","SC","SI","RA","CP"],
+    "AZURE": ["AC","AU","CM","SC","SI","RA"],
+    "GCP": ["AC","AU","CM","SC","SI","RA"],
+    "OKTA": ["AC","IA","AU"],
+    "GITHUB": ["CM","SA","AC"],
+    "QUALYS": ["RA","SI"],
+    "CROWDSTRIKE": ["SI","IR"],
+    "SSH": ["CM","SI"]
+  }
+}
