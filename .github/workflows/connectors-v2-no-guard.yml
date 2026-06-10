@@ -1,0 +1,42 @@
+name: Add connector framework v2 (marketplace, 44 connectors)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode and unpack bundle
+        run: |
+          echo "${B64}" | base64 -d > /tmp/conn.tgz
+          tar xzf /tmp/conn.tgz -C .
+          ls -la app/connectors/catalog.py app/connectors/framework.py app/data/connector_control_map.json tests/test_connectors_v2.py
+
+      - name: Apply idempotent patch (models + main + README)
+        run: |
+          python3 _apply_connectors.py
+          rm -f _apply_connectors.py _models_block.txt _main_block.txt
+
+      - name: Run connector tests
+        env:
+          DATABASE_URL: "sqlite+pysqlite:////tmp/ci.db"
+          APP_ENV: test
+          ENABLE_SCHEDULER: "false"
+          EVIDENCE_SIGNING_KEY: ci-test-key
+        run: |
+          pip install -r requirements.txt -q
+          alembic upgrade head
+          python3 -m pytest tests/test_connectors_v2.py -q --tb=short
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "nothing to commit" || \
+            git commit -m "feat: connector framework v2 - 44-connector marketplace, normalized multi-framework evidence, sync/test endpoints" && git push
