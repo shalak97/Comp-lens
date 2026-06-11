@@ -104,6 +104,88 @@ def list_connectors(_: Principal = Depends(require_principal)) -> list[dict]:
     return [{"source_system": n, "healthy": registry.healthcheck(n)} for n in registry.supported()]
 
 
+# ── Connector framework v2 (marketplace) ──
+@app.get("/connectors/catalog", tags=["connectors"])
+def connectors_catalog(category: str | None = None,
+                       _: Principal = Depends(require_principal)) -> list[dict]:
+    from app.connectors import catalog as ccat
+    items = ccat.by_category(category) if category else ccat.all_connectors()
+    return [{k: v for k, v in c.items()} for c in items]
+
+
+@app.get("/connectors/status", tags=["connectors"])
+def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    from app.connectors import catalog as ccat
+    from app.connectors import framework as cfw
+    return [cfw.status_one(db, c, tenant_id) for c in ccat.all_connectors()]
+
+
+@app.get("/connectors/{name}", tags=["connectors"])
+def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.connectors import catalog as ccat
+    from app.connectors import framework as cfw
+    c = ccat.get(name)
+    if not c:
+        raise HTTPException(404, f"unknown connector '{name}'")
+    st = cfw.status_one(db, c, tenant_id)
+    st["supported_controls"] = cfw.supported_controls(c)
+    return st
+
+
+@app.post("/connectors/{name}/test", tags=["connectors"])
+def connector_test(name: str, p: Principal = Depends(require_principal)) -> dict:
+    from app.connectors import catalog as ccat
+    from app.connectors import framework as cfw
+    c = ccat.get(name)
+    if not c:
+        raise HTTPException(404, f"unknown connector '{name}'")
+    return cfw.test_connection(c)
+
+
+from pydantic import BaseModel as _PydBase
+
+
+class _SyncRequest(_PydBase):
+    tenant_id: str = "default"
+    force_demo: bool = False
+
+
+@app.post("/connectors/{name}/sync", tags=["connectors"])
+def connector_sync(name: str, req: _SyncRequest | None = None,
+                   db: Session = Depends(get_db),
+                   p: Principal = Depends(require_principal)) -> dict:
+    req = req or _SyncRequest()
+    authorize_tenant(p, req.tenant_id)
+    from app.connectors import catalog as ccat
+    from app.connectors import framework as cfw
+    c = ccat.get(name)
+    if not c:
+        raise HTTPException(404, f"unknown connector '{name}'")
+    return cfw.sync(db, c, req.tenant_id, req.force_demo)
+
+
+@app.get("/connectors/{name}/evidence", tags=["connectors"])
+def connector_evidence(name: str, tenant_id: str = "default",
+                       db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    from app.connectors import framework as cfw
+    return cfw.evidence_for(db, name, tenant_id)
+
+
+@app.get("/evidence/by-connector/{name}", tags=["connectors"])
+def evidence_by_connector(name: str, tenant_id: str = "default",
+                          db: Session = Depends(get_db),
+                          p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    from app.connectors import framework as cfw
+    return cfw.evidence_for(db, name, tenant_id)
+
+
 @app.get("/legacy/sources")
 def legacy_sources(_: Principal = Depends(require_principal)) -> list[dict]:
     # names + types only; connection strings/credentials are never exposed

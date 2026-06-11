@@ -179,6 +179,36 @@ class ComplianceSnapshot(Base):
 
 
 
+class ConnectorSyncState(Base):
+    """Per-tenant sync state for marketplace connectors (framework v2)."""
+    __tablename__ = "connector_sync_state"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
+    connector_key: Mapped[str] = mapped_column(String(64), index=True)
+    last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="never")
+    mode: Mapped[str] = mapped_column(String(16), default="demo")
+    evidence_count: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    __table_args__ = (UniqueConstraint("tenant_id", "connector_key", name="uq_sync_tenant_connector"),)
+
+
+class ConnectorEvidenceItem(Base):
+    """Normalized evidence collected (or demo-generated) by a connector."""
+    __tablename__ = "connector_evidence_items"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
+    connector_key: Mapped[str] = mapped_column(String(64), index=True)
+    category: Mapped[str] = mapped_column(String(24), default="")
+    evidence_type: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(256), default="")
+    status: Mapped[str] = mapped_column(String(16), default="info")
+    mode: Mapped[str] = mapped_column(String(16), default="demo")
+    signals: Mapped[dict] = mapped_column(JSON, default=dict)
+    controls: Mapped[list] = mapped_column(JSON, default=list)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 # ── Pydantic API schemas ──
 class AssessmentRequest(BaseModel):
     tenant_id: str = Field(default="default")

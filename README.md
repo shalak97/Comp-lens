@@ -177,7 +177,7 @@ Locally, tables auto-create on startup for convenience.
 ## Tests
 
 ```bash
-pytest -q   # 10 tests, uses DEMO connector
+pytest -q   # 152 tests, uses DEMO connector
 ```
 
 ## Deploy on AWS free tier
@@ -227,3 +227,30 @@ docker compose up --build      # API + PostgreSQL
 ## License
 
 MIT
+
+## Connector Architecture
+
+Comp-Lens has a two-layer connector system:
+
+* **Registry (live telemetry)** — `app/connectors/*.py` classes implementing
+  `BaseConnector` (healthcheck + per-control `collect_telemetry`). Used by the
+  assessment engine.
+* **Marketplace framework v2** — `app/connectors/catalog.py` defines 44
+  connectors across 8 categories (cloud, identity, devops, itsm, security,
+  grc, saas, endpoint) with auth method, required env vars, and the evidence
+  types each produces. `app/connectors/framework.py` provides status, test,
+  sync, and normalized evidence with multi-framework control mappings
+  (NIST 800-53, ISO 27001:2022, NIST CSF, SOC 2, CIS v8, GDPR, ISO 42001 /
+  NIST AI RMF) from `app/data/connector_control_map.json`.
+
+Modes are honest: `connected` (creds valid, live), `demo` (realistic synthetic
+evidence — works with zero credentials), `not_configured`, `error`.
+
+Endpoints: `GET /connectors/catalog`, `GET /connectors/status`,
+`GET /connectors/{name}`, `POST /connectors/{name}/test`,
+`POST /connectors/{name}/sync`, `GET /connectors/{name}/evidence`,
+`GET /evidence/by-connector/{name}`.
+
+Setup: set the env vars listed per connector in the catalog (names are shown
+in the dashboard marketplace; values are never logged or returned). With no
+credentials, every connector still tests and syncs in demo mode.

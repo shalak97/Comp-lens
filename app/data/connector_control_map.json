@@ -1,0 +1,78 @@
+{
+  "note": "Maps normalized evidence types to controls across frameworks. NIST_800_53 and ISO_27001_2022 ids match the in-app catalogs; NIST_CSF, SOC_2 (TSC), CIS_V8, GDPR, ISO_42001 and NIST_AI_RMF are informational references for reporting.",
+  "mappings": {
+    "mfa_enabled": {
+      "NIST_800_53": ["IA-2", "IA-2(1)", "IA-2(2)"], "ISO_27001_2022": ["A.5.17", "A.8.5"],
+      "NIST_CSF": ["PR.AA-03"], "SOC_2": ["CC6.1"], "CIS_V8": ["6.3", "6.4", "6.5"], "GDPR": ["Art.32"]
+    },
+    "privileged_users_reviewed": {
+      "NIST_800_53": ["AC-2(7)", "AC-6", "AC-6(7)"], "ISO_27001_2022": ["A.8.2"],
+      "NIST_CSF": ["PR.AA-05"], "SOC_2": ["CC6.3"], "CIS_V8": ["5.4", "6.8"], "GDPR": ["Art.32"]
+    },
+    "inactive_accounts_disabled": {
+      "NIST_800_53": ["AC-2", "AC-2(3)"], "ISO_27001_2022": ["A.5.16"],
+      "NIST_CSF": ["PR.AA-01"], "SOC_2": ["CC6.2"], "CIS_V8": ["5.3"]
+    },
+    "logging_enabled": {
+      "NIST_800_53": ["AU-2", "AU-3", "AU-12"], "ISO_27001_2022": ["A.8.15"],
+      "NIST_CSF": ["DE.CM-01"], "SOC_2": ["CC7.2"], "CIS_V8": ["8.2", "8.5"], "GDPR": ["Art.32"]
+    },
+    "encryption_enabled": {
+      "NIST_800_53": ["SC-28", "SC-8", "SC-13"], "ISO_27001_2022": ["A.8.24"],
+      "NIST_CSF": ["PR.DS-01", "PR.DS-02"], "SOC_2": ["CC6.7"], "CIS_V8": ["3.10", "3.11"], "GDPR": ["Art.32"]
+    },
+    "vulnerability_findings": {
+      "NIST_800_53": ["RA-5", "SI-2"], "ISO_27001_2022": ["A.8.8"],
+      "NIST_CSF": ["ID.RA-01"], "SOC_2": ["CC7.1"], "CIS_V8": ["7.1", "7.5", "7.6"]
+    },
+    "incidents_tracked": {
+      "NIST_800_53": ["IR-4", "IR-5", "IR-6"], "ISO_27001_2022": ["A.5.24", "A.5.25"],
+      "NIST_CSF": ["RS.MA-01"], "SOC_2": ["CC7.3", "CC7.4"], "CIS_V8": ["17.1", "17.4"], "GDPR": ["Art.33"]
+    },
+    "patch_status": {
+      "NIST_800_53": ["SI-2", "CM-3"], "ISO_27001_2022": ["A.8.8", "A.8.19"],
+      "NIST_CSF": ["PR.PS-02"], "SOC_2": ["CC7.1"], "CIS_V8": ["7.3", "7.4"]
+    },
+    "backup_configuration": {
+      "NIST_800_53": ["CP-9", "CP-10"], "ISO_27001_2022": ["A.8.13"],
+      "NIST_CSF": ["PR.DS-11"], "SOC_2": ["A1.2"], "CIS_V8": ["11.1", "11.2"], "GDPR": ["Art.32"]
+    },
+    "audit_logs_retained": {
+      "NIST_800_53": ["AU-9", "AU-11"], "ISO_27001_2022": ["A.8.15"],
+      "NIST_CSF": ["PR.PS-04"], "SOC_2": ["CC7.2"], "CIS_V8": ["8.3", "8.10"], "GDPR": ["Art.30"]
+    },
+    "access_reviews_completed": {
+      "NIST_800_53": ["AC-2(7)", "CA-7"], "ISO_27001_2022": ["A.5.18"],
+      "NIST_CSF": ["PR.AA-05"], "SOC_2": ["CC6.3"], "CIS_V8": ["5.1", "6.8"], "GDPR": ["Art.32"]
+    },
+    "branch_protection": {
+      "NIST_800_53": ["CM-3", "CM-5", "SA-10"], "ISO_27001_2022": ["A.8.32"],
+      "NIST_CSF": ["PR.PS-06"], "SOC_2": ["CC8.1"], "CIS_V8": ["16.1"]
+    },
+    "code_scanning_enabled": {
+      "NIST_800_53": ["SA-11", "RA-5"], "ISO_27001_2022": ["A.8.28", "A.8.29"],
+      "NIST_CSF": ["PR.PS-06"], "SOC_2": ["CC8.1"], "CIS_V8": ["16.12"]
+    },
+    "endpoint_protection_active": {
+      "NIST_800_53": ["SI-3", "SI-4"], "ISO_27001_2022": ["A.8.7"],
+      "NIST_CSF": ["DE.CM-09"], "SOC_2": ["CC6.8"], "CIS_V8": ["10.1", "10.2"]
+    },
+    "data_retention_policy": {
+      "NIST_800_53": ["SI-12", "AU-11"], "ISO_27001_2022": ["A.5.33", "A.8.10"],
+      "NIST_CSF": ["GV.PO-01"], "SOC_2": ["C1.1"], "CIS_V8": ["3.4"], "GDPR": ["Art.5(1)(e)", "Art.17"]
+    },
+    "ai_system_inventory": {
+      "NIST_800_53": ["CM-8", "PM-5"], "ISO_27001_2022": ["A.5.9"],
+      "ISO_42001": ["A.4.2", "A.6.2.2"], "NIST_AI_RMF": ["MAP-1.1", "GOVERN-1.6"],
+      "NIST_CSF": ["ID.AM-01"], "SOC_2": ["CC3.2"]
+    },
+    "consent_records_managed": {
+      "NIST_800_53": ["PT-2", "PT-4"], "ISO_27001_2022": ["A.5.34"],
+      "GDPR": ["Art.6", "Art.7"], "SOC_2": ["P2.1"], "NIST_CSF": ["GV.PO-02"]
+    },
+    "siem_alerts_monitored": {
+      "NIST_800_53": ["SI-4", "AU-6", "IR-5"], "ISO_27001_2022": ["A.8.16"],
+      "NIST_CSF": ["DE.CM-01", "DE.AE-02"], "SOC_2": ["CC7.2"], "CIS_V8": ["13.1", "8.11"]
+    }
+  }
+}
