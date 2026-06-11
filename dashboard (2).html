@@ -1,0 +1,1926 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comp-Lens — Compliance Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05070e; --bg2:#080c16; --panel:rgba(13,19,32,.74); --panel-solid:#0d1320;
+  --line:rgba(120,140,175,.16); --line-strong:rgba(120,140,175,.30);
+  --teal:#33e0c8; --violet:#8b7cff; --info:#41a6ff;
+  --pass:#3ddc84; --warn:#ffb020; --fail:#ff5d6c; --crit:#ff3b5c; --low:#6fb3ff;
+  --hi:#e8eef7; --mid:#93a0b4; --dim:#5d6b80;
+  --r:12px; --mono:'JetBrains Mono',monospace; --disp:'Saira Condensed',sans-serif; --body:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--hi); font-family:var(--body); font-size:14px;
+  background-image:
+    radial-gradient(900px 500px at 78% -8%, rgba(51,224,200,.10), transparent 60%),
+    radial-gradient(800px 600px at 8% 110%, rgba(139,124,255,.10), transparent 55%),
+    linear-gradient(rgba(120,140,175,.04) 1px,transparent 1px),
+    linear-gradient(90deg, rgba(120,140,175,.04) 1px,transparent 1px);
+  background-size:auto,auto,40px 40px,40px 40px;
+  overflow:hidden;
+}
+.app{display:grid;grid-template-columns:232px 1fr;grid-template-rows:60px 1fr;height:100vh}
+
+/* top bar */
+.top{grid-column:1/3;display:flex;align-items:center;gap:18px;padding:0 22px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(10,15,26,.9),rgba(8,12,22,.6));backdrop-filter:blur(8px);z-index:5}
+.brand{display:flex;align-items:center;gap:11px;font-family:var(--disp);font-weight:700;letter-spacing:.06em;font-size:21px}
+.brand b{color:var(--teal)} .brand i{color:var(--violet);font-style:normal}
+.logo{width:30px;height:30px;display:block}
+.spacer{flex:1}
+.ctl{display:flex;align-items:center;gap:8px}
+.sel,.btn{font-family:var(--mono);font-size:12px;color:var(--hi);background:rgba(120,140,175,.08);
+  border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;cursor:pointer;transition:.15s}
+.sel:hover,.btn:hover{border-color:var(--teal);background:rgba(51,224,200,.08)}
+.lbl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;margin-right:2px}
+.chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;padding:6px 11px;border-radius:20px;border:1px solid var(--line-strong)}
+.dot{width:7px;height:7px;border-radius:50%;box-shadow:0 0 8px currentColor}
+.chip.live{color:var(--pass)} .chip.demo{color:var(--warn)} .chip.down{color:var(--fail)}
+
+/* tab rail */
+.rail{border-right:1px solid var(--line);background:linear-gradient(180deg,rgba(9,13,23,.5),transparent);
+  padding:16px 12px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.navh{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:14px 10px 6px}
+.tab{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;cursor:pointer;color:var(--mid);
+  font-weight:500;border:1px solid transparent;transition:.14s;position:relative}
+.tab svg{width:17px;height:17px;flex:none;opacity:.8}
+.tab:hover{color:var(--hi);background:rgba(120,140,175,.06)}
+.tab.on{color:var(--hi);background:linear-gradient(90deg,rgba(51,224,200,.14),rgba(51,224,200,.02));border-color:rgba(51,224,200,.3)}
+.tab.on::before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--teal);box-shadow:0 0 12px var(--teal)}
+.tab .ct{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);background:rgba(120,140,175,.1);padding:1px 6px;border-radius:10px}
+.railftr{margin-top:auto;font-family:var(--mono);font-size:10px;color:var(--dim);padding:10px;line-height:1.6;border-top:1px solid var(--line)}
+/* nav groups */
+.nav-sect{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;
+  padding:12px 10px 5px;user-select:none}
+.rail-search{padding:2px 2px 10px}
+.rail-search input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.04);border:1px solid var(--line);
+  border-radius:8px;color:var(--hi);font-family:var(--sans);font-size:12px;padding:7px 10px 7px 28px;outline:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7a99' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:9px center}
+.rail-search input:focus{border-color:rgba(51,224,200,.35)}
+.rail-search input::placeholder{color:var(--dim)}
+.rail-ext{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;cursor:pointer;
+  color:var(--mid);font-size:13px;font-weight:500;border:1px solid transparent;transition:.14s}
+.rail-ext:hover{color:var(--teal);background:rgba(51,224,200,.06)}
+.rail-ext svg{width:16px;height:16px;flex:none;opacity:.75}
+
+/* callout banner */
+.callout{background:rgba(51,224,200,.05);border:1px solid rgba(51,224,200,.18);border-radius:10px;
+  padding:11px 14px;margin-bottom:18px;font-size:13px;color:var(--mid)}
+.callout a{color:var(--teal);cursor:pointer;text-decoration:none}
+.callout a:hover{text-decoration:underline}
+
+/* plane cards */
+.plane-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+@media(max-width:1100px){.plane-grid{grid-template-columns:repeat(2,1fr)}}
+.plane-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 15px;
+  border-top:2px solid var(--pc,var(--teal));transition:.18s}
+.plane-card:hover{border-color:var(--pc,var(--teal))}
+.pc-name{font-size:13px;font-weight:600;color:var(--hi);margin-bottom:8px}
+.pc-meta{display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap}
+.pc-producers{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px}
+.chip-sm{font-family:var(--mono);font-size:10px;padding:1px 7px;border-radius:10px;
+  background:rgba(120,140,175,.1);color:var(--mid)}
+
+/* resolver form */
+.res-form{display:flex;flex-direction:column;gap:12px;margin:14px 0 18px}
+.res-row{display:flex;gap:14px;flex-wrap:wrap}
+.res-row .fld{flex:1;min-width:150px}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+.chip-chk{font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:8px;
+  background:rgba(120,140,175,.07);border:1px solid var(--line);cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;color:var(--mid);transition:.12s}
+.chip-chk:has(input:checked){background:rgba(51,224,200,.1);border-color:rgba(51,224,200,.3);color:var(--teal)}
+.chip-chk:hover{border-color:rgba(51,224,200,.3);color:var(--teal)}
+.chip-chk input{accent-color:var(--teal);cursor:pointer}
+
+/* resolver result */
+.res-result{background:rgba(255,255,255,.02);border:1px solid var(--rc,var(--teal));
+  border-left:3px solid var(--rc,var(--teal));border-radius:10px;padding:14px 16px;margin-top:14px}
+.rr-plane{font-family:var(--mono);font-size:14px;color:var(--hi);margin-bottom:10px;font-weight:600}
+.rr-row{font-size:13px;color:var(--mid);margin-bottom:6px}
+.rr-row code{font-family:var(--mono);font-size:11px;background:rgba(120,140,175,.1);
+  padding:2px 7px;border-radius:5px;color:var(--info)}
+
+
+/* main */
+.main{overflow-y:auto;padding:22px 26px 50px;position:relative}
+.view{display:none;animation:fade .35s ease} .view.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.vhead{display:flex;align-items:baseline;gap:14px;margin:2px 0 18px}
+.vhead h1{font-family:var(--disp);font-weight:600;font-size:27px;letter-spacing:.02em;margin:0}
+.vhead p{color:var(--mid);margin:0;font-size:13px}
+
+/* metric cards */
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:20px}
+/* home: workflow stepper */
+.workflow{display:flex;margin-top:8px;flex-wrap:wrap}
+.wf-step{flex:1;min-width:130px;position:relative;padding:0 6px;text-align:center}
+.wf-step:not(:last-child)::after{content:'';position:absolute;top:20px;left:50%;width:100%;height:2px;background:var(--line);z-index:0}
+.wf-step.done:not(:last-child)::after{background:var(--pass)}
+.wf-ic{width:40px;height:40px;border-radius:50%;border:2px solid var(--line);background:var(--bg);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;position:relative;z-index:1;font-family:var(--mono);font-size:15px;color:var(--dim)}
+.wf-step.done .wf-ic{border-color:var(--pass);color:var(--pass);background:rgba(51,224,100,.08)}
+.wf-step.active .wf-ic{border-color:var(--teal);color:var(--teal);background:rgba(51,224,200,.1)}
+.wf-label{font-size:13px;font-weight:600;color:var(--hi)}
+.wf-stat{font-size:11px;color:var(--dim);font-family:var(--mono);margin:2px 0 5px;min-height:14px}
+.wf-go{font-size:11px;color:var(--teal);cursor:pointer;background:none;border:0;padding:2px}
+.wf-go:hover{text-decoration:underline}
+/* simulator */
+.sim-scenario{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px}
+.sim-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1}
+.sim-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.25);border-radius:8px;padding:5px 11px;font-family:var(--mono);font-size:12px;color:var(--fail)}
+.sim-tag button{background:none;border:0;color:var(--fail);cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px}
+.blast-summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.blast-chip{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 14px}
+.blast-chip .bc-n{font-family:var(--mono);font-size:20px;font-weight:700}
+.blast-chip .bc-l{font-size:11px;color:var(--dim)}
+.cascade-group{margin-bottom:16px}
+.cascade-group h4{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+.cascade-row{display:flex;align-items:flex-start;gap:12px;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.cascade-row:first-child{border-top:0}
+.cascade-path{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--mid);margin-top:4px}
+.cascade-path .pa{color:var(--teal)}.cascade-path .sep{color:var(--dim)}
+.cascade-path .ph{color:var(--fail);font-weight:600}
+.frag-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.frag-row:first-child{border-top:0}
+
+.qa-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:4px}
+.qa-btn{display:flex;align-items:center;gap:11px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;text-align:left;transition:.14s;color:var(--hi);width:100%}
+.qa-btn:hover{border-color:var(--teal);background:rgba(51,224,200,.05)}
+.qa-ic{font-size:19px;flex:none}
+.qa-t{font-size:13px;font-weight:600}
+.qa-d{font-size:11px;color:var(--dim)}
+.gap-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.gap-item:first-of-type{border-top:0}
+.gap-fix{font-size:11px;color:var(--teal);cursor:pointer;background:none;border:0;white-space:nowrap}
+.gap-fix:hover{text-decoration:underline}
+
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--accent,var(--teal));opacity:.7}
+.kpi .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;color:var(--dim);text-transform:uppercase}
+.kpi .v{font-family:var(--disp);font-weight:700;font-size:34px;line-height:1.05;margin-top:8px;color:var(--accent,var(--hi))}
+.kpi .s{font-family:var(--mono);font-size:11px;color:var(--mid);margin-top:3px}
+
+/* panels + grid */
+.grid{display:grid;gap:16px}
+.g-2{grid-template-columns:1.4fr 1fr} .g-3{grid-template-columns:repeat(3,1fr)} .g-12{grid-template-columns:1fr}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.card h3{font-family:var(--disp);font-weight:600;font-size:16px;letter-spacing:.03em;margin:0 0 2px;display:flex;align-items:center;gap:9px}
+.card .sub{color:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px}
+
+/* tables */
+.tools{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.inp{font-family:var(--mono);font-size:12px;color:var(--hi);background:rgba(120,140,175,.07);border:1px solid var(--line-strong);
+  border-radius:8px;padding:8px 11px;min-width:200px;outline:none}
+.inp:focus{border-color:var(--teal)}
+.seg{display:flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.seg button{font-family:var(--mono);font-size:11px;color:var(--mid);background:transparent;border:0;padding:8px 12px;cursor:pointer}
+.seg button.on{background:rgba(51,224,200,.14);color:var(--teal)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;
+  padding:9px 12px;border-bottom:1px solid var(--line-strong);cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--mid)} th .ar{opacity:.5}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr{transition:.12s} tbody tr:hover{background:rgba(120,140,175,.05)}
+.mono{font-family:var(--mono)} .right{text-align:right} .center{text-align:center}
+.muted{color:var(--mid)} .dim{color:var(--dim)}
+.empty{text-align:center;color:var(--dim);padding:34px;font-family:var(--mono);font-size:12px}
+
+/* badges */
+.bdg{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;font-weight:500;
+  padding:3px 9px;border-radius:20px;border:1px solid;letter-spacing:.03em;white-space:nowrap}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.st-pass{color:var(--pass);border-color:rgba(61,220,132,.4);background:rgba(61,220,132,.08)}
+.st-fail{color:var(--fail);border-color:rgba(255,93,108,.4);background:rgba(255,93,108,.08)}
+.st-error{color:var(--warn);border-color:rgba(255,176,32,.4);background:rgba(255,176,32,.08)}
+.st-pending{color:var(--info);border-color:rgba(65,166,255,.4);background:rgba(65,166,255,.08)}
+.st-not_applicable,.st-na{color:var(--dim);border-color:var(--line-strong);background:transparent}
+.sv-critical{color:var(--crit);border-color:rgba(255,59,92,.45);background:rgba(255,59,92,.09)}
+.sv-high{color:var(--fail);border-color:rgba(255,93,108,.4);background:rgba(255,93,108,.07)}
+.sv-medium{color:var(--warn);border-color:rgba(255,176,32,.4);background:rgba(255,176,32,.07)}
+.sv-low{color:var(--low);border-color:rgba(111,179,255,.4);background:rgba(111,179,255,.07)}
+.sv-info{color:var(--mid);border-color:var(--line-strong)}
+.lc-open{color:var(--fail)} .lc-in_progress{color:var(--warn)} .lc-resolved{color:var(--pass)} .lc-risk_accepted{color:var(--violet)}
+.tag{font-family:var(--mono);font-size:10px;color:var(--mid);background:rgba(120,140,175,.1);border:1px solid var(--line);border-radius:5px;padding:2px 7px;margin:1px 3px 1px 0;display:inline-block}
+
+/* health grid */
+.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+/* 3d graph */
+#gcanvas{width:100%;height:100%;display:block;cursor:grab;background:#0a0d14;border-radius:8px}
+.ghud{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;padding:14px 18px;box-sizing:border-box;display:flex;justify-content:space-between}
+.ghud .gctrl{pointer-events:all;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.ghud .gleg{pointer-events:all;display:flex;flex-direction:column;gap:5px}
+.gleg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(155,168,192,.8)}
+.gleg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.gleg-line{width:14px;height:2px;border-radius:1px;flex-shrink:0}
+.gbtn{font-size:10px;padding:4px 9px;border-radius:6px;border:1px solid rgba(100,120,160,.3);background:rgba(255,255,255,.07);color:#9ba8c0;cursor:pointer}
+.gbtn.on{background:rgba(91,156,246,.25);color:#93c5fd;border-color:rgba(91,156,246,.5)}
+#ginfo{background:rgba(10,13,20,.9);border:1px solid rgba(100,120,160,.25);border-radius:8px;padding:10px 13px;font-size:11px;color:#9ba8c0;min-width:170px;max-width:220px;display:none}
+/* connector marketplace */
+.mkt-filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.mkt-filters .seg{cursor:pointer}
+.mkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.mkt-card{background:var(--card,rgba(255,255,255,.03));border:1px solid rgba(120,140,175,.16);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.mkt-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.mkt-name{font-weight:650;font-size:14px}
+.mkt-cat{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--dim)}
+.mkt-pill{font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;white-space:nowrap}
+.mkt-pill.connected{background:rgba(46,204,113,.14);color:var(--pass)}
+.mkt-pill.demo{background:rgba(255,184,0,.13);color:var(--warn)}
+.mkt-pill.not_configured{background:rgba(124,138,165,.14);color:var(--mid)}
+.mkt-pill.error{background:rgba(255,90,90,.15);color:var(--fail)}
+.mkt-meta{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--dim);font-family:var(--mono)}
+.mkt-actions{display:flex;gap:8px;margin-top:auto}
+.mkt-actions .btn{flex:1;font-size:12px;padding:7px 8px}
+.mkt-msg{font-size:11px;color:var(--mid);min-height:14px}
+.hcell{background:rgba(120,140,175,.05);border:1px solid var(--line);border-radius:10px;padding:14px;position:relative}
+.hcell .hn{font-family:var(--disp);font-weight:600;font-size:16px;letter-spacing:.04em}
+.hcell .hs{font-family:var(--mono);font-size:10px;margin-top:5px;display:flex;align-items:center;gap:6px}
+.hcell .pulse{position:absolute;top:14px;right:14px;width:9px;height:9px;border-radius:50%}
+.pulse.ok{background:var(--pass);box-shadow:0 0 0 0 rgba(61,220,132,.5);animation:pl 2.2s infinite}
+.pulse.bad{background:var(--fail);box-shadow:0 0 8px var(--fail)}
+@keyframes pl{0%{box-shadow:0 0 0 0 rgba(61,220,132,.45)}70%{box-shadow:0 0 0 9px rgba(61,220,132,0)}100%{box-shadow:0 0 0 0 transparent}}
+
+/* bars + misc viz */
+.bar-row{display:flex;align-items:center;gap:12px;margin:9px 0}
+.bar-row .nm{width:120px;font-family:var(--mono);font-size:11px;color:var(--mid);text-align:right;flex:none}
+.bar-track{flex:1;height:9px;background:rgba(120,140,175,.1);border-radius:6px;overflow:hidden}
+.bar-fill{height:100%;border-radius:6px;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.bar-row .pc{width:46px;font-family:var(--mono);font-size:12px;text-align:right;flex:none}
+.dl{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.dl:last-child{border:0} .dl .dk{color:var(--mid)} .dl .dv{font-family:var(--mono)}
+
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(3,5,10,.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:50}
+.modal.on{display:flex}
+.sheet{background:var(--panel-solid);border:1px solid var(--line-strong);border-radius:14px;padding:24px;width:440px;max-width:92vw;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.sheet h3{font-family:var(--disp);margin:0 0 16px;font-size:20px}
+.fld{margin-bottom:14px} .fld label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:6px}
+.fld input{width:100%}
+.row-end{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+.btn.primary{background:var(--teal);color:#04231f;border-color:var(--teal);font-weight:700}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel-solid);
+  border:1px solid var(--line-strong);border-radius:10px;padding:11px 18px;font-family:var(--mono);font-size:12px;
+  opacity:0;transition:.3s;z-index:60;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:rgba(120,140,175,.2);border-radius:6px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- top -->
+  <header class="top">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" fill="none">
+        <circle cx="20" cy="20" r="15" stroke="var(--teal)" stroke-width="2"/>
+        <circle cx="20" cy="20" r="6" stroke="var(--violet)" stroke-width="2"/>
+        <path d="M31 31 L37 37" stroke="var(--teal)" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="20" cy="20" r="1.6" fill="var(--teal)"/>
+      </svg>
+      <span>COMP<b>·</b>LENS<i> //</i></span>
+    </div>
+    <span class="lbl">Compliance Console</span>
+    <div class="spacer"></div>
+    <div class="ctl"><span class="lbl">Tenant</span><select id="tenant" class="sel"></select></div>
+    <div class="ctl"><span class="lbl">Framework</span><select id="fw" class="sel"></select></div>
+    <button class="btn" id="refresh">↻ Refresh</button>
+    <span class="chip demo" id="conn"><span class="dot"></span><span id="connTxt">demo</span></span>
+    <button class="btn" id="gear">⚙</button>
+  </header>
+
+  <!-- rail -->
+  <nav class="rail" id="rail">
+    <div class="rail-search"><input id="railSearch" placeholder="Find a tab…"></div>
+    <div class="railftr" id="rfoot">v1.3.0 · console</div>
+  </nav>
+
+  <!-- main -->
+  <main class="main" id="main"></main>
+</div>
+
+<!-- settings modal -->
+<div class="modal" id="cfgModal">
+  <div class="sheet">
+    <h3>API Connection</h3>
+    <div class="fld"><label>API Base URL <span class="dim">(blank = same origin)</span></label><input class="inp" id="cfgBase" placeholder="https://comp-lens.onrender.com"></div>
+    <div class="fld"><label>API Key <span class="dim">(X-API-Key, optional)</span></label><input class="inp" id="cfgKey" placeholder="leave blank if auth disabled"></div>
+    <div class="row-end">
+      <button class="btn" id="cfgCancel">Cancel</button>
+      <button class="btn primary" id="cfgSave">Save & Reload</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================ CONFIG + API ============================ */
+const LS='complens.console';
+function _load(){try{return JSON.parse(localStorage.getItem(LS)||'{}');}catch(e){return {};}}
+const CFG=Object.assign({base:'',key:'',tenant:'default'},_load());
+function saveCfg(){try{localStorage.setItem(LS,JSON.stringify(CFG));}catch(e){}}
+const $=s=>document.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),2200);}
+
+async function api(path){
+  const url=(CFG.base||'').replace(/\/$/,'')+path;
+  const h={'Content-Type':'application/json'}; if(CFG.key)h['X-API-Key']=CFG.key;
+  const r=await fetch(url,{headers:h}); if(!r.ok)throw new Error(path+' '+r.status); return r.json();
+}
+// fetch that never rejects — returns fallback on any error
+const soft=(p,fb)=>api(p).then(d=>({ok:true,d})).catch(()=>({ok:false,d:fb}));
+
+/* ============================ DEMO DATA ============================ */
+function demo(){
+  const CTRL=[
+    ['AC-2-7','Privileged account MFA enforcement','Access Control','high',{NIST:['AC-2(7)'],ISO27001:['A.5.15','A.8.5'],SOC2:['CC6.1'],CIS:['6.5']}],
+    ['AC-2-3','Disable dormant accounts','Access Control','medium',{NIST:['AC-2(3)'],ISO27001:['A.5.18'],SOC2:['CC6.2'],CIS:['5.3']}],
+    ['CM-3','Change control / approvals','Config Mgmt','medium',{NIST:['CM-3'],ISO27001:['A.8.32'],SOC2:['CC8.1'],CIS:['4.2']}],
+    ['SC-28','Encryption at rest','Data Protection','high',{NIST:['SC-28'],ISO27001:['A.8.24'],SOC2:['CC6.7'],CIS:['3.11']}],
+    ['SC-7','Boundary protection (no public exposure)','Network','critical',{NIST:['SC-7'],ISO27001:['A.8.20','A.8.22'],SOC2:['CC6.6'],CIS:['12.2']}],
+    ['AU-2','Audit logging enabled','Logging','medium',{NIST:['AU-2'],ISO27001:['A.8.15'],SOC2:['CC7.2'],CIS:['8.2']}],
+    ['RA-5','Vulnerability scanning','Vuln Mgmt','high',{NIST:['RA-5'],ISO27001:['A.8.8'],SOC2:['CC7.1'],CIS:['7.1']}],
+    ['SA-15-BRANCH','Protected default branch','SecDevOps','medium',{NIST:['SA-15'],ISO27001:['A.8.25'],SOC2:['CC8.1'],CIS:['16.7']}],
+    ['SA-15-SECRETS','No plaintext secrets in repo','SecDevOps','critical',{NIST:['SA-15'],ISO27001:['A.8.24'],SOC2:['CC6.1'],CIS:['16.4']}],
+    ['SC-28-HOST','Host disk encryption','Data Protection','high',{NIST:['SC-28'],ISO27001:['A.8.24'],SOC2:['CC6.7'],CIS:['3.11']}],
+    ['AI-INV','AI system inventory','AI Governance','medium',{ISO42001:['A.6.2'],NIST_AI_RMF:['GOVERN-1'],EU_AI_ACT:['Art.11']}],
+    ['AI-RISK','AI risk assessment','AI Governance','high',{ISO42001:['A.5.2'],NIST_AI_RMF:['MAP-1','MEASURE-2'],EU_AI_ACT:['Art.9']}],
+    ['AI-DATA','Training data governance','AI Governance','high',{ISO42001:['A.7.4'],NIST_AI_RMF:['MAP-2'],EU_AI_ACT:['Art.10']}],
+    ['AI-OVERSIGHT','Human oversight defined','AI Governance','critical',{ISO42001:['A.9.2'],NIST_AI_RMF:['GOVERN-3'],EU_AI_ACT:['Art.14']}],
+    ['AI-TRANSP','Model transparency / disclosure','AI Governance','medium',{ISO42001:['A.8.3'],NIST_AI_RMF:['MEASURE-2'],EU_AI_ACT:['Art.13']}],
+    ['AI-EVAL','Pre-deployment evaluation','AI Governance','high',{ISO42001:['A.6.2'],NIST_AI_RMF:['MEASURE-1'],EU_AI_ACT:['Art.15']}],
+    ['AI-LOG','AI decision logging','AI Governance','medium',{ISO42001:['A.8.4'],NIST_AI_RMF:['MANAGE-2'],EU_AI_ACT:['Art.12']}],
+    ['AI-ROBUST','Adversarial robustness testing','AI Governance','high',{ISO42001:['A.6.2'],NIST_AI_RMF:['MEASURE-2'],EU_AI_ACT:['Art.15']}],
+  ].map(c=>({control_id:c[0],title:c[1],domain:c[2],severity:c[3],frameworks:c[4]}));
+
+  const CONN=['AWS','OKTA','GITHUB','SSH','JIRA','GCP','AZURE','QUALYS','CROWDSTRIKE','GITLAB','SLACK','SERVICENOW','LEGACY','AIGOV','DEMO']
+    .map((n,i)=>({source_system:n,healthy:!(i===1||i===8)}));
+
+  const F=[]; let id=1;
+  const mk=(cid,src,asset,st,sv,lc,owner,desc)=>({finding_id:'f-'+String(id++).padStart(4,'0'),tenant_id:CFG.tenant,
+    run_id:'run-7f3a',framework:'NIST',control_id:cid,source_system:src,asset_id:asset,status:st,severity:sv,
+    lifecycle:lc,assigned_to:owner,owner:owner,description:desc,remediation:{action:'See runbook'},evidence_ids:['ev-'+id],
+    created_at:new Date(Date.now()-id*7.2e6).toISOString()});
+  F.push(mk('SC-7','AWS','aws:sg-0a91/public-ssh','fail','critical','open','cloud-team','Security group 0.0.0.0/0 → port 22'));
+  F.push(mk('SA-15-SECRETS','GITHUB','github:repo/payments','fail','critical','in_progress','appsec','AWS key committed in .env.bak'));
+  F.push(mk('AI-OVERSIGHT','AIGOV','ai:fraud-scorer-v3','fail','critical','open','ml-gov','No documented human-in-the-loop'));
+  F.push(mk('RA-5','QUALYS','host:web-prod-02','fail','high','open','infra','3 critical CVEs unpatched >30d'));
+  F.push(mk('SC-28','AWS','aws:rds/analytics','fail','high','open','data-eng','RDS instance not encrypted'));
+  F.push(mk('AC-2-7','OKTA','okta:admin-group','fail','high','in_progress','iam','2 admins without MFA'));
+  F.push(mk('AI-RISK','AIGOV','ai:resume-ranker','fail','high','open','ml-gov','Risk assessment expired'));
+  F.push(mk('CM-3','JIRA','jira:CHG-2231','fail','medium','open','change-mgmt','Emergency change lacked approval'));
+  F.push(mk('AU-2','GCP','gcp:project/data-lake','fail','medium','resolved','platform','Audit sink re-enabled'));
+  F.push(mk('AC-2-3','OKTA','okta:contractor-pool','fail','medium','risk_accepted','iam','Dormant accounts — accepted to Q3'));
+  // passing posture
+  const passSpec=[['AC-2-7','OKTA','okta:eng',9],['SC-28','AWS','aws:rds',7],['AU-2','GCP','gcp:proj',6],
+    ['SA-15-BRANCH','GITHUB','github:repo',8],['RA-5','QUALYS','host',5],['CM-3','JIRA','jira:chg',7],
+    ['AI-INV','AIGOV','ai:sys',6],['AI-TRANSP','AIGOV','ai:sys',5],['AI-LOG','AIGOV','ai:sys',4],['SC-28-HOST','SSH','host:db',6]];
+  passSpec.forEach(([cid,src,a,n])=>{for(let i=0;i<n;i++)F.push(mk(cid,src,a+'-'+i,'pass',
+    CTRL.find(c=>c.control_id===cid).severity,'resolved','auto','OK'));});
+
+  const total=F.length, passed=F.filter(f=>f.status==='pass').length, failed=F.filter(f=>f.status==='fail').length;
+  const summary={total,by_status:{pass:passed,fail:failed,error:1,not_applicable:2,pending:1},waived:2,
+    compliance_score:+(passed/(total)*100).toFixed(1),risk_weighted_score:78.4,risk_exposure:34.5,framework:'ALL'};
+
+  const trends=[]; let sc=64;
+  for(let i=29;i>=0;i--){sc+=(Math.random()*4-1.2); sc=Math.max(58,Math.min(92,sc));
+    const t=total, p=Math.round(t*sc/100);
+    trends.push({captured_at:new Date(Date.now()-i*864e5).toISOString(),score:+sc.toFixed(1),total:t,passed:p,failed:t-p});}
+  summary.compliance_score=trends[trends.length-1].score;
+
+  const drift={regressions:[{control_id:'SC-7',source_system:'AWS',asset_id:'aws:sg-0a91'},
+    {control_id:'AI-RISK',source_system:'AIGOV',asset_id:'ai:resume-ranker'}],
+    recoveries:[{control_id:'AU-2',source_system:'GCP',asset_id:'gcp:data-lake'}],regression_count:2,recovery_count:1};
+
+  const queue=F.filter(f=>f.status==='fail'&&f.lifecycle!=='risk_accepted').map(f=>({control_id:f.control_id,
+    source_system:f.source_system,asset_id:f.asset_id,severity:f.severity,
+    asset_criticality:({critical:'high',high:'high',medium:'medium',low:'low'})[f.severity]||'medium',
+    priority:+( ({critical:10,high:6,medium:3,low:1})[f.severity]*(Math.random()*.6+1.2)).toFixed(2)}))
+    .sort((a,b)=>b.priority-a.priority);
+  const remediation={open_findings:queue.length,current_risk_weighted_score:78.4,projected_after_fixing_top:91.2,top_n:10,queue:queue.slice(0,10)};
+
+  const forecast={insufficient_data:false,current_score:summary.compliance_score,slope_per_day:0.42,trend:'improving',
+    horizon_days:30,projected_score:+(summary.compliance_score+0.42*30).toFixed(1),threshold:90,days_to_threshold:Math.round((90-summary.compliance_score)/0.42),
+    at_risk_controls:[{control_id:'SC-7',source_system:'AWS',asset_id:'aws:sg-0a91'},{control_id:'AI-OVERSIGHT',source_system:'AIGOV',asset_id:'ai:fraud-scorer-v3'}],at_risk_count:2};
+
+  const inventory=[['aws:rds/analytics','database','AWS','data-eng','high'],['aws:sg-0a91','network','AWS','cloud-team','high'],
+    ['github:repo/payments','repository','GITHUB','appsec','critical'],['okta:admin-group','identity','OKTA','iam','critical'],
+    ['host:web-prod-02','host','QUALYS','infra','high'],['ai:fraud-scorer-v3','ai_system','AIGOV','ml-gov','critical'],
+    ['gcp:project/data-lake','project','GCP','platform','medium'],['jira:CHG-2231','change','JIRA','change-mgmt','low'],
+    ['ai:resume-ranker','ai_system','AIGOV','ml-gov','high'],['host:db-01','host','SSH','infra','high']]
+    .map(a=>({asset_id:a[0],asset_type:a[1],source_system:a[2],owner:a[3],criticality:a[4]}));
+
+  const waivers=[{waiver_id:'w-001',tenant_id:CFG.tenant,control_id:'AC-2-3',asset_id:'okta:contractor-pool',
+      reason:'Dormant contractor accounts retained for Q3 audit trail',approver:'ciso@acme.com',status:'active',
+      created_at:new Date(Date.now()-12*864e5).toISOString(),expires_at:new Date(Date.now()+30*864e5).toISOString()},
+    {waiver_id:'w-002',tenant_id:CFG.tenant,control_id:'SA-15-SECRETS',asset_id:'github:repo/legacy-tool',
+      reason:'Test fixture secret, non-production, scheduled for removal',approver:'appsec-lead@acme.com',status:'active',
+      created_at:new Date(Date.now()-5*864e5).toISOString(),expires_at:new Date(Date.now()+14*864e5).toISOString()},
+    {waiver_id:'w-003',tenant_id:CFG.tenant,control_id:'RA-5',asset_id:'host:lab-sandbox',
+      reason:'Isolated lab host, no production data',approver:'infra-lead@acme.com',status:'expired',
+      created_at:new Date(Date.now()-60*864e5).toISOString(),expires_at:new Date(Date.now()-2*864e5).toISOString()}];
+
+  const schedules=[{schedule_id:'s-001',tenant_id:CFG.tenant,name:'Nightly full posture sweep',interval_minutes:1440,
+      enabled:true,last_run_at:new Date(Date.now()-6*36e5).toISOString(),next_run_at:new Date(Date.now()+18*36e5).toISOString()},
+    {schedule_id:'s-002',tenant_id:CFG.tenant,name:'Hourly critical-control check',interval_minutes:60,
+      enabled:true,last_run_at:new Date(Date.now()-40*6e4).toISOString(),next_run_at:new Date(Date.now()+20*6e4).toISOString()},
+    {schedule_id:'s-003',tenant_id:CFG.tenant,name:'Weekly AI-governance review',interval_minutes:10080,
+      enabled:false,last_run_at:new Date(Date.now()-3*864e5).toISOString(),next_run_at:new Date(Date.now()+4*864e5).toISOString()}];
+
+  const frameworks=['NIST','ISO27001','SOC2','CIS','ISO42001','NIST_AI_RMF','EU_AI_ACT'];
+  return {summary,controls:CTRL,connectors:CONN,findings:F,trends,drift,remediation,forecast,inventory,waivers,schedules,frameworks,_demo:true};
+}
+
+/* ============================ DATA LOAD ============================ */
+let DATA=null;
+async function loadAll(){
+  const t=encodeURIComponent(CFG.tenant); const fw=$('#fw')?.value||'';
+  const fwq=fw?('&framework='+encodeURIComponent(fw)):'';
+  try{
+    // probe — if root fails entirely, go demo
+    await api('/health/live');
+    const [sum,ctl,con,fnd,trd,drf,rem,fcr,inv,wvr,sch,fwk]=await Promise.all([
+      soft('/summary?tenant_id='+t+fwq,{}), soft('/controls',[]), soft('/connectors',[]),
+      soft('/findings?tenant_id='+t+'&limit=500',[]), soft('/trends?tenant_id='+t,[]),
+      soft('/drift?tenant_id='+t,{regressions:[],recoveries:[],regression_count:0,recovery_count:0}),
+      soft('/remediation?tenant_id='+t+'&top=10',{queue:[]}), soft('/forecast?tenant_id='+t,{insufficient_data:true}),
+      soft('/inventory?tenant_id='+t,[]), soft('/waivers?tenant_id='+t,[]),
+      soft('/schedules?tenant_id='+t,[]), soft('/frameworks',{frameworks:[]})
+    ]);
+    DATA={summary:sum.d||{},controls:ctl.d||[],connectors:con.d||[],findings:fnd.d||[],trends:trd.d||[],
+      drift:drf.d||{},remediation:rem.d||{},forecast:fcr.d||{},inventory:inv.d||[],waivers:wvr.d||[],
+      schedules:sch.d||[],frameworks:(fwk.d&&fwk.d.frameworks)||[],_demo:false};
+    setConn('live');
+  }catch(e){
+    DATA=demo(); setConn('demo');
+  }
+  hydrateSelectors();
+  renderActive();
+}
+function setConn(mode){
+  const c=$('#conn'),tx=$('#connTxt'); c.className='chip '+mode;
+  tx.textContent=mode==='live'?'live api':mode==='down'?'offline':'demo data';
+}
+
+/* ============================ SVG CHART HELPERS ============================ */
+const sv=(c,a)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',c);for(const k in a)e.setAttribute(k,a[k]);return e;};
+function donut(seg,size=170){ // seg=[{v,color,label}]
+  const tot=seg.reduce((s,x)=>s+x.v,0)||1, r=size/2-14, cx=size/2, cy=size/2, C=2*Math.PI*r;
+  const g=sv('svg',{viewBox:`0 0 ${size} ${size}`,width:size,height:size}); let off=0;
+  g.appendChild(sv('circle',{cx,cy,r,fill:'none',stroke:'rgba(120,140,175,.12)','stroke-width':14}));
+  seg.forEach((s,i)=>{const len=s.v/tot*C;const c=sv('circle',{cx,cy,r,fill:'none',stroke:s.color,'stroke-width':14,
+    'stroke-dasharray':`${len} ${C-len}`,'stroke-dashoffset':-off,transform:`rotate(-90 ${cx} ${cy})`,'stroke-linecap':'butt'});
+    c.style.transition='stroke-dasharray .9s cubic-bezier(.2,.8,.2,1)';g.appendChild(c);off+=len;});
+  const t1=sv('text',{x:cx,y:cy-2,'text-anchor':'middle',fill:'var(--hi)','font-family':'var(--disp)','font-size':30,'font-weight':700});
+  t1.textContent=tot; const t2=sv('text',{x:cx,y:cy+16,'text-anchor':'middle',fill:'var(--dim)','font-family':'var(--mono)','font-size':9,'letter-spacing':'2'});
+  t2.textContent='ASSESSED'; g.appendChild(t1);g.appendChild(t2); return g;
+}
+function spark(points,w=720,h=170,color='var(--teal)'){
+  const g=sv('svg',{viewBox:`0 0 ${w} ${h}`,width:'100%',height:h,preserveAspectRatio:'none'});
+  if(!points.length)return g;
+  const xs=points.map((_,i)=>i),ys=points.map(p=>p.y);
+  const mnY=Math.min(...ys)-3,mxY=Math.max(...ys)+3, pad=30;
+  const X=i=>pad+i/(points.length-1||1)*(w-pad*1.2);
+  const Y=v=>h-22-(v-mnY)/((mxY-mnY)||1)*(h-44);
+  // gridlines
+  [0,.5,1].forEach(f=>{const y=22+f*(h-44);g.appendChild(sv('line',{x1:pad,y1:y,x2:w-10,y2:y,stroke:'rgba(120,140,175,.1)','stroke-width':1}));});
+  let d='',a=''; points.forEach((p,i)=>{const x=X(i),y=Y(p.y);d+=(i?'L':'M')+x+' '+y+' ';});
+  a=`M${X(0)} ${h-22} `+points.map((p,i)=>'L'+X(i)+' '+Y(p.y)).join(' ')+` L${X(points.length-1)} ${h-22} Z`;
+  const grad='grad'+Math.random().toString(36).slice(2,7);
+  const defs=sv('defs');const lg=sv('linearGradient',{id:grad,x1:0,y1:0,x2:0,y2:1});
+  lg.appendChild(sv('stop',{offset:'0%','stop-color':color,'stop-opacity':.32}));
+  lg.appendChild(sv('stop',{offset:'100%','stop-color':color,'stop-opacity':0}));defs.appendChild(lg);g.appendChild(defs);
+  g.appendChild(sv('path',{d:a,fill:`url(#${grad})`}));
+  const ln=sv('path',{d,fill:'none',stroke:color,'stroke-width':2.4,'stroke-linejoin':'round'});g.appendChild(ln);
+  const last=points[points.length-1];g.appendChild(sv('circle',{cx:X(points.length-1),cy:Y(last.y),r:4,fill:color}));
+  return g;
+}
+function gauge(val,size=150,color='var(--teal)'){
+  const r=size/2-12,cx=size/2,cy=size/2,C=Math.PI*r,frac=Math.max(0,Math.min(100,val))/100;
+  const g=sv('svg',{viewBox:`0 0 ${size} ${size/1.7}`,width:size,height:size/1.7});
+  const path=`M12 ${cy} A ${r} ${r} 0 0 1 ${size-12} ${cy}`;
+  g.appendChild(sv('path',{d:path,fill:'none',stroke:'rgba(120,140,175,.14)','stroke-width':12,'stroke-linecap':'round'}));
+  const fg=sv('path',{d:path,fill:'none',stroke:color,'stroke-width':12,'stroke-linecap':'round',
+    'stroke-dasharray':`${frac*C} ${C}`});fg.style.transition='stroke-dasharray 1s cubic-bezier(.2,.8,.2,1)';g.appendChild(fg);
+  const t=sv('text',{x:cx,y:cy-4,'text-anchor':'middle',fill:color,'font-family':'var(--disp)','font-size':26,'font-weight':700});
+  t.textContent=val+'%';g.appendChild(t);return g;
+}
+
+/* ============================ TABS ============================ */
+const ICON={
+  overview:'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
+  findings:'M3 5h18M3 12h18M3 19h12',
+  controls:'M4 6h16M4 12h16M4 18h10M20 16l-3 3-1.5-1.5',
+  connectors:'M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4M19 5l-4 4m-6 6l-4 4',
+  remediation:'M13 2L3 14h7l-1 8 10-12h-7z',
+  trends:'M3 17l5-6 4 3 8-9M3 21h18',
+  inventory:'M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4 9-4V7',
+  waivers:'M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z',
+  schedules:'M12 6v6l4 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  catalog:'M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z',
+  resolver:'M22 3H2l8 9.46V19l4 2v-8.54L22 3',
+  simulator:'M9 3H5a2 2 0 00-2 2v4h6V3zm0 0h6M9 3v8m6-8h4a2 2 0 012 2v4h-6V3zm0 8v8m-6 0H5a2 2 0 01-2-2v-4h6v6zm0 0h6m0 0h4a2 2 0 002-2v-4h-6v6z',
+  evmap:'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14',
+  graph:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z'
+};
+const TABS=[
+  ['overview','Home'],['findings','Findings'],
+  ['controls','Auto Checks'],['catalog','Catalog'],
+  ['waivers','Waivers'],
+  ['resolver','Resolver'],['simulator','Simulator'],['remediation','Remediation'],
+  ['connectors','Connectors'],['inventory','Inventory'],['schedules','Schedules'],['trends','Trends'],
+  ['graph','3D Graph'],
+  ['evmap','Evidence Map'],
+];
+const EXTERNAL={evmap:'/evidence-map'};
+const GROUPS=[
+  ['MONITOR',    ['overview','findings']],
+  ['GOVERN',     ['controls','catalog','waivers']],
+  ['RESOLVE',    ['resolver','simulator','remediation']],
+  ['OPERATE',    ['connectors','inventory','schedules','trends']],
+  ['EVIDENCE',   ['graph','evmap']],
+];
+let ACTIVE='overview';
+function buildRail(){
+  const rail=$('#rail');
+  rail.querySelectorAll('.tab,.nav-sect,.rail-ext').forEach(n=>n.remove());
+  const foot=$('#rfoot');
+  GROUPS.forEach(([label,ids])=>{
+    const h=el('div','nav-sect');h.textContent=label;rail.insertBefore(h,foot);
+    ids.forEach(id=>{
+      const tab=TABS.find(t=>t[0]===id);if(!tab)return;
+      if(EXTERNAL[id]){
+        const e=el('div','rail-ext');
+        e.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON[id]}"/></svg><span>${tab[1]}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:11px;opacity:.35;margin-left:auto"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>`;
+        e.onclick=()=>window.open(EXTERNAL[id],'_blank');
+        rail.insertBefore(e,foot);
+      } else {
+        const t=el('div','tab'+(id===ACTIVE?' on':''));
+        t.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON[id]}"/></svg><span>${tab[1]}</span><span class="ct" data-ct="${id}"></span>`;
+        t.onclick=()=>{ACTIVE=id;buildRail();renderActive();};
+        rail.insertBefore(t,foot);
+      }
+    });
+  });
+  // wire search filter
+  const srch=document.getElementById('railSearch');
+  if(srch&&!srch._wired){srch._wired=true;srch.addEventListener('input',function(){
+    const q=this.value.toLowerCase();
+    rail.querySelectorAll('.tab,.rail-ext').forEach(t=>{
+      const lbl=(t.querySelector('span')||{}).textContent||'';
+      t.style.display=!q||lbl.toLowerCase().includes(q)?'':'none';
+    });
+    rail.querySelectorAll('.nav-sect').forEach(h=>{
+      let nx=h.nextElementSibling,vis=false;
+      while(nx&&!nx.classList.contains('nav-sect')&&nx.id!=='rfoot'){
+        if(nx.style.display!=='none')vis=true; nx=nx.nextElementSibling;
+      }
+      h.style.display=vis||!q?'':'none';
+    });
+  });}
+}
+function setCount(id,n){const e=document.querySelector(`[data-ct="${id}"]`);if(e)e.textContent=n??'';}
+
+/* ============================ RENDERERS ============================ */
+const main=()=>$('#main');
+function view(title,sub){const v=el('section','view on');v.appendChild(el('div','vhead',`<h1>${title}</h1><p>${sub||''}</p>`));return v;}
+const cap=s=>(s||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+const stBadge=s=>`<span class="bdg st-${s}">${cap(s)}</span>`;
+const svBadge=s=>`<span class="bdg sv-${s}">${cap(s)}</span>`;
+const lcBadge=s=>`<span class="mono lc-${s}">${cap(s)}</span>`;
+const ago=iso=>{if(!iso)return '—';const d=(Date.now()-new Date(iso))/1000;
+  if(d<3600)return Math.round(d/60)+'m ago';if(d<864e2)return Math.round(d/3600)+'h ago';return Math.round(d/864e2)+'d ago';};
+const ahead=iso=>{if(!iso)return '—';const d=(new Date(iso)-Date.now())/1000;if(d<0)return 'overdue';
+  if(d<3600)return 'in '+Math.round(d/60)+'m';if(d<864e2)return 'in '+Math.round(d/3600)+'h';return 'in '+Math.round(d/864e2)+'d';};
+
+function renderActive(){
+  if(!DATA)return; const m=main(); m.innerHTML='';
+  // counts
+  setCount('findings',DATA.findings.length); setCount('controls',DATA.controls.length);
+  setCount('connectors',DATA.connectors.length); setCount('inventory',DATA.inventory.length);
+  setCount('waivers',DATA.waivers.length); setCount('schedules',DATA.schedules.length);
+  setCount('remediation',(DATA.remediation.queue||[]).length);
+  ({overview:rOverview,findings:rFindings,controls:rControls,connectors:rConnectors,remediation:rRemediation,
+    trends:rTrends,inventory:rInventory,waivers:rWaivers,schedules:rSchedules,catalog:rCatalog,resolver:rResolver,simulator:rSimulator,graph:rGraph})[ACTIVE]();
+}
+
+function rOverview(){
+  const m=main(),v=view('Home','Your compliance posture, what needs attention, and what to do next');
+  const s=DATA.summary,bs=s.by_status||{}; const f=DATA.findings;
+  const open=f.filter(x=>x.lifecycle==='open').length;
+  const kpis=[
+    ['Compliance Score',(s.compliance_score??'—')+(s.compliance_score!=null?'%':''),'pass→fail ratio','var(--teal)'],
+    ['Risk-Weighted',(s.risk_weighted_score??'—')+(s.risk_weighted_score!=null?'%':''),'severity-adjusted','var(--violet)'],
+    ['Controls Assessed',s.total??f.length,'across frameworks','var(--info)'],
+    ['Open Findings',open||f.filter(x=>x.status==='fail').length,'need attention','var(--fail)'],
+    ['Waived',s.waived??DATA.waivers.filter(w=>w.status==='active').length,'active exceptions','var(--warn)'],
+    ['Risk Exposure',s.risk_exposure??'—','unwaived weight','var(--crit)'],
+  ];
+  const kp=el('div','kpis'); kpis.forEach(k=>{const c=el('div','kpi');c.style.setProperty('--accent',k[3]);
+    c.innerHTML=`<div class="k">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div>`;kp.appendChild(c);});
+  v.appendChild(kp);
+
+  // ===== navigation helper =====
+  const goTab=(id)=>{if(EXTERNAL[id]){window.open(EXTERNAL[id],'_blank');return;}ACTIVE=id;buildRail();renderActive();};
+
+  // ===== GUIDED WORKFLOW STEPPER =====
+  const conns=DATA.connectors||[];
+  const healthy=conns.filter(c=>c.status==='healthy'||c.status==='ok'||c.connected).length;
+  const assessed=DATA.controls.filter(c=>c.status&&c.status!=='pending').length;
+  const failing=DATA.controls.filter(c=>c.status==='fail').length;
+  const steps=[
+    {id:'connect',label:'Connect',tab:'connectors',n:'1',done:healthy>0,
+     stat:conns.length?`${healthy}/${conns.length} healthy`:'no sources yet',cta:'Manage sources'},
+    {id:'assess',label:'Assess',tab:'controls',n:'2',done:assessed>0,
+     stat:assessed?`${assessed} checked · ${failing} failing`:'not run yet',cta:'View auto checks'},
+    {id:'resolve',label:'Resolve',tab:'resolver',n:'3',done:false,active:assessed>0,
+     stat:'8 planes ready',cta:'Open resolver'},
+    {id:'attest',label:'Attest',tab:'catalog',n:'4',done:false,
+     stat:'sign off gaps',cta:'Open catalog'},
+    {id:'evidence',label:'Evidence',tab:'evmap',n:'5',done:false,
+     stat:'attach proof',cta:'Open evidence map'},
+  ];
+  const wfCard=el('div','card');wfCard.style.marginBottom='16px';
+  wfCard.innerHTML='<h3>Getting to compliance</h3><div class="sub">Five steps from connecting data to defensible evidence — your progress and what to do next</div>';
+  const wf=el('div','workflow');
+  steps.forEach(st=>{
+    const stp=el('div','wf-step'+(st.done?' done':st.active?' active':''));
+    stp.innerHTML=`<div class="wf-ic">${st.done?'✓':st.n}</div><div class="wf-label">${st.label}</div><div class="wf-stat">${st.stat}</div>`;
+    const b=el('button','wf-go');b.textContent=st.cta+' →';b.onclick=()=>goTab(st.tab);
+    stp.appendChild(b);wf.appendChild(stp);});
+  wfCard.appendChild(wf);v.appendChild(wfCard);
+
+  // enrich attest/evidence/resolve stats live
+  if(!DATA._demo){
+    Promise.allSettled([
+      api('/resolve/decisions?tenant_id='+CFG.tenant).catch(()=>[]),
+      api('/evidence/documents?tenant_id='+CFG.tenant).catch(()=>[]),
+    ]).then(([rd,ev])=>{
+      const decs=rd.value||[],docs=ev.value||[];
+      const stp=wf.children;
+      if(decs.length){stp[2].classList.add('done');stp[2].querySelector('.wf-stat').textContent=decs.length+' decisions';}
+      if(docs.length){stp[4].classList.add('done');stp[4].querySelector('.wf-stat').textContent=docs.length+' document(s)';}
+    });
+  }
+
+  // ===== TOP GAPS + QUICK ACTIONS =====
+  const g0=el('div','grid g-2');g0.style.marginBottom='16px';
+  // gaps
+  const gapCard=el('div','card');gapCard.innerHTML='<h3>Top gaps</h3><div class="sub">controls that need attention first</div>';
+  const failChecks=DATA.controls.filter(c=>c.status==='fail').map(c=>({id:c.control_id||c.id,title:c.title,sev:c.severity||'high',kind:'check'}));
+  const sevFindings=(DATA.findings||[]).filter(x=>x.status==='fail').map(x=>({id:x.control_id,title:x.title||x.control_id,sev:x.severity||'medium',kind:'finding'}));
+  const seen=new Set();const gaps=[...failChecks,...sevFindings].filter(g=>{if(seen.has(g.id))return false;seen.add(g.id);return true;});
+  const sevW={critical:0,high:1,medium:2,low:3};gaps.sort((a,b)=>(sevW[a.sev]??4)-(sevW[b.sev]??4));
+  if(gaps.length){gaps.slice(0,6).forEach(g=>{
+    const r=el('div','gap-item');
+    r.innerHTML=`<div style="min-width:0"><span class="mono" style="color:var(--hi)">${g.id}</span> <span class="bdg st-fail" style="font-size:9px">${g.sev}</span><div class="dim" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.title||''}</div></div>`;
+    const fx=el('button','gap-fix');fx.textContent='Investigate →';fx.onclick=()=>goTab('findings');
+    r.appendChild(fx);gapCard.appendChild(r);});
+  } else {gapCard.appendChild(el('div','empty dim','Nothing failing right now — clean posture.'));}
+  g0.appendChild(gapCard);
+  // quick actions
+  const qaCard=el('div','card');qaCard.innerHTML='<h3>Quick actions</h3><div class="sub">jump straight to a task</div>';
+  const qg=el('div','qa-grid');
+  [['⚡','Resolve a control','pick the best proof & run it','resolver'],
+   ['📎','Add evidence','attach a doc or link','evmap'],
+   ['◎','Review findings','triage what failed','findings'],
+   ['✓','Attest a control','sign off manually','catalog']].forEach(([ic,t,d,tab])=>{
+    const b=el('button','qa-btn');b.innerHTML=`<span class="qa-ic">${ic}</span><span><div class="qa-t">${t}</div><div class="qa-d">${d}</div></span>`;
+    b.onclick=()=>goTab(tab);qg.appendChild(b);});
+  qaCard.appendChild(qg);g0.appendChild(qaCard);
+  v.appendChild(g0);
+
+
+  // row: status donut + trend
+  const g1=el('div','grid g-2');
+  const cD=el('div','card');cD.innerHTML='<h3>Status Distribution</h3><div class="sub">current posture by control state</div>';
+  const wrap=el('div');wrap.style.cssText='display:flex;gap:22px;align-items:center';
+  const seg=[['pass','var(--pass)'],['fail','var(--fail)'],['error','var(--warn)'],['pending','var(--info)'],['not_applicable','var(--dim)']]
+    .map(([k,c])=>({v:bs[k]||0,color:c,label:k})).filter(x=>x.v>0);
+  wrap.appendChild(donut(seg.length?seg:[{v:1,color:'var(--dim)'}]));
+  const leg=el('div');leg.style.flex='1';
+  seg.forEach(x=>{const r=el('div','dl',`<span class="dk"><span class="bdg st-${x.label}">${cap(x.label)}</span></span><span class="dv">${x.v}</span>`);leg.appendChild(r);});
+  wrap.appendChild(leg);cD.appendChild(wrap);g1.appendChild(cD);
+
+  const cT=el('div','card');cT.innerHTML='<h3>Compliance Trend</h3><div class="sub">score over time</div>';
+  cT.appendChild(spark(DATA.trends.map(t=>({y:t.score})),720,180));
+  const tr=DATA.trends;if(tr.length>1){const delta=(tr[tr.length-1].score-tr[0].score).toFixed(1);
+    cT.appendChild(el('div','s',`<span class="mono" style="color:${delta>=0?'var(--pass)':'var(--fail)'}">${delta>=0?'▲':'▼'} ${Math.abs(delta)} pts</span> <span class="dim mono">over ${tr.length} snapshots</span>`));}
+  g1.appendChild(cT);v.appendChild(g1);
+
+  // row: framework bars + drift
+  const g2=el('div','grid g-2');g2.style.marginTop='16px';
+  const cF=el('div','card');cF.innerHTML='<h3>Framework Coverage</h3><div class="sub">controls mapped per framework</div>';
+  const fwCount={}; DATA.controls.forEach(c=>Object.keys(c.frameworks||{}).forEach(fw=>fwCount[fw]=(fwCount[fw]||0)+1));
+  const maxFw=Math.max(1,...Object.values(fwCount));
+  Object.entries(fwCount).sort((a,b)=>b[1]-a[1]).forEach(([fw,n],i)=>{
+    const row=el('div','bar-row',`<span class="nm">${fw}</span><div class="bar-track"><div class="bar-fill" style="background:linear-gradient(90deg,var(--teal),var(--violet))"></div></div><span class="pc mono">${n}</span>`);
+    cF.appendChild(row);setTimeout(()=>row.querySelector('.bar-fill').style.width=(n/maxFw*100)+'%',60+i*55);});
+  g2.appendChild(cF);
+
+  const cDr=el('div','card');cDr.innerHTML='<h3>Drift <span class="sub" style="margin:0">since last run</span></h3>';
+  const dr=DATA.drift;
+  cDr.appendChild(el('div','dl',`<span class="dk">↘ Regressions (pass→fail)</span><span class="dv" style="color:var(--fail)">${dr.regression_count??0}</span>`));
+  (dr.regressions||[]).slice(0,3).forEach(r=>cDr.appendChild(el('div','dl',`<span class="dk mono dim">${r.control_id} · ${r.source_system}</span><span class="dv dim mono">${(r.asset_id||'').slice(0,22)}</span>`)));
+  cDr.appendChild(el('div','dl',`<span class="dk">↗ Recoveries (fail→pass)</span><span class="dv" style="color:var(--pass)">${dr.recovery_count??0}</span>`));
+  (dr.recoveries||[]).slice(0,2).forEach(r=>cDr.appendChild(el('div','dl',`<span class="dk mono dim">${r.control_id} · ${r.source_system}</span><span class="dv dim mono">${(r.asset_id||'').slice(0,22)}</span>`)));
+  g2.appendChild(cDr);v.appendChild(g2);
+  m.appendChild(v);
+}
+
+/* generic sortable table builder */
+function sortableTable(rows,cols,opts={}){
+  // cols: [{k,label,render?,cls?,sort?}]
+  let sortK=opts.sort||cols[0].k, dir=opts.dir||1;
+  const wrap=el('div');const tbl=el('table');const thead=el('thead');const tr=el('tr');
+  cols.forEach(c=>{const th=el('th',c.cls);th.innerHTML=c.label+' <span class="ar"></span>';
+    th.onclick=()=>{if(sortK===c.k)dir=-dir;else{sortK=c.k;dir=1;}draw();};tr.appendChild(th);});
+  thead.appendChild(tr);tbl.appendChild(thead);const tb=el('tbody');tbl.appendChild(tb);wrap.appendChild(tbl);
+  function draw(){
+    tb.innerHTML='';
+    const sc=cols.find(c=>c.k===sortK);
+    const sorted=[...rows].sort((a,b)=>{let x=(sc.sortVal?sc.sortVal(a):a[sortK]),y=(sc.sortVal?sc.sortVal(b):b[sortK]);
+      x=x==null?'':x;y=y==null?'':y;return (x>y?1:x<y?-1:0)*dir;});
+    tr.querySelectorAll('th .ar').forEach((a,i)=>a.textContent=cols[i].k===sortK?(dir>0?'▲':'▼'):'');
+    if(!sorted.length){const r=el('tr');r.innerHTML=`<td colspan="${cols.length}"><div class="empty">No records.</div></td>`;tb.appendChild(r);return;}
+    sorted.forEach(row=>{const r=el('tr');cols.forEach(c=>{const td=el('td',c.cls);
+      td.innerHTML=c.render?c.render(row):(row[c.k]??'—');r.appendChild(td);});
+      if(opts.onRow)r.onclick=()=>opts.onRow(row);if(opts.onRow)r.style.cursor='pointer';tb.appendChild(r);});
+  }
+  draw();wrap._draw=draw;wrap._sort=k=>{sortK=k;draw();};return wrap;
+}
+
+function rFindings(){
+  const m=main(),v=view('Findings','Every assessed control instance and its lifecycle state');
+  const card=el('div','card');
+  const tools=el('div','tools');
+  tools.innerHTML=`<input class="inp" id="ff" placeholder="Filter by control, asset, owner…">
+    <div class="seg" id="fStatus"><button class="on" data-v="">All</button><button data-v="fail">Fail</button><button data-v="pass">Pass</button><button data-v="error">Error</button></div>
+    <div class="seg" id="fSev"><button class="on" data-v="">Any sev</button><button data-v="critical">Critical</button><button data-v="high">High</button><button data-v="medium">Medium</button></div>`;
+  card.appendChild(tools);
+  let q='',st='',sv2='';
+  const cols=[
+    {k:'control_id',label:'Control',cls:'mono',render:r=>`<b>${r.control_id}</b>`},
+    {k:'source_system',label:'Source',cls:'mono',render:r=>`<span class="tag">${r.source_system}</span>`},
+    {k:'asset_id',label:'Asset',cls:'mono muted',render:r=>(r.asset_id||'—')},
+    {k:'status',label:'Status',render:r=>stBadge(r.status)},
+    {k:'severity',label:'Severity',render:r=>svBadge(r.severity),sortVal:r=>({critical:0,high:1,medium:2,low:3,info:4})[r.severity]},
+    {k:'lifecycle',label:'Lifecycle',render:r=>lcBadge(r.lifecycle)},
+    {k:'owner',label:'Owner',cls:'mono muted'},
+    {k:'created_at',label:'Seen',cls:'mono dim',render:r=>ago(r.created_at),sortVal:r=>r.created_at||''},
+  ];
+  const host=el('div');card.appendChild(host);
+  function rebuild(){
+    const rows=DATA.findings.filter(f=>{
+      if(st&&f.status!==st)return false; if(sv2&&f.severity!==sv2)return false;
+      if(q){const s=(f.control_id+' '+f.asset_id+' '+(f.owner||'')+' '+f.source_system).toLowerCase();if(!s.includes(q))return false;}
+      return true;});
+    host.innerHTML='';host.appendChild(sortableTable(rows,cols,{sort:'severity',onRow:openFinding}));
+    card.querySelector('#cnt')&&(card.querySelector('#cnt').textContent=rows.length);
+  }
+  tools.querySelector('#ff').oninput=e=>{q=e.target.value.toLowerCase();rebuild();};
+  tools.querySelectorAll('#fStatus button').forEach(b=>b.onclick=()=>{tools.querySelectorAll('#fStatus button').forEach(x=>x.classList.remove('on'));b.classList.add('on');st=b.dataset.v;rebuild();});
+  tools.querySelectorAll('#fSev button').forEach(b=>b.onclick=()=>{tools.querySelectorAll('#fSev button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sv2=b.dataset.v;rebuild();});
+  rebuild();v.appendChild(card);m.appendChild(v);
+}
+function openFinding(f){
+  const md=$('#cfgModal');// reuse modal styling via a fresh sheet
+  let host=$('#detailModal');
+  if(!host){host=el('div','modal');host.id='detailModal';document.body.appendChild(host);
+    host.onclick=e=>{if(e.target===host)host.classList.remove('on');};}
+  host.innerHTML=`<div class="sheet"><h3>${f.control_id} <span class="bdg st-${f.status}" style="vertical-align:middle">${cap(f.status)}</span></h3>
+    <div class="dl"><span class="dk">Severity</span><span class="dv">${svBadge(f.severity)}</span></div>
+    <div class="dl"><span class="dk">Lifecycle</span><span class="dv">${lcBadge(f.lifecycle)}</span></div>
+    <div class="dl"><span class="dk">Source</span><span class="dv mono">${f.source_system}</span></div>
+    <div class="dl"><span class="dk">Asset</span><span class="dv mono">${f.asset_id||'—'}</span></div>
+    <div class="dl"><span class="dk">Owner</span><span class="dv mono">${f.owner||'—'}</span></div>
+    <div class="dl"><span class="dk">Framework</span><span class="dv mono">${f.framework||'—'}</span></div>
+    <div class="dl"><span class="dk">Finding ID</span><span class="dv mono dim">${f.finding_id}</span></div>
+    <div class="dl"><span class="dk">Detected</span><span class="dv mono dim">${new Date(f.created_at).toLocaleString()}</span></div>
+    <p class="muted" style="margin:14px 0 4px">${f.description||''}</p>
+    <div class="row-end"><button class="btn" onclick="document.getElementById('detailModal').classList.remove('on')">Close</button></div></div>`;
+  host.classList.add('on');
+}
+
+function rControls(){
+  const m=main(),v=view('Auto Checks',DATA.controls.length+' automated checks running via live connectors');
+  const _cb=el('div','callout');
+  _cb.innerHTML='These '+DATA.controls.length+' checks run automatically via connectors and return live pass/fail status. For the full 1,289-control catalog with attestation and evidence tracking, go to <a id="go2cat">Catalog →</a>';
+  _cb.querySelector('#go2cat').onclick=()=>{ACTIVE='catalog';buildRail();renderActive();};
+  v.appendChild(_cb);
+  // status summary strip
+  const byStat=DATA.controls.reduce((a,c)=>{const s=(c.status||'pending');a[s]=(a[s]||0)+1;return a;},{});
+  const strip=el('div');strip.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px';
+  [['pass','Passing','var(--pass)'],['fail','Failing','var(--fail)'],['error','Errored','var(--warn)'],['not_applicable','N/A','var(--dim)'],['pending','Pending','var(--mid)']].forEach(([k,lbl,col])=>{
+    if(!byStat[k])return;
+    const chip=el('div');chip.style.cssText=`display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-left:3px solid ${col};border-radius:8px;padding:8px 13px`;
+    chip.innerHTML=`<span style="font-family:var(--mono);font-size:18px;font-weight:600;color:${col}">${byStat[k]}</span><span style="font-size:12px;color:var(--mid)">${lbl}</span>`;
+    strip.appendChild(chip);});
+  v.appendChild(strip);
+  const card=el('div','card');
+  const tools=el('div','tools');tools.innerHTML=`<input class="inp" id="cf" placeholder="Filter controls…">`;
+  card.appendChild(tools);
+  const cols=[
+    {k:'control_id',label:'ID',cls:'mono',render:r=>`<b>${r.control_id}</b>`},
+    {k:'title',label:'Title'},
+    {k:'domain',label:'Domain',render:r=>`<span class="tag">${r.domain}</span>`},
+    {k:'severity',label:'Severity',render:r=>svBadge(r.severity),sortVal:r=>({critical:0,high:1,medium:2,low:3,info:4})[r.severity]},
+    {k:'frameworks',label:'Framework Mappings',render:r=>Object.entries(r.frameworks||{}).map(([f,codes])=>`<span class="tag" title="${(codes||[]).join(', ')}">${f}</span>`).join('')},
+  ];
+  const host=el('div');card.appendChild(host);let q='';
+  function rebuild(){const rows=DATA.controls.filter(c=>!q||(c.control_id+' '+c.title+' '+c.domain).toLowerCase().includes(q));
+    host.innerHTML='';host.appendChild(sortableTable(rows,cols,{sort:'control_id'}));}
+  tools.querySelector('#cf').oninput=e=>{q=e.target.value.toLowerCase();rebuild();};
+  rebuild();v.appendChild(card);m.appendChild(v);
+}
+
+const DEMO_MKT=[
+ {key:'AWS_SECURITY_HUB',name:'AWS Security Hub',category:'cloud',vendor:'AWS',auth_method:'iam_keys',mode:'demo',evidence_count:4,controls_covered:31,last_sync_at:null,credentials:{missing:['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION']}},
+ {key:'OKTA',name:'Okta',category:'identity',vendor:'Okta',auth_method:'api_token',mode:'connected',evidence_count:4,controls_covered:36,last_sync_at:new Date(Date.now()-36e5).toISOString(),credentials:{missing:[]}},
+ {key:'ENTRA_ID',name:'Microsoft Entra ID',category:'identity',vendor:'Microsoft',auth_method:'oauth_client_credentials',mode:'demo',evidence_count:4,controls_covered:38,last_sync_at:null,credentials:{missing:['AZURE_TENANT_ID','AZURE_CLIENT_ID','AZURE_CLIENT_SECRET']}},
+ {key:'GITHUB',name:'GitHub',category:'devops',vendor:'GitHub',auth_method:'pat_token',mode:'connected',evidence_count:4,controls_covered:29,last_sync_at:new Date(Date.now()-72e5).toISOString(),credentials:{missing:[]}},
+ {key:'JIRA',name:'Jira',category:'itsm',vendor:'Atlassian',auth_method:'api_token',mode:'demo',evidence_count:2,controls_covered:14,last_sync_at:null,credentials:{missing:['JIRA_URL','JIRA_EMAIL','JIRA_API_TOKEN']}},
+ {key:'SERVICENOW',name:'ServiceNow',category:'itsm',vendor:'ServiceNow',auth_method:'basic_auth',mode:'not_configured',evidence_count:0,controls_covered:18,last_sync_at:null,credentials:{missing:['SERVICENOW_INSTANCE','SERVICENOW_USER','SERVICENOW_PASSWORD']}},
+ {key:'CROWDSTRIKE',name:'CrowdStrike Falcon',category:'security',vendor:'CrowdStrike',auth_method:'oauth_client_credentials',mode:'demo',evidence_count:3,controls_covered:21,last_sync_at:null,credentials:{missing:['CROWDSTRIKE_CLIENT_ID','CROWDSTRIKE_CLIENT_SECRET']}},
+ {key:'ONETRUST',name:'OneTrust',category:'grc',vendor:'OneTrust',auth_method:'oauth_client_credentials',mode:'demo',evidence_count:3,controls_covered:16,last_sync_at:null,credentials:{missing:['ONETRUST_HOSTNAME','ONETRUST_CLIENT_ID','ONETRUST_CLIENT_SECRET']}},
+ {key:'SPLUNK',name:'Splunk',category:'security',vendor:'Splunk',auth_method:'api_token',mode:'not_configured',evidence_count:0,controls_covered:15,last_sync_at:null,credentials:{missing:['SPLUNK_URL','SPLUNK_TOKEN']}},
+ {key:'SSH',name:'SSH Linux',category:'endpoint',vendor:'Linux',auth_method:'ssh_key',mode:'error',evidence_count:0,controls_covered:13,last_sync_at:null,credentials:{missing:[]}},
+];
+const MKT={cat:'all',data:null,demoOnly:false};
+function rConnectors(){
+  const m=main(),v=view('Connectors','Marketplace — evidence sources across cloud, identity, DevOps, ITSM, security, GRC, SaaS and endpoints');
+  const host=el('div');v.appendChild(host);m.appendChild(v);
+  host.innerHTML='<div class="empty">Loading connector catalog…</div>';
+  (async()=>{
+    let rows;
+    if(DATA._demo){rows=DEMO_MKT;}
+    else{try{rows=await api('/connectors/status?tenant_id='+encodeURIComponent(CFG.tenant||'default'));}
+         catch(e){rows=DEMO_MKT;}}
+    MKT.data=rows;renderMkt(host);
+  })();
+}
+function renderMkt(host){
+  const rows=MKT.data||[];
+  host.innerHTML='';
+  const by={connected:0,demo:0,not_configured:0,error:0};
+  rows.forEach(r=>{by[r.mode]=(by[r.mode]||0)+1;});
+  const kp=el('div','kpis');kp.style.gridTemplateColumns='repeat(4,1fr)';
+  [['Connected',by.connected,'live credentials','var(--pass)'],['Demo',by.demo,'synthetic evidence','var(--warn)'],
+   ['Not configured',by.not_configured,'set env vars','var(--mid)'],['Error',by.error||0,'check credentials','var(--fail)']]
+   .forEach(k=>{const c=el('div','kpi');c.style.setProperty('--accent',k[3]);
+     c.innerHTML=`<div class="k">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div>`;kp.appendChild(c);});
+  host.appendChild(kp);
+  const card=el('div','card');
+  card.innerHTML='<h3>Marketplace</h3><div class="sub">'+rows.length+' connectors · test or sync each; demo works with zero credentials</div>';
+  const cats=['all','cloud','identity','devops','itsm','security','grc','saas','endpoint'];
+  const fl=el('div','mkt-filters');
+  cats.forEach(c=>{const b=el('button','seg'+(MKT.cat===c?' on':''));b.textContent=c==='all'?'All':c.toUpperCase();
+    b.onclick=()=>{MKT.cat=c;renderMkt(host);};fl.appendChild(b);});
+  const tg=el('button','seg'+(MKT.demoOnly?' on':''));tg.textContent='⚡ Demo data only';
+  tg.title='Show only connectors currently producing demo evidence';
+  tg.onclick=()=>{MKT.demoOnly=!MKT.demoOnly;renderMkt(host);};fl.appendChild(tg);
+  card.appendChild(fl);
+  const grid=el('div','mkt-grid');
+  rows.filter(r=>(MKT.cat==='all'||r.category===MKT.cat)&&(!MKT.demoOnly||r.mode==='demo')).forEach(r=>{
+    const pill={connected:'Connected',demo:'Demo',not_configured:'Not connected',error:'Error'}[r.mode]||r.mode;
+    const sync=r.last_sync_at?new Date(r.last_sync_at).toLocaleString():'never';
+    const cardEl=el('div','mkt-card');
+    cardEl.innerHTML=`<div class="mkt-head"><div><div class="mkt-name">${r.name}</div>
+        <div class="mkt-cat">${r.category} · ${r.auth_method.replace(/_/g,' ')}</div></div>
+        <span class="mkt-pill ${r.mode}">${pill}</span></div>
+      <div class="mkt-meta"><span>⛁ ${r.evidence_count||0} evidence</span><span>⛨ ${r.controls_covered||0} controls</span><span>↻ ${sync}</span></div>
+      ${(r.credentials&&r.credentials.missing&&r.credentials.missing.length)?`<div class="mkt-msg dim">needs: ${r.credentials.missing.slice(0,3).join(', ')}${r.credentials.missing.length>3?'…':''}</div>`:'<div class="mkt-msg"></div>'}`;
+    const acts=el('div','mkt-actions');
+    const tb=el('button','btn');tb.textContent='Test';
+    const sb=el('button','btn primary');sb.textContent='Sync';
+    const msg=cardEl.querySelector('.mkt-msg');
+    tb.onclick=async()=>{tb.disabled=true;msg.textContent='testing…';
+      if(DATA._demo){await new Promise(x=>setTimeout(x,300));msg.textContent='✓ demo mode OK';tb.disabled=false;return;}
+      try{const j=await _mktPost('/connectors/'+r.key+'/test');msg.textContent=(j.ok?'✓ ':'✗ ')+j.detail;}
+      catch(e){msg.textContent='✗ '+e.message;}tb.disabled=false;};
+    sb.onclick=async()=>{sb.disabled=true;msg.textContent='syncing…';
+      if(DATA._demo){await new Promise(x=>setTimeout(x,400));r.evidence_count=r.evidence_count||3;r.last_sync_at=new Date().toISOString();if(r.mode==='not_configured')r.mode='demo';msg.textContent='✓ demo evidence synced';renderMkt(host);toast('Synced '+r.name+' (demo)');return;}
+      try{const j=await _mktPost('/connectors/'+r.key+'/sync',{tenant_id:CFG.tenant||'default'});
+        msg.textContent='✓ '+j.evidence_count+' items ('+j.mode+')';toast('Synced '+r.name);
+        const st=await api('/connectors/status?tenant_id='+encodeURIComponent(CFG.tenant||'default'));MKT.data=st;renderMkt(host);}
+      catch(e){msg.textContent='✗ '+e.message;sb.disabled=false;}};
+    acts.appendChild(tb);acts.appendChild(sb);cardEl.appendChild(acts);
+    grid.appendChild(cardEl);
+  });
+  card.appendChild(grid);host.appendChild(card);
+}
+async function _mktPost(path,body){
+  const url=(CFG.base||'').replace(/\/$/,'')+path;
+  const h={'Content-Type':'application/json'};if(CFG.key)h['X-API-Key']=CFG.key;
+  const r=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body||{})});
+  if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+}
+
+function rRemediation(){
+  const m=main(),v=view('Remediation Queue','Risk-prioritized backlog with what-if projection');
+  const r=DATA.remediation;
+  const g=el('div','grid g-3');
+  const c1=el('div','card');c1.innerHTML='<h3>Current Risk-Weighted</h3><div class="sub">unwaived exposure</div>';
+  c1.appendChild(gauge(r.current_risk_weighted_score??DATA.summary.risk_weighted_score??0,170,'var(--warn)'));g.appendChild(c1);
+  const c2=el('div','card');c2.innerHTML='<h3>After Fixing Top '+(r.top_n||10)+'</h3><div class="sub">projected score</div>';
+  c2.appendChild(gauge(r.projected_after_fixing_top??0,170,'var(--pass)'));g.appendChild(c2);
+  const c3=el('div','card');c3.innerHTML='<h3>Backlog</h3><div class="sub">open prioritized items</div>';
+  c3.innerHTML+=`<div class="kpi" style="background:none;border:0;padding:0"><div class="v" style="color:var(--fail)">${r.open_findings??(r.queue||[]).length}</div><div class="s">items in queue</div></div>`;
+  const lift=((r.projected_after_fixing_top||0)-(r.current_risk_weighted_score||0)).toFixed(1);
+  c3.innerHTML+=`<div class="dl"><span class="dk">Potential lift</span><span class="dv" style="color:var(--pass)">+${lift} pts</span></div>`;
+  g.appendChild(c3);v.appendChild(g);
+
+  const card=el('div','card');card.style.marginTop='16px';card.innerHTML='<h3>Priority Queue</h3><div class="sub">severity × asset criticality</div>';
+  const cols=[
+    {k:'_rank',label:'#',cls:'mono dim',render:(r,i)=>''},
+    {k:'priority',label:'Priority',cls:'mono',render:x=>`<b style="color:var(--crit)">${x.priority}</b>`,sortVal:x=>x.priority},
+    {k:'control_id',label:'Control',cls:'mono',render:x=>`<b>${x.control_id}</b>`},
+    {k:'source_system',label:'Source',render:x=>`<span class="tag">${x.source_system}</span>`},
+    {k:'asset_id',label:'Asset',cls:'mono muted'},
+    {k:'severity',label:'Severity',render:x=>svBadge(x.severity)},
+    {k:'asset_criticality',label:'Asset Crit.',render:x=>`<span class="bdg sv-${x.asset_criticality==='high'?'high':x.asset_criticality==='critical'?'critical':x.asset_criticality==='low'?'low':'medium'}">${cap(x.asset_criticality)}</span>`},
+  ];
+  card.appendChild(sortableTable(r.queue||[],cols,{sort:'priority',dir:-1}));
+  v.appendChild(card);m.appendChild(v);
+}
+
+function rTrends(){
+  const m=main(),v=view('Trends & Forecast','Historical posture and linear projection to threshold');
+  const fc=DATA.forecast||{};
+  const kp=el('div','kpis');kp.style.gridTemplateColumns='repeat(5,1fr)';
+  const trendColor=fc.trend==='improving'?'var(--pass)':fc.trend==='declining'?'var(--fail)':'var(--info)';
+  [['Current Score',(fc.current_score??DATA.summary.compliance_score??'—')+'%','today','var(--teal)'],
+   ['Trend',cap(fc.trend||(DATA.trends.length>1?'—':'n/a')),(fc.slope_per_day!=null?(fc.slope_per_day>0?'+':'')+fc.slope_per_day+' pts/day':''),trendColor],
+   ['Projected ('+(fc.horizon_days||30)+'d)',(fc.projected_score??'—')+(fc.projected_score!=null?'%':''),'linear fit','var(--violet)'],
+   ['Threshold',(fc.threshold??90)+'%','target','var(--info)'],
+   ['Days to Target',fc.days_to_threshold!=null&&fc.days_to_threshold>=0?fc.days_to_threshold:'—','at current pace','var(--warn)'],
+  ].forEach(k=>{const c=el('div','kpi');c.style.setProperty('--accent',k[3]);c.innerHTML=`<div class="k">${k[0]}</div><div class="v" style="font-size:26px">${k[1]}</div><div class="s">${k[2]}</div>`;kp.appendChild(c);});
+  v.appendChild(kp);
+
+  const card=el('div','card');card.innerHTML='<h3>Compliance Score History</h3><div class="sub">'+DATA.trends.length+' snapshots</div>';
+  card.appendChild(spark(DATA.trends.map(t=>({y:t.score})),900,240,'var(--teal)'));
+  v.appendChild(card);
+
+  const g=el('div','grid g-2');g.style.marginTop='16px';
+  const cP=el('div','card');cP.innerHTML='<h3>Pass / Fail Volume</h3><div class="sub">controls passing vs failing per snapshot</div>';
+  const last=DATA.trends.slice(-14);const maxT=Math.max(1,...last.map(t=>t.total));
+  last.forEach((t,i)=>{const row=el('div','bar-row');
+    row.innerHTML=`<span class="nm dim">${new Date(t.captured_at).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</span>
+      <div class="bar-track" style="display:flex"><div class="bar-fill" style="background:var(--pass)"></div><div class="bar-fill" style="background:var(--fail)"></div></div>
+      <span class="pc mono">${t.passed}/${t.total}</span>`;cP.appendChild(row);
+    const fills=row.querySelectorAll('.bar-fill');
+    setTimeout(()=>{fills[0].style.width=(t.passed/maxT*100)+'%';fills[1].style.width=(t.failed/maxT*100)+'%';},60+i*40);});
+  g.appendChild(cP);
+
+  const cR=el('div','card');cR.innerHTML='<h3>At-Risk Controls</h3><div class="sub">trending toward failure</div>';
+  if((fc.at_risk_controls||[]).length){(fc.at_risk_controls||[]).forEach(a=>cR.appendChild(el('div','dl',
+    `<span class="dk mono"><b>${a.control_id}</b> <span class="tag">${a.source_system}</span></span><span class="dv dim mono">${(a.asset_id||'').slice(0,24)}</span>`)));}
+  else cR.appendChild(el('div','empty','No controls flagged at risk.'));
+  g.appendChild(cR);v.appendChild(g);m.appendChild(v);
+}
+
+function rInventory(){
+  const m=main(),v=view('Asset Inventory',DATA.inventory.length+' discovered assets under assessment');
+  const card=el('div','card');
+  const tools=el('div','tools');tools.innerHTML=`<input class="inp" id="if" placeholder="Filter assets…">`;card.appendChild(tools);
+  const cols=[
+    {k:'asset_id',label:'Asset ID',cls:'mono',render:r=>`<b>${r.asset_id}</b>`},
+    {k:'asset_type',label:'Type',render:r=>`<span class="tag">${r.asset_type}</span>`},
+    {k:'source_system',label:'Source',cls:'mono'},
+    {k:'owner',label:'Owner',cls:'mono muted'},
+    {k:'criticality',label:'Criticality',render:r=>`<span class="bdg sv-${({critical:'critical',high:'high',medium:'medium',low:'low'})[r.criticality]||'info'}">${cap(r.criticality||'unknown')}</span>`,
+      sortVal:r=>({critical:0,high:1,medium:2,low:3})[r.criticality]??9},
+  ];
+  const host=el('div');card.appendChild(host);let q='';
+  function rebuild(){const rows=DATA.inventory.filter(a=>!q||(a.asset_id+' '+a.asset_type+' '+(a.owner||'')+' '+a.source_system).toLowerCase().includes(q));
+    host.innerHTML='';host.appendChild(sortableTable(rows,cols,{sort:'criticality'}));}
+  tools.querySelector('#if').oninput=e=>{q=e.target.value.toLowerCase();rebuild();};
+  rebuild();v.appendChild(card);m.appendChild(v);
+}
+
+function rWaivers(){
+  const m=main(),v=view('Waivers & Exceptions','Accepted risks and their expiry');
+  const card=el('div','card');
+  const cols=[
+    {k:'control_id',label:'Control',cls:'mono',render:r=>`<b>${r.control_id}</b>`},
+    {k:'asset_id',label:'Asset',cls:'mono muted'},
+    {k:'reason',label:'Reason'},
+    {k:'approver',label:'Approver',cls:'mono muted'},
+    {k:'status',label:'Status',render:r=>{const c={active:'st-pass',revoked:'st-fail',expired:'st-error'}[r.status]||'st-na';return `<span class="bdg ${c}">${cap(r.status)}</span>`;}},
+    {k:'expires_at',label:'Expires',cls:'mono dim',render:r=>r.expires_at?(ahead(r.expires_at)):'—',sortVal:r=>r.expires_at||''},
+  ];
+  card.appendChild(sortableTable(DATA.waivers,cols,{sort:'status'}));
+  v.appendChild(card);m.appendChild(v);
+}
+
+function rSchedules(){
+  const m=main(),v=view('Assessment Schedules','Automated recurring posture sweeps');
+  const card=el('div','card');
+  const fmtInt=mins=>mins%1440===0?(mins/1440)+'d':mins%60===0?(mins/60)+'h':mins+'m';
+  const cols=[
+    {k:'name',label:'Name',render:r=>`<b>${r.name}</b>`},
+    {k:'interval_minutes',label:'Interval',cls:'mono',render:r=>'every '+fmtInt(r.interval_minutes)},
+    {k:'enabled',label:'State',render:r=>r.enabled?`<span class="bdg st-pass">Enabled</span>`:`<span class="bdg st-na">Paused</span>`,sortVal:r=>r.enabled?0:1},
+    {k:'last_run_at',label:'Last Run',cls:'mono dim',render:r=>ago(r.last_run_at),sortVal:r=>r.last_run_at||''},
+    {k:'next_run_at',label:'Next Run',cls:'mono',render:r=>r.enabled?ahead(r.next_run_at):'—',sortVal:r=>r.next_run_at||''},
+  ];
+  card.appendChild(sortableTable(DATA.schedules,cols,{sort:'next_run_at'}));
+  v.appendChild(card);m.appendChild(v);
+}
+
+/* ============================ FRAMEWORKS / CATALOG ============================ */
+const CAT={frameworks:null,cur:null,data:{}};  // data[fw]={coverage,controls,families}
+function demoCatalog(){
+  const nist=[['AC-1','Policy and Procedures','Access Control'],['AC-2','Account Management','Access Control'],
+    ['AC-2(7)','Privileged User Accounts','Access Control'],['AC-3','Access Enforcement','Access Control'],
+    ['AU-2','Event Logging','Audit and Accountability'],['AU-6','Audit Record Review','Audit and Accountability'],
+    ['CA-7','Continuous Monitoring','Assessment, Authorization, and Monitoring'],['CM-3','Configuration Change Control','Configuration Management'],
+    ['CP-9','System Backup','Contingency Planning'],['IA-2','Identification and Authentication','Identification and Authentication'],
+    ['IR-4','Incident Handling','Incident Response'],['RA-5','Vulnerability Monitoring','Risk Assessment'],
+    ['SC-7','Boundary Protection','System and Communications Protection'],['SC-28','Protection of Information at Rest','System and Communications Protection'],
+    ['SI-2','Flaw Remediation','System and Information Integrity'],['AT-2','Literacy Training and Awareness','Awareness and Training']]
+    .map(c=>({id:c[0],title:c[1],family:c[2],automated:['AU-2','CM-3','RA-5','SC-7','SC-28','AC-2(7)'].includes(c[0])}));
+  const iso=[['A.5.1','Policies for information security','Organizational controls'],['A.5.15','Access control','Organizational controls'],
+    ['A.5.23','Information security for cloud services','Organizational controls'],['A.6.3','Security awareness, education and training','People controls'],
+    ['A.7.4','Physical security monitoring','Physical controls'],['A.8.2','Privileged access rights','Technological controls'],
+    ['A.8.5','Secure authentication','Technological controls'],['A.8.8','Management of technical vulnerabilities','Technological controls'],
+    ['A.8.15','Logging','Technological controls'],['A.8.24','Use of cryptography','Technological controls'],
+    ['A.8.28','Secure coding','Technological controls'],['A.8.32','Change management','Technological controls']]
+    .map(c=>({id:c[0],title:c[1],family:c[2],automated:['A.8.5','A.8.8','A.8.15','A.8.24'].includes(c[0])}));
+  const mkcov=(ctrls)=>{const fams={};ctrls.forEach(c=>{const f=fams[c.family]=fams[c.family]||{family:c.family,total:0,assessed:0,compliant:0};
+    f.total++;if(c.automated){f.assessed++;f.compliant++;}});
+    const total=ctrls.length,assessed=ctrls.filter(c=>c.automated).length;
+    return {total,assessed,coverage_pct:+(assessed/total*100).toFixed(1),compliant:assessed,
+      compliance_pct:+(assessed/total*100).toFixed(1),automated_controls:assessed,by_family:Object.values(fams)};};
+  return {frameworks:[{framework:'NIST_800_53',label:'NIST SP 800-53 Rev 5 (demo subset)',control_count:nist.length},
+                      {framework:'ISO_27001_2022',label:'ISO/IEC 27001:2022 Annex A (demo subset)',control_count:iso.length}],
+          NIST_800_53:{controls:nist,coverage:mkcov(nist)},ISO_27001_2022:{controls:iso,coverage:mkcov(iso)}};
+}
+async function ensureFrameworks(){
+  if(CAT.frameworks)return;
+  if(DATA._demo){const d=demoCatalog();CAT.frameworks=d.frameworks;CAT._demo=d;CAT.cur=CAT.cur||'NIST_800_53';return;}
+  try{CAT.frameworks=await api('/catalog/frameworks');CAT.cur=CAT.cur||(CAT.frameworks[0]&&CAT.frameworks[0].framework);}
+  catch(e){const d=demoCatalog();CAT.frameworks=d.frameworks;CAT._demo=d;CAT.cur=CAT.cur||'NIST_800_53';}
+}
+async function loadFramework(fw){
+  if(CAT.data[fw])return CAT.data[fw];
+  if(CAT._demo){const dd=CAT._demo[fw];CAT.data[fw]=dd;return dd;}
+  const t=encodeURIComponent(CFG.tenant);
+  const [cov,ctrls,att]=await Promise.all([
+    api('/coverage?framework='+fw+'&tenant_id='+t).catch(()=>null),
+    api('/catalog?framework='+fw).catch(()=>[]),
+    api('/attestations?tenant_id='+t+'&framework='+fw).catch(()=>[])]);
+  const amap={};(att||[]).forEach(a=>amap[a.control_id]=a);
+  CAT.data[fw]={coverage:cov,controls:ctrls,att:amap};
+  return CAT.data[fw];
+}
+function rCatalog(){
+  const m=main(),v=view('Framework Catalog','Full NIST 800-53 & ISO 27001 coverage with attestation tracking');
+  const host=el('div');v.appendChild(host);m.appendChild(v);
+  host.innerHTML='<div class="empty">Loading catalog…</div>';
+  ensureFrameworks().then(()=>renderCatalog(host));
+}
+async function renderCatalog(host){
+  const fwBar=el('div','tools');
+  CAT.frameworks.forEach(f=>{const b=el('button','btn'+(f.framework===CAT.cur?' primary':''),`${f.label} · ${f.control_count}`);
+    b.onclick=()=>{CAT.cur=f.framework;renderCatalog(host);};fwBar.appendChild(b);});
+  host.innerHTML='';host.appendChild(fwBar);
+  const body=el('div');body.innerHTML='<div class="empty">Loading '+CAT.cur+'…</div>';host.appendChild(body);
+  const d=await loadFramework(CAT.cur);
+  const cov=d.coverage||{total:d.controls.length,assessed:0,coverage_pct:0,compliance_pct:0,compliant:0,automated_controls:0,by_family:[]};
+  body.innerHTML='';
+  // KPIs
+  const kp=el('div','kpis');kp.style.gridTemplateColumns='repeat(5,1fr)';
+  [['Total Controls',cov.total,'in framework','var(--info)'],
+   ['Assessed',cov.assessed,cov.coverage_pct+'% coverage','var(--teal)'],
+   ['Compliant',cov.compliant,cov.compliance_pct+'% of total','var(--pass)'],
+   ['Automated',cov.automated_controls,'via connectors','var(--violet)'],
+   ['Not Assessed',cov.total-cov.assessed,'need attestation','var(--warn)']
+  ].forEach(k=>{const c=el('div','kpi');c.style.setProperty('--accent',k[3]);c.innerHTML=`<div class="k">${k[0]}</div><div class="v" style="font-size:30px">${k[1]}</div><div class="s">${k[2]}</div>`;kp.appendChild(c);});
+  body.appendChild(kp);
+  if(DATA._demo||CAT._demo){const n=el('div','s');n.style.cssText='color:var(--warn);font-family:var(--mono);font-size:11px;margin:-8px 0 14px';
+    n.textContent='● demo subset — connect the live API to load all '+(CAT.cur==='NIST_800_53'?'1,196':'93')+' controls';body.appendChild(n);}
+
+  const g=el('div','grid g-2');
+  // families coverage
+  const cF=el('div','card');cF.innerHTML='<h3>Coverage by Family</h3><div class="sub">assessed / total per control family</div>';
+  const fams=(cov.by_family||[]).slice().sort((a,b)=>b.total-a.total);
+  const maxT=Math.max(1,...fams.map(f=>f.total));
+  fams.forEach((f,i)=>{const pct=f.total?Math.round(f.assessed/f.total*100):0;
+    const row=el('div','bar-row');row.innerHTML=`<span class="nm" title="${f.family}">${f.family.length>18?f.family.slice(0,17)+'…':f.family}</span>
+      <div class="bar-track"><div class="bar-fill" style="background:linear-gradient(90deg,var(--teal),var(--pass))"></div></div>
+      <span class="pc mono">${f.assessed}/${f.total}</span>`;
+    cF.appendChild(row);setTimeout(()=>row.querySelector('.bar-fill').style.width=pct+'%',50+i*25);});
+  g.appendChild(cF);
+
+  // controls table (filterable)
+  const cC=el('div','card');cC.innerHTML='<h3>Controls</h3><div class="sub">search, filter by status or family, sort — click any control to set its attestation</div>';
+  const att=d.att||{};
+  function statusOf(c){ if(c.automated)return {s:'auto',label:'Automated'}; const a=att[c.id];
+    return a?{s:a.status,label:cap(a.status)}:{s:'not_assessed',label:'Not assessed'}; }
+  const badge=st=>{const map={auto:'st-pass',compliant:'st-pass',non_compliant:'st-fail',not_applicable:'st-na',in_progress:'st-error',not_assessed:'st-na'};
+    return `<span class="bdg ${map[st.s]||'st-na'}">${st.label}</span>`;};
+  const famList=[...new Set(d.controls.map(c=>c.family))].sort();
+  const tools=el('div','tools');
+  tools.innerHTML=`
+    <input class="inp" id="catf" placeholder="Search id, title…" style="min-width:180px">
+    <select class="inp" id="catFam"><option value="">All families (${famList.length})</option>${famList.map(f=>`<option value="${f}">${f}</option>`).join('')}</select>
+    <select class="inp" id="catSort"><option value="id">Sort: Control ID</option><option value="status">Sort: Status</option><option value="family">Sort: Family</option><option value="title">Sort: Title</option></select>
+    <div class="seg" id="catStatus"><button class="on" data-v="">All</button><button data-v="auto">Auto</button><button data-v="compliant">Compliant</button><button data-v="non_compliant">Non-compliant</button><button data-v="not_assessed">Unassessed</button></div>`;
+  cC.appendChild(tools);
+  const cnt=el('div');cnt.style.cssText='font-family:var(--mono);font-size:11px;color:var(--dim);margin:2px 2px 8px';cC.appendChild(cnt);
+  const tHost=el('div');cC.appendChild(tHost);
+  const cols=[
+    {k:'id',label:'Control',cls:'mono',render:c=>`<b>${c.id}</b>`,sortVal:c=>c.id},
+    {k:'title',label:'Title'},
+    {k:'family',label:'Family',render:c=>`<span class="tag">${c.family}</span>`},
+    {k:'_status',label:'Status',render:c=>badge(statusOf(c)),sortVal:c=>({auto:0,non_compliant:1,in_progress:2,compliant:3,not_applicable:4,not_assessed:5})[statusOf(c).s]??9},
+  ];
+  let q='',fam='',sortBy='id',stf='';
+  function rebuild(){
+    const rows=d.controls.filter(c=>{
+      if(q&&!(c.id+' '+c.title+' '+c.family).toLowerCase().includes(q))return false;
+      if(fam&&c.family!==fam)return false;
+      if(stf&&statusOf(c).s!==stf)return false;
+      return true;});
+    cnt.textContent=`${rows.length} of ${d.controls.length} controls`;
+    tHost.innerHTML='';tHost.appendChild(sortableTable(rows,cols,{sort:sortBy==='status'?'_status':sortBy,onRow:c=>openAttest(CAT.cur,c,statusOf(c),host)}));}
+  tools.querySelector('#catf').oninput=e=>{q=e.target.value.toLowerCase();rebuild();};
+  tools.querySelector('#catFam').onchange=e=>{fam=e.target.value;rebuild();};
+  tools.querySelector('#catSort').onchange=e=>{sortBy=e.target.value;rebuild();};
+  tools.querySelectorAll('#catStatus button').forEach(b=>b.onclick=()=>{tools.querySelectorAll('#catStatus button').forEach(x=>x.classList.remove('on'));b.classList.add('on');stf=b.dataset.v;rebuild();});
+  rebuild();g.appendChild(cC);body.appendChild(g);
+  // --- Evidence Compliance panel ---
+  const evCard=el('div','card');
+  evCard.innerHTML='<h3>Evidence Compliance</h3><div class="sub">For controls with uploaded evidence, the policy engine evaluates whether it meets the configured thresholds — confirmation required, minimum confidence, attestation owner rules.</div>';
+  const evRow=el('div');evRow.style.cssText='display:flex;gap:8px;margin-top:10px;flex-wrap:wrap';
+  const evBtn=el('button','btn');evBtn.textContent='Load evidence compliance';
+  const oscalBtn=el('button','btn');oscalBtn.innerHTML='⬇ Export OSCAL';oscalBtn.title='Download an auditor-ready OSCAL 1.1.2 assessment-results file';
+  oscalBtn.onclick=()=>downloadOscal(CAT.cur);
+  evRow.appendChild(evBtn);evRow.appendChild(oscalBtn);
+  const evBody=el('div');evCard.appendChild(evRow);evCard.appendChild(evBody);
+  evBtn.onclick=async()=>{evBtn.disabled=true;evBtn.textContent='Loading…';evBody.innerHTML='<div class="empty">Fetching…</div>';
+    if(DATA._demo||CAT._demo){_renderEvComp(evBody,[
+      {control_id:'IA-2',status:'insufficient_evidence',satisfied:false,reason:'Evidence found but confidence 0.50 < 0.70 (MFA floor)',qualifying_concepts:[],notes:['mfa: hit not confirmed','mfa: confidence 0.50 < 0.70']},
+      {control_id:'SC-28',status:'compliant',satisfied:true,reason:'Evidence satisfies control via: encryption_at_rest',qualifying_concepts:['encryption_at_rest'],notes:[],propagated_to:[{framework:'ISO_27001_2022',control_id:'A.8.24',shared_concepts:['encryption_at_rest']}]},
+      {control_id:'A.8.5',status:'not_assessed',satisfied:false,reason:'No evidence or attestation on record',qualifying_concepts:[],notes:[]},
+    ]);evBtn.textContent='Reload';evBtn.disabled=false;return;}
+    try{
+      const g2=await api('/evidence/graph?tenant_id='+CFG.tenant);
+      const ctrlIds=[...new Set((g2.edges||[]).filter(e=>e.to&&e.type==='evidences').map(e=>e.to))].slice(0,40);
+      if(!ctrlIds.length){evBody.innerHTML='<div class="empty dim">No evidence uploaded yet. Add documents via the Evidence Map to see compliance results here.</div>';evBtn.textContent='Reload';evBtn.disabled=false;return;}
+      const results=await Promise.all(ctrlIds.map(cid=>
+        api('/evidence/compliance?control_id='+encodeURIComponent(cid)+'&framework='+CAT.cur+'&tenant_id='+CFG.tenant)
+          .then(r=>({control_id:cid,...r})).catch(()=>null)));
+      _renderEvComp(evBody,results.filter(Boolean));
+    }catch(e){evBody.innerHTML=`<div class="empty" style="color:var(--fail)">Failed: ${e.message}</div>`;}
+    evBtn.textContent='Reload';evBtn.disabled=false;};
+  body.appendChild(evCard);
+
+  // --- Evidence Documents (freshness + integrity) ---
+  const docCard=el('div','card');
+  docCard.innerHTML='<h3>Evidence Documents</h3><div class="sub">Freshness (evidence decays after 180 days) and cryptographic integrity — each document is signed at ingestion and can be verified as untampered.</div>';
+  const docBtn=el('button','btn');docBtn.textContent='Load documents';docBtn.style.cssText='margin-top:10px';
+  const docBody=el('div');docCard.appendChild(docBtn);docCard.appendChild(docBody);
+  docBtn.onclick=async()=>{docBtn.disabled=true;docBtn.textContent='Loading…';docBody.innerHTML='<div class="empty">Fetching…</div>';
+    if(DATA._demo||CAT._demo){_renderDocs(docBody,[
+      {name:'Information Security Policy v3',method:'llm',concepts_found:7,created_at:new Date(Date.now()-40*864e5).toISOString(),_verify:{verified:true,signed:true}},
+      {name:'Encryption Standard (2024)',method:'lexicon',concepts_found:3,created_at:new Date(Date.now()-250*864e5).toISOString(),_verify:{verified:true,signed:true}},
+      {name:'Legacy DR Plan',method:'lexicon',concepts_found:2,created_at:new Date(Date.now()-420*864e5).toISOString(),_verify:{verified:true,signed:true}},
+    ]);docBtn.textContent='Reload';docBtn.disabled=false;return;}
+    try{
+      const docs=await api('/evidence/documents?tenant_id='+CFG.tenant);
+      if(!docs.length){docBody.innerHTML='<div class="empty dim">No documents yet — add evidence via the Evidence Map.</div>';docBtn.textContent='Reload';docBtn.disabled=false;return;}
+      // verify each (cryptographic integrity check) in parallel
+      await Promise.all(docs.slice(0,25).map(d=>
+        api('/evidence/documents/'+d.doc_id+'/verify?tenant_id='+CFG.tenant)
+          .then(v=>{d._verify=v;}).catch(()=>{d._verify=null;})));
+      _renderDocs(docBody,docs);
+    }catch(e){docBody.innerHTML=`<div class="empty" style="color:var(--fail)">Failed: ${e.message}</div>`;}
+    docBtn.textContent='Reload';docBtn.disabled=false;};
+  body.appendChild(docCard);
+}
+function openAttest(framework,ctrl,cur,host){
+  let mod=$('#attestModal');
+  if(!mod){mod=el('div','modal');mod.id='attestModal';document.body.appendChild(mod);
+    mod.onclick=e=>{if(e.target===mod)mod.classList.remove('on');};}
+  if(cur.s==='auto'){
+    mod.innerHTML=`<div class="sheet"><h3>${ctrl.id}</h3><p class="muted">${ctrl.title}</p>
+      <div class="dl"><span class="dk">Status</span><span class="dv">${'<span class=\"bdg st-pass\">Automated</span>'}</span></div>
+      <p class="dim" style="font-size:12px">This control is assessed automatically by a connector — its status comes from live findings and can't be manually attested.</p>
+      <div class="row-end"><button class="btn" onclick="document.getElementById('attestModal').classList.remove('on')">Close</button></div></div>`;
+    mod.classList.add('on');return;
+  }
+  const opts=['compliant','non_compliant','in_progress','not_applicable','not_assessed'];
+  mod.innerHTML=`<div class="sheet"><h3>${ctrl.id} <span class="dim" style="font-size:13px">${framework.replace('_',' ')}</span></h3>
+    <p class="muted" style="margin-top:-6px">${ctrl.title}</p>
+    <div class="fld"><label>Attestation status</label>
+      <select class="inp" id="atSt" style="width:100%">${opts.map(o=>`<option value="${o}" ${cur.s===o?'selected':''}>${cap(o)}</option>`).join('')}</select></div>
+    <div class="fld"><label>Owner</label><input class="inp" id="atOwn" placeholder="e.g. ciso@org.com"></div>
+    <div class="fld"><label>Evidence note / justification</label><input class="inp" id="atNote" placeholder="link or short note"></div>
+    <div id="evPolBox" style="border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin:8px 0;font-size:12px;min-height:36px;color:var(--dim)">Loading evidence policy…</div>
+    <div class="row-end"><button class="btn" id="atCancel">Cancel</button><button class="btn primary" id="atSave">Save attestation</button></div></div>`;
+  mod.classList.add('on');
+  (()=>{
+    if(DATA._demo||CAT._demo){
+      const b=document.getElementById('evPolBox');if(b)b.innerHTML='<b style="color:var(--warn)">Demo</b> — evidence policy visible in live mode.';return;}
+    api('/evidence/compliance?control_id='+encodeURIComponent(ctrl.id)+'&framework='+(framework||CAT.cur||'NIST_800_53')+'&tenant_id='+CFG.tenant)
+      .then(d=>{const b=document.getElementById('evPolBox');if(!b)return;
+        const col={compliant:'var(--pass)',insufficient_evidence:'var(--warn)',not_assessed:'var(--dim)'}[d.status]||'var(--mid)';
+        let h=`<b style="color:${col}">Evidence: ${(d.status||'').replace(/_/g,' ')}</b><span class="dim"> · ${d.engine||'builtin'}</span>`;
+        if((d.qualifying_concepts||[]).length)h+=`<br><span class="dim">Qualifying: </span>${d.qualifying_concepts.map(c=>`<span class="tag">${c.replace(/_/g,' ')}</span>`).join(' ')}`;
+        if((d.propagated_to||[]).length)h+=`<br><span class="dim">Also satisfies: </span>${d.propagated_to.slice(0,3).map(p=>`<span class="tag" style="background:rgba(139,124,255,.12);color:var(--violet)">${p.framework.replace('_',' ').replace('27001 2022','27001')} ${p.control_id}</span>`).join(' ')}`;
+        if((d.notes||[]).length)h+=`<ul style="margin:4px 0 0 14px;color:var(--dim)">${d.notes.slice(0,3).map(n=>`<li>${n}</li>`).join('')}</ul>`;
+        b.innerHTML=h;b.style.borderColor=col.includes('pass')?'rgba(51,224,100,.25)':col.includes('warn')?'rgba(255,184,0,.2)':'var(--line)';})
+      .catch(()=>{const b=document.getElementById('evPolBox');if(b)b.style.display='none';});
+  })();
+  mod.querySelector('#atCancel').onclick=()=>mod.classList.remove('on');
+  mod.querySelector('#atSave').onclick=async()=>{
+    const payload={tenant_id:CFG.tenant,framework,control_id:ctrl.id,status:mod.querySelector('#atSt').value,
+      owner:mod.querySelector('#atOwn').value||null,note:mod.querySelector('#atNote').value||null};
+    if(DATA._demo||CAT._demo){ // demo: update locally
+      (CAT.data[framework].att=CAT.data[framework].att||{})[ctrl.id]={control_id:ctrl.id,status:payload.status};
+      mod.classList.remove('on');toast('Saved (demo)');renderCatalog(host);return;}
+    try{const r=await fetch((CFG.base||'').replace(/\/$/,'')+'/attestations',{method:'POST',
+        headers:Object.assign({'Content-Type':'application/json'},CFG.key?{'X-API-Key':CFG.key}:{}),body:JSON.stringify(payload)});
+      if(!r.ok)throw new Error(r.status);
+      delete CAT.data[framework];mod.classList.remove('on');toast('Attestation saved');renderCatalog(host);}
+    catch(e){toast('Save failed: '+e.message);}
+  };
+}
+
+
+const DEMO_SIM_RESULT = {
+  blast_radius:{total_affected:9,by_impact:{failed:5,weakened:2,at_risk:2}},
+  directly_changed:[{control_id:'SC-12',state:'failed'}],
+  cascade:[
+    {control_id:'SC-28',impact:'failed',severity:0.9,via:['SC-12','SC-28'],edge_type:'hard',provenance:'curated',rationale:'Encryption at rest depends on cryptographic key management.'},
+    {control_id:'SC-8', impact:'failed',severity:0.9,via:['SC-12','SC-8'], edge_type:'hard',provenance:'curated',rationale:'Transmission confidentiality depends on key management.'},
+    {control_id:'AU-9', impact:'failed',severity:0.72,via:['SC-12','SC-28','AU-9'],edge_type:'hard',provenance:'curated',rationale:'Audit log protection relies on encryption at rest.'},
+    {control_id:'AC-17',impact:'failed',severity:0.63,via:['SC-12','SC-8','AC-17'],edge_type:'hard',provenance:'curated',rationale:'Remote access security depends on transmission protection.'},
+    {control_id:'CP-9', impact:'failed',severity:0.63,via:['SC-12','SC-28','CP-9'],edge_type:'hard',provenance:'curated',rationale:'Backups must be encrypted at rest.'},
+    {control_id:'SC-13',impact:'weakened',severity:0.38,via:['SC-12','SC-28','SC-13'],edge_type:'soft',provenance:'shared_concept',rationale:'Both map to evidence concept encryption_at_rest.'},
+    {control_id:'SA-9', impact:'weakened',severity:0.31,via:['SC-12','SC-8','SA-9'], edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+    {control_id:'CP-2', impact:'at_risk',severity:0.2,via:['SC-12','SC-28','CP-9','CP-2'],edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+    {control_id:'SI-12',impact:'at_risk',severity:0.18,via:['SC-12','SC-8','SI-12'],edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+  ],
+  explanation:'Changing SC-12 structurally affects 9 control(s). Hard-dependent and likely INVALIDATED even if their own test stays green: SC-28, SC-8, AU-9, AC-17, CP-9. Weakened / at-risk: SC-13, SA-9, CP-2, SI-12.'
+};
+
+/* ============================ RESOLVER / ONTOLOGY ============================ */
+const DEMO_PLANES_DATA={
+  configuration:{label:"Configuration / Posture",shape:"snapshot",trust:"high",cadence:"periodic",producers:["AWS","AZURE","GCP"]},
+  identity_access:{label:"Identity & Access",shape:"snapshot",trust:"high",cadence:"periodic",producers:["OKTA","AZURE","AWS"]},
+  activity_audit:{label:"Activity & Audit",shape:"timeseries",trust:"high",cadence:"streaming",producers:["AWS","OKTA"]},
+  vulnerability_threat:{label:"Vulnerability & Threat",shape:"scan",trust:"high",cadence:"scan-driven",producers:["QUALYS","CROWDSTRIKE","SSH"]},
+  change_delivery:{label:"Change & Delivery",shape:"event",trust:"medium",cadence:"event-driven",producers:["JIRA","SERVICENOW","GITHUB","GITLAB"]},
+  host_runtime:{label:"Host / Runtime",shape:"pull",trust:"high",cadence:"on-demand",producers:["SSH"]},
+  ai_governance:{label:"AI Governance",shape:"metadata",trust:"medium",cadence:"on-change",producers:["AIGOV"]},
+  attestation_document:{label:"Attestation & Document",shape:"document",trust:"asserted",cadence:"human",producers:["EVIDENCE","ATTEST"]},
+};
+const PLANE_COLORS={configuration:'var(--teal)',identity_access:'var(--violet)',activity_audit:'var(--info)',
+  vulnerability_threat:'var(--fail)',change_delivery:'var(--warn)',host_runtime:'var(--pass)',
+  ai_governance:'#e879f9',attestation_document:'var(--dim)'};
+function rResolver(){
+  const m=main(),v=view('Ontology Resolver','8 telemetry planes · 1,289 control bindings · live module routing');
+  const host=el('div');v.appendChild(host);m.appendChild(v);
+  host.innerHTML='<div class="empty">Loading ontology…</div>';
+  if(DATA._demo){_drawResolver(host,DEMO_PLANES_DATA);}
+  else{api('/ontology/planes').then(r=>_drawResolver(host,r.planes)).catch(()=>_drawResolver(host,DEMO_PLANES_DATA));}
+}
+function _drawResolver(host,planes){
+  host.innerHTML='';
+  // Plain-English explainer
+  const ex=el('div','callout');
+  ex.style.cssText='background:rgba(139,124,255,.06);border-color:rgba(139,124,255,.2);margin-bottom:18px';
+  ex.innerHTML='<b>What is this?</b> Every control can be proven in more than one way — by reading live config from a connector (telemetry), by a document you uploaded (evidence), or by a person signing off (attestation). The resolver looks at a control + what you have connected, then <b>automatically picks the best available proof and runs it</b>. Below: the proof sources it can use (planes), a tool to try it on any control, and a log of every decision it made.';
+  host.appendChild(ex);
+  // Plane cards
+  const ph=el('div');ph.innerHTML='<h3 style="margin-bottom:10px">Telemetry Planes</h3><p class="muted" style="margin-bottom:14px">The resolver walks these in preference order and picks the first plane where a healthy producer is available for the asset.</p>';
+  host.appendChild(ph);
+  const grid=el('div','plane-grid');
+  Object.entries(planes).forEach(([pid,p])=>{
+    const card=el('div','plane-card');card.style.setProperty('--pc',PLANE_COLORS[pid]||'var(--teal)');
+    card.innerHTML=`<div class="pc-name">${p.label}</div>
+      <div class="pc-meta"><span class="tag">${p.shape}</span><span class="tag" style="color:${p.trust==='high'?'var(--pass)':p.trust==='asserted'?'var(--warn)':'var(--info)'}">${p.trust}</span></div>
+      <div class="pc-producers">${(p.producers||[]).map(pr=>`<span class="chip-sm">${pr}</span>`).join('')}</div>
+      <div class="dim" style="font-size:11px">${p.cadence}</div>`;
+    grid.appendChild(card);
+  });
+  host.appendChild(grid);
+  // Resolver form card
+  const fc=el('div','card');
+  fc.innerHTML='<h3>Resolve a Control</h3><div class="sub">Select a control, asset type and available connectors — the resolver picks the best module and executes it.</div>';
+  const form=el('div','res-form');
+  const COMMON_CTRLS=['SC-28','SC-7','AU-2','RA-5','IA-2','AC-2(7)','CM-3','SA-15','A.8.5','A.8.24','A.5.1','A.8.8'];
+  form.innerHTML=`
+    <div class="res-row">
+      <div class="fld"><label>Control ID</label>
+        <input class="inp" id="resCtrl" placeholder="e.g. SC-28, IA-2, A.8.5" list="rCtrlSug">
+        <datalist id="rCtrlSug">${COMMON_CTRLS.map(c=>`<option value="${c}">`).join('')}</datalist>
+      </div>
+      <div class="fld"><label>Framework</label>
+        <select class="inp" id="resFw"><option value="NIST_800_53">NIST 800-53</option><option value="ISO_27001_2022">ISO 27001:2022</option></select>
+      </div>
+      <div class="fld"><label>Asset type</label>
+        <select class="inp" id="resAt">
+          <option value="cloud-account">Cloud account</option><option value="host">Host / server</option>
+          <option value="identity">Identity / user</option><option value="repo">Repository</option>
+          <option value="change">Change ticket</option><option value="ai-system">AI system</option>
+          <option value="*">Any</option>
+        </select>
+      </div>
+    </div>
+    <div class="res-row">
+      <div class="fld"><label>Available connectors <span class="dim">(DEMO = simulation, always works)</span></label>
+        <div class="chips">${['DEMO','AWS','OKTA','GITHUB','SSH','QUALYS','JIRA'].map(c=>`<label class="chip-chk"><input type="checkbox" value="${c}"${c==='DEMO'?' checked':''}> ${c}</label>`).join('')}</div>
+      </div>
+      <div class="fld" style="flex:0 0 auto;max-width:130px"><label>Mode</label>
+        <label class="chip-chk" style="margin-top:6px"><input type="checkbox" id="resDry"> Dry run (plan only)</label>
+      </div>
+    </div>
+    <button class="btn primary" id="resRun">⚡ Resolve &amp; Execute</button>`;
+  const resOut=el('div');resOut.id='resOut';form.appendChild(resOut);
+  fc.appendChild(form);host.appendChild(fc);
+  // Decision history
+  const hc=el('div','card');
+  hc.innerHTML='<h3>Routing Decision Audit Trail</h3><div class="sub">Every call to /resolve is recorded here — what was chosen, what was skipped, and why.</div>';
+  const hBody=el('div');hBody.id='resHist';hc.appendChild(hBody);
+  host.appendChild(hc);
+  _loadHistory(hBody);
+  // Wire button
+  document.getElementById('resRun').onclick=async()=>{
+    const ctrl=document.getElementById('resCtrl').value.trim();
+    if(!ctrl){toast('Enter a control ID');return;}
+    const fw=document.getElementById('resFw').value;
+    const at=document.getElementById('resAt').value;
+    const conns=[...document.querySelectorAll('.res-form .chips input:checked')].map(i=>i.value);
+    const dry=document.getElementById('resDry').checked;
+    resOut.innerHTML='<div class="empty">Resolving…</div>';
+    if(DATA._demo){
+      const typeCol={telemetry:'var(--teal)',document:'var(--violet)',attestation:'var(--warn)'};
+      const dr={chosen:{type:'telemetry',plane:'configuration',signal:'storage.encryption_at_rest',module:'DEMO (simulation)',eval_control:'SC-28'},
+        status:'pass',reason:'Encryption at rest is enabled (simulated).',executed:!dry,skipped:[],finding_id:'demo-1'};
+      _renderDecision(resOut,dr);toast('Demo result shown');
+    } else {
+      try{
+        const r=await fetch((CFG.base||'').replace(/\/$/,'')+'/resolve',{method:'POST',
+          headers:Object.assign({'Content-Type':'application/json'},CFG.key?{'X-API-Key':CFG.key}:{}),
+          body:JSON.stringify({control_id:ctrl,framework:fw,asset:{type:at},available_connectors:conns,dry_run:dry,tenant_id:CFG.tenant})});
+        if(!r.ok)throw new Error((await r.json()).detail||r.status);
+        _renderDecision(resOut,await r.json());
+        _loadHistory(hBody);
+      }catch(e){resOut.innerHTML=`<div class="empty" style="color:var(--fail)">Error: ${e.message}</div>`;}
+    }
+  };
+}
+function _renderDecision(node,d){
+  const typeCol={telemetry:'var(--teal)',document:'var(--violet)',attestation:'var(--warn)'};
+  const col=typeCol[d.chosen?.type]||'var(--mid)';
+  const sb=d.status?stBadge(d.status):'<span class="bdg st-na">planned</span>';
+  node.innerHTML=`<div class="res-result" style="--rc:${col}">
+    <div class="rr-plane">${(d.chosen?.plane||'?').replace(/_/g,' ')} <span class="dim" style="font-weight:400">via</span> ${d.chosen?.module||'?'}</div>
+    <div class="rr-row"><b>Type:</b> <span class="tag">${d.chosen?.type||'?'}</span> &nbsp;
+      <b>Status:</b> ${sb} &nbsp; <b>Executed:</b> ${d.executed?'<span style="color:var(--pass)">✓ yes</span>':'<span class="dim">dry run</span>'}</div>
+    <div class="rr-row"><b>Reason:</b> ${d.reason||'—'}</div>
+    ${d.chosen?.signal?`<div class="rr-row"><b>Signal:</b> <code>${d.chosen.signal}</code>${d.chosen.eval_control?` &nbsp; <b>Eval:</b> <code>${d.chosen.eval_control}</code>`:''}</div>`:''}
+    ${(d.skipped||[]).length?`<details style="font-size:12px;color:var(--dim);margin-top:8px"><summary style="cursor:pointer">${d.skipped.length} alternative(s) skipped</summary><ul style="margin:6px 0 0 16px">${d.skipped.map(s=>`<li>${(s.plane||s.type||'?').replace(/_/g,' ')}: ${s.reason||'?'}</li>`).join('')}</ul></details>`:''}
+    ${d.evidence_policy?`<details style="font-size:12px;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px 11px"><summary style="cursor:pointer;color:var(--mid)">Evidence policy — <b style="color:${d.evidence_policy.satisfied?'var(--pass)':'var(--warn)'}">${d.evidence_policy.satisfied?'✓ satisfied':'✗ insufficient'}</b> <span class="dim">(${d.evidence_policy.engine||'builtin'})</span></summary>${(d.evidence_policy.qualifying_concepts||[]).length?`<div style="margin-top:6px">${d.evidence_policy.qualifying_concepts.map(c=>`<span class="tag">${c.replace(/_/g,' ')}</span>`).join(' ')}</div>`:''} ${(d.evidence_policy.notes||[]).length?`<ul style="margin:4px 0 0 14px;color:var(--dim)">${d.evidence_policy.notes.map(n=>`<li>${n}</li>`).join('')}</ul>`:''}</details>`:''}
+  </div>`;
+}
+async function _loadHistory(node){
+  node.innerHTML='<div class="empty">Loading…</div>';
+  if(DATA._demo){node.innerHTML='<div class="empty dim">Routing decisions appear here in live mode — <span style="color:var(--teal)">connect the API to see your audit trail.</span></div>';return;}
+  try{
+    const decs=await api('/resolve/decisions?tenant_id='+CFG.tenant);
+    if(!decs.length){node.innerHTML='<div class="empty dim">No decisions yet — use the form above to resolve a control.</div>';return;}
+    const cols=[
+      {k:'created_at',label:'When',render:d=>`<span class="dim">${ago(d.created_at)}</span>`},
+      {k:'control_id',label:'Control',cls:'mono',render:d=>`<b>${d.control_id}</b>`},
+      {k:'plane',label:'Plane',render:d=>`<span class="tag">${(d.plane||'').replace(/_/g,' ')}</span>`},
+      {k:'module',label:'Module',cls:'mono dim'},
+      {k:'status',label:'Status',render:d=>d.status?stBadge(d.status):'<span class="dim">planned</span>'},
+      {k:'executed',label:'Run',render:d=>d.executed?'<span style="color:var(--pass)">✓</span>':'<span class="dim">—</span>'},
+    ];
+    node.innerHTML='';node.appendChild(sortableTable(decs,cols,{sort:'created_at'}));
+  }catch(e){node.innerHTML=`<div class="empty" style="color:var(--fail)">Failed: ${e.message}</div>`;}
+}
+
+
+function _renderEvComp(node,results){
+  if(!results.length){node.innerHTML='<div class="empty dim">No compliance results.</div>';return;}
+  const ord={compliant:0,insufficient_evidence:1,not_assessed:2};
+  results.sort((a,b)=>(ord[a.status]??9)-(ord[b.status]??9));
+  const cols=[
+    {k:'control_id',label:'Control',cls:'mono',render:r=>`<b>${r.control_id}</b>`},
+    {k:'status',label:'Policy',render:r=>stBadge(r.status)},
+    {k:'satisfied',label:'✓',render:r=>r.satisfied?'<span style="color:var(--pass)">✓</span>':'<span style="color:var(--fail)">✗</span>'},
+    {k:'qualifying_concepts',label:'Qualifying evidence',render:r=>(r.qualifying_concepts||[]).length?r.qualifying_concepts.map(c=>`<span class="tag">${c.replace(/_/g,' ')}</span>`).join(' '):'<span class="dim">—</span>'},
+    {k:'propagated_to',label:'Also satisfies',render:r=>(r.propagated_to||[]).length?r.propagated_to.slice(0,3).map(p=>`<span class="tag" style="background:rgba(139,124,255,.12);color:var(--violet)" title="via ${(p.shared_concepts||[]).join(', ')}">${p.framework.replace('_',' ').replace('27001 2022','27001')} ${p.control_id}</span>`).join(' '):'<span class="dim">—</span>'},
+    {k:'reason',label:'Reason',render:r=>`<span style="font-size:12px;color:var(--dim)">${r.reason||'—'}</span>`},
+  ];
+  node.innerHTML='';node.appendChild(sortableTable(results,cols,{sort:'status'}));
+}
+
+function freshness(createdAt){
+  if(!createdAt)return{label:'unknown',color:'var(--dim)',days:null};
+  const days=(Date.now()-new Date(createdAt).getTime())/864e5;
+  if(days<180)return{label:'Fresh',color:'var(--pass)',days};
+  if(days<365)return{label:'Aging',color:'var(--warn)',days};
+  return{label:'Stale',color:'var(--fail)',days};
+}
+async function downloadOscal(framework){
+  if(DATA._demo||CAT._demo){toast('Connect the API to export OSCAL');return;}
+  toast('Generating OSCAL…');
+  try{
+    const o=await api('/evidence/export/oscal?framework='+framework+'&tenant_id='+CFG.tenant);
+    const blob=new Blob([JSON.stringify(o,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=url;a.download='oscal-assessment-'+framework+'.json';document.body.appendChild(a);a.click();
+    a.remove();URL.revokeObjectURL(url);toast('OSCAL assessment exported');
+  }catch(e){toast('Export failed: '+e.message);}
+}
+function _renderDocs(node,docs){
+  if(!docs.length){node.innerHTML='<div class="empty dim">No documents.</div>';return;}
+  const cols=[
+    {k:'name',label:'Document',render:d=>`<b>${d.name||'untitled'}</b>`},
+    {k:'_fresh',label:'Freshness',render:d=>{const f=freshness(d.created_at);return `<span class="bdg" style="background:transparent;border:1px solid ${f.color};color:${f.color}">${f.label}</span>${f.days!=null?` <span class="dim" style="font-size:11px">${Math.round(f.days)}d</span>`:''}`;},sortVal:d=>freshness(d.created_at).days??-1},
+    {k:'method',label:'Analysis',render:d=>`<span class="tag">${d.method==='llm'?'LLM':'keyword'}</span>`},
+    {k:'concepts_found',label:'Concepts',cls:'mono',render:d=>d.concepts_found??'—'},
+    {k:'_integrity',label:'Integrity',render:d=>{const v=d._verify;if(!v)return '<span class="dim">—</span>';
+      if(!v.signed)return '<span class="dim" title="No signature on record">unsigned</span>';
+      return v.verified?'<span style="color:var(--pass)" title="Cryptographically verified — content unchanged since ingestion">🛡 Verified</span>':'<span style="color:var(--fail)" title="Signature mismatch — content may have been altered">⚠ Altered</span>';}},
+  ];
+  node.innerHTML='';node.appendChild(sortableTable(docs,cols,{sort:'_fresh'}));
+}
+
+/* ============================ BLAST RADIUS SIMULATOR ============================ */
+const DEMO_BLAST={
+  framework:'NIST_800_53',
+  directly_changed:[{control_id:'SC-12',state:'failed'}],
+  blast_radius:{total_affected:8,by_impact:{failed:6,weakened:1,at_risk:1},max_depth:3},
+  cascade:[
+    {control_id:'SC-28',impact:'failed',severity:0.9,via:['SC-12','SC-28'],edge_type:'hard',provenance:'curated',rationale:'Encryption at rest depends on cryptographic key management.'},
+    {control_id:'SC-8',impact:'failed',severity:0.9,via:['SC-12','SC-8'],edge_type:'hard',provenance:'curated',rationale:'Transmission confidentiality depends on key management.'},
+    {control_id:'AU-9',impact:'failed',severity:0.72,via:['SC-12','SC-28','AU-9'],edge_type:'hard',provenance:'curated',rationale:'Protection of audit information relies on encryption at rest.'},
+    {control_id:'AC-17',impact:'failed',severity:0.63,via:['SC-12','SC-8','AC-17'],edge_type:'hard',provenance:'curated',rationale:'Remote access confidentiality depends on transmission protection.'},
+    {control_id:'CP-9',impact:'failed',severity:0.63,via:['SC-12','SC-28','CP-9'],edge_type:'hard',provenance:'curated',rationale:'System backups must be encrypted at rest to be protected.'},
+    {control_id:'CP-10',impact:'failed',severity:0.5,via:['SC-12','SC-28','CP-9','CP-10'],edge_type:'hard',provenance:'curated',rationale:'System recovery depends on the existence of backups.'},
+    {control_id:'SI-7',impact:'weakened',severity:0.36,via:['SC-12','SC-28','SI-7'],edge_type:'soft',provenance:'shared_concept',rationale:'Both map to evidence concept encryption_at_rest.'},
+    {control_id:'MP-4',impact:'at_risk',severity:0.22,via:['SC-12','SC-28','MP-4'],edge_type:'soft',provenance:'nist_related',rationale:'NIST 800-53 lists these as related controls.'},
+  ],
+  explanation:'Changing SC-12 structurally affects 8 control(s). Hard-dependent and likely INVALIDATED even if their own test stays green: SC-28, SC-8, AU-9, AC-17, CP-9, CP-10. Weakened / at-risk (related or shared-evidence): SI-7, MP-4.'
+};
+const _IMPACT_COL={failed:'#ff5a5a',weakened:'#ffb800',at_risk:'#7c8aa5'};
+
+function rSimulator(){
+  const m=main(),v=view('Blast Radius','What-if analysis — simulate a control failing and see which others structurally collapse, even if their own check still shows green');
+  const host=el('div');v.appendChild(host);m.appendChild(v);
+  const ex=el('div','callout');
+  ex.innerHTML='<b>What is this?</b> Every other tool tests each control on its own. This models how controls <b>depend on each other</b>: simulate one failing and watch the cascade. A control can be green on its own test yet be structurally invalid because something it relies on broke.';
+  host.appendChild(ex);
+
+  // scenario builder
+  const sc=el('div','card');
+  sc.innerHTML='<h3>Build a scenario</h3><div class="sub">Mark one or more controls as failing, then run the simulation.</div>';
+  let selected=[];
+  const row=el('div','sim-scenario');
+  row.innerHTML=`
+    <div class="fld" style="flex:1;min-width:150px"><label>Control to fail</label>
+      <input class="inp" id="simCtrl" placeholder="e.g. SC-12, AC-2, IA-5" list="simSug">
+      <datalist id="simSug">${['SC-12','SC-28','SC-8','AC-2','AC-3','IA-2','IA-5','AU-2','AU-9','CM-2','CM-8','RA-5'].map(x=>`<option value="${x}">`).join('')}</datalist></div>
+    <div class="fld" style="flex:0 0 auto"><label>State</label>
+      <select class="inp" id="simState"><option value="failed">Failed</option><option value="degraded">Degraded</option></select></div>
+    <div class="fld" style="flex:0 0 auto"><label>Max depth</label>
+      <select class="inp" id="simDepth"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div>
+    <button class="btn" id="simAdd">+ Add</button>`;
+  sc.appendChild(row);
+  const tags=el('div');tags.style.cssText='display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 12px';sc.appendChild(tags);
+  const runBtn=el('button','btn primary');runBtn.textContent='⚡ Run simulation';runBtn.disabled=true;sc.appendChild(runBtn);
+  host.appendChild(sc);
+  const out=el('div');host.appendChild(out);
+
+  function renderTags(){
+    tags.innerHTML='';
+    selected.forEach((s,i)=>{const t=el('span','sim-tag');t.innerHTML=`${s.control_id} <span style="opacity:.65">${s.state}</span>`;
+      const x=el('button');x.textContent='×';x.onclick=()=>{selected.splice(i,1);renderTags();};t.appendChild(x);tags.appendChild(t);});
+    runBtn.disabled=!selected.length;
+  }
+  sc.querySelector('#simAdd').onclick=()=>{const cid=sc.querySelector('#simCtrl').value.trim().toUpperCase();
+    if(!cid)return;const st=sc.querySelector('#simState').value;
+    if(!selected.some(s=>s.control_id===cid))selected.push({control_id:cid,state:st});
+    sc.querySelector('#simCtrl').value='';renderTags();};
+  runBtn.onclick=async()=>{
+    const depth=+sc.querySelector('#simDepth').value;
+    out.innerHTML='<div class="empty">Computing blast radius…</div>';
+    if(DATA._demo){renderBlast(out,DEMO_BLAST,selected);return;}
+    try{
+      const r=await fetch((CFG.base||'').replace(/\/$/,'')+'/simulate',{method:'POST',
+        headers:Object.assign({'Content-Type':'application/json'},CFG.key?{'X-API-Key':CFG.key}:{}),
+        body:JSON.stringify({framework:'NIST_800_53',changes:selected,max_depth:depth})});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      renderBlast(out,await r.json(),selected);
+    }catch(e){out.innerHTML=`<div class="empty" style="color:var(--fail)">Error: ${e.message}</div>`;}
+  };
+  if(DATA._demo){selected=[{control_id:'SC-12',state:'failed'}];renderTags();renderBlast(out,DEMO_BLAST,selected);}
+
+  // fragility checker
+  const fc=el('div','card');fc.style.marginTop='16px';
+  fc.innerHTML='<h3>Structural fragility check</h3><div class="sub">Is a control green on its own test but secretly resting on failing prerequisites?</div>';
+  const fr=el('div','sim-scenario');
+  fr.innerHTML=`<div class="fld" style="flex:1;min-width:150px"><label>Control</label><input class="inp" id="fragCtrl" placeholder="e.g. AU-9" list="simSug2"><datalist id="simSug2">${['AU-9','AU-6','IR-4','AC-3','AC-17','SC-28','RA-5','CA-7'].map(x=>`<option value="${x}">`).join('')}</datalist></div><button class="btn" id="fragRun">Check</button>`;
+  fc.appendChild(fr);const fout=el('div');fout.id='fragOut';fc.appendChild(fout);host.appendChild(fc);
+  fc.querySelector('#fragRun').onclick=async()=>{
+    const cid=fc.querySelector('#fragCtrl').value.trim().toUpperCase();if(!cid)return;
+    fout.innerHTML='<div class="empty">Checking…</div>';
+    if(DATA._demo){renderFrag(fout,{control_id:cid,structurally_at_risk:cid==='AU-9',weak_prerequisites:cid==='AU-9'?[{prereq:'SC-28',status:'insufficient_evidence',weight:0.8,rationale:'Protection of audit information relies on encryption at rest.'},{prereq:'AC-3',status:'not_assessed',weight:0.7,rationale:'Audit log protection relies on access enforcement.'}]:[],detail:cid==='AU-9'?'This control depends on 2 unsatisfied prerequisite(s); its own evidence may not hold even if its direct test passes.':'All hard prerequisites are satisfied.'});return;}
+    try{const r=await api(`/controls/${encodeURIComponent(cid)}/fragility?framework=NIST_800_53&tenant_id=${CFG.tenant}`);renderFrag(fout,r);}
+    catch(e){fout.innerHTML=`<div class="empty" style="color:var(--fail)">Error: ${e.message}</div>`;}
+  };
+}
+
+function _blastSvg(data,scenario){
+  const W=660,H=460,cx=W/2,cy=H/2;
+  const epi=(scenario&&scenario.length?scenario:data.directly_changed||[]).map(s=>s.control_id);
+  const nodes=data.cascade||[];
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:460px">`;
+  [0.28,0.52,0.76,1].forEach(r=>{s+=`<circle cx="${cx}" cy="${cy}" r="${36+r*176}" fill="none" stroke="rgba(120,140,175,.13)" stroke-dasharray="3 5"/>`;});
+  const place=nodes.map((n,i)=>{const ang=(i/Math.max(nodes.length,1))*Math.PI*2-Math.PI/2;
+    const rad=46+(1-Math.min(n.severity,1))*180;return {...n,x:cx+Math.cos(ang)*rad,y:cy+Math.sin(ang)*rad};});
+  place.forEach(p=>{const c=_IMPACT_COL[p.impact]||'#7c8aa5';
+    s+=`<line x1="${cx}" y1="${cy}" x2="${p.x}" y2="${p.y}" stroke="${c}" stroke-opacity="${p.impact==='failed'?.45:.18}" stroke-width="${p.impact==='failed'?1.6:1}"/>`;});
+  place.forEach(p=>{const c=_IMPACT_COL[p.impact]||'#7c8aa5';const r=p.impact==='failed'?9:p.impact==='weakened'?7:5;
+    s+=`<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${c}" fill-opacity=".88"/>`;
+    s+=`<text x="${p.x}" y="${p.y-r-4}" text-anchor="middle" font-size="10" font-family="ui-monospace,monospace" fill="#e8eef7">${p.control_id}</text>`;});
+  s+=`<circle cx="${cx}" cy="${cy}" r="24" fill="rgba(255,90,90,.16)" stroke="#ff5a5a" stroke-width="2"/>`;
+  s+=`<circle cx="${cx}" cy="${cy}" r="14" fill="#ff5a5a"/>`;
+  s+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="9" font-family="ui-monospace,monospace" fill="#fff" font-weight="700">${epi[0]||'?'}</text>`;
+  if(epi.length>1)s+=`<text x="${cx}" y="${cy+36}" text-anchor="middle" font-size="9" fill="#7c8aa5">+${epi.length-1} more</text>`;
+  s+=`</svg>`;return s;
+}
+
+function renderBlast(out,data,scenario){
+  const bi=(data.blast_radius&&data.blast_radius.by_impact)||{};
+  out.innerHTML='';
+  const card=el('div','card');card.innerHTML='<h3>Blast radius</h3>';
+  const sum=el('div','blast-summary');
+  sum.innerHTML=[['Total affected',(data.blast_radius||{}).total_affected||0,'var(--hi)'],
+    ['Failed',bi.failed||0,'var(--fail)'],['Weakened',bi.weakened||0,'var(--warn)'],['At risk',bi.at_risk||0,'var(--mid)']]
+    .map(([l,n,c])=>`<div class="blast-chip"><span class="bc-n" style="color:${c}">${n}</span><span class="bc-l">${l}</span></div>`).join('');
+  card.appendChild(sum);
+  if(data.explanation){const e=el('div');e.style.cssText='font-size:13px;color:var(--mid);margin-bottom:12px';e.textContent=data.explanation;card.appendChild(e);}
+  const viz=el('div');viz.innerHTML=_blastSvg(data,scenario);card.appendChild(viz);
+  out.appendChild(card);
+  if(!(data.cascade||[]).length){const n=el('div','empty dim','No downstream controls structurally depend on the changed control(s).');out.appendChild(n);return;}
+  const detail=el('div','card');detail.innerHTML='<h3>Affected controls</h3><div class="sub">grouped by impact, with the dependency path and the reason for each link</div>';
+  [['failed','Failed — evidence invalidated','var(--fail)'],['weakened','Weakened','var(--warn)'],['at_risk','At risk','var(--mid)']].forEach(([lvl,label,col])=>{
+    const rows=data.cascade.filter(c=>c.impact===lvl);if(!rows.length)return;
+    const grp=el('div','cascade-group');grp.innerHTML=`<h4 style="color:${col}">${label} (${rows.length})</h4>`;
+    rows.forEach(c=>{const r=el('div','cascade-row');
+      const path=(c.via||[]).map((p,i)=>i===0?`<span class="pa">${p}</span>`:`<span class="sep">→</span><span class="${i===c.via.length-1?'ph':''}">${p}</span>`).join('');
+      r.innerHTML=`<div style="min-width:58px"><b class="mono">${c.control_id}</b></div>
+        <div style="flex:1;min-width:200px"><div style="font-size:12px;color:var(--mid)">${c.rationale||''}</div><div class="cascade-path">${path}</div></div>
+        <div style="text-align:right;min-width:80px"><span class="tag">${c.provenance}</span><div class="dim" style="font-size:11px;margin-top:3px">sev ${(c.severity||0).toFixed(2)}</div></div>`;
+      grp.appendChild(r);});
+    detail.appendChild(grp);});
+  out.appendChild(detail);
+}
+
+function renderFrag(out,d){
+  out.innerHTML='';
+  const col=d.structurally_at_risk?'var(--warn)':'var(--pass)';
+  const head=el('div');head.style.cssText='margin:10px 0 6px;font-size:14px;color:'+col+';font-weight:600';
+  head.textContent=d.structurally_at_risk?`⚠ ${d.control_id} is structurally at risk`:`✓ ${d.control_id} is structurally sound`;
+  out.appendChild(head);
+  const det=el('div');det.style.cssText='font-size:13px;color:var(--mid);margin-bottom:8px';det.textContent=d.detail||'';out.appendChild(det);
+  (d.weak_prerequisites||[]).forEach(w=>{const r=el('div','frag-row');
+    r.innerHTML=`<b class="mono">${w.prereq}</b> ${stBadge(w.status)} <span style="flex:1;min-width:160px;font-size:12px;color:var(--dim)">${w.rationale||''}</span><span class="dim" style="font-size:11px">weight ${(w.weight||0).toFixed(2)}</span>`;
+    out.appendChild(r);});
+}
+
+/* ============================ 3D KNOWLEDGE GRAPH ============================ */
+const GRAPH={nodes:[],edges:[],rotX:.35,rotY:-.55,zoom:1,drag:false,lmx:0,lmy:0,
+  hov:null,sel:null,filter:'all',running:false,canvas:null,ctx:null,idx:{},animId:null};
+
+const GC={connector:'#5b9cf6',evidence:'#4ade80',pass:'#22d3ee',fail:'#f87171',risk:'#fbbf24'};
+
+function _buildDemoGraph(){
+  const conns=[
+    {id:'c_aws',label:'AWS',type:'connector',cat:'cloud',color:GC.connector,r:10},
+    {id:'c_okta',label:'Okta',type:'connector',cat:'identity',color:'#a78bfa',r:10},
+    {id:'c_github',label:'GitHub',type:'connector',cat:'devops',color:'#fb923c',r:10},
+    {id:'c_jira',label:'Jira',type:'connector',cat:'itsm',color:'#38bdf8',r:9},
+    {id:'c_cs',label:'CrowdStrike',type:'connector',cat:'security',color:'#f43f5e',r:10},
+    {id:'c_entra',label:'Entra ID',type:'connector',cat:'identity',color:'#a78bfa',r:10},
+    {id:'c_snow',label:'ServiceNow',type:'connector',cat:'itsm',color:'#38bdf8',r:9},
+    {id:'c_ot',label:'OneTrust',type:'connector',cat:'grc',color:'#34d399',r:9},
+  ];
+  const evs=[
+    {id:'e_mfa',label:'mfa_enabled',type:'evidence',color:GC.evidence,r:7},
+    {id:'e_enc',label:'encryption',type:'evidence',color:GC.evidence,r:7},
+    {id:'e_log',label:'logging',type:'evidence',color:GC.evidence,r:7},
+    {id:'e_vuln',label:'vuln_findings',type:'evidence',color:GC.evidence,r:7},
+    {id:'e_inc',label:'incidents',type:'evidence',color:GC.evidence,r:7},
+    {id:'e_ep',label:'endpoint_prot',type:'evidence',color:GC.evidence,r:7},
+    {id:'e_priv',label:'priv_users',type:'evidence',color:GC.evidence,r:7},
+    {id:'e_patch',label:'patch_status',type:'evidence',color:GC.evidence,r:7},
+  ];
+  const ctrls=[
+    {id:'ct_ia2',label:'IA-2',type:'control',status:'pass',color:GC.pass,r:8},
+    {id:'ct_sc28',label:'SC-28',type:'control',status:'fail',color:GC.fail,r:8},
+    {id:'ct_au9',label:'AU-9',type:'control',status:'risk',color:GC.risk,r:8},
+    {id:'ct_au2',label:'AU-2',type:'control',status:'pass',color:GC.pass,r:7},
+    {id:'ct_ac2',label:'AC-2',type:'control',status:'pass',color:GC.pass,r:8},
+    {id:'ct_ac3',label:'AC-3',type:'control',status:'risk',color:GC.risk,r:7},
+    {id:'ct_ra5',label:'RA-5',type:'control',status:'fail',color:GC.fail,r:8},
+    {id:'ct_si2',label:'SI-2',type:'control',status:'pass',color:GC.pass,r:7},
+    {id:'ct_ir4',label:'IR-4',type:'control',status:'pass',color:GC.pass,r:7},
+    {id:'ct_sc12',label:'SC-12',type:'control',status:'pass',color:GC.pass,r:8},
+    {id:'ct_cp9',label:'CP-9',type:'control',status:'pass',color:GC.pass,r:7},
+    {id:'ct_si4',label:'SI-4',type:'control',status:'pass',color:GC.pass,r:7},
+  ];
+  const edges=[
+    {s:'c_aws',t:'e_vuln',kind:'conn'},{s:'c_aws',t:'e_log',kind:'conn'},{s:'c_aws',t:'e_enc',kind:'conn'},
+    {s:'c_okta',t:'e_mfa',kind:'conn'},{s:'c_okta',t:'e_priv',kind:'conn'},{s:'c_okta',t:'e_log',kind:'conn'},
+    {s:'c_github',t:'e_mfa',kind:'conn'},{s:'c_github',t:'e_vuln',kind:'conn'},
+    {s:'c_jira',t:'e_inc',kind:'conn'},{s:'c_snow',t:'e_inc',kind:'conn'},{s:'c_snow',t:'e_patch',kind:'conn'},
+    {s:'c_cs',t:'e_ep',kind:'conn'},{s:'c_cs',t:'e_patch',kind:'conn'},{s:'c_cs',t:'e_inc',kind:'conn'},
+    {s:'c_entra',t:'e_mfa',kind:'conn'},{s:'c_entra',t:'e_priv',kind:'conn'},
+    {s:'c_ot',t:'e_inc',kind:'conn'},
+    {s:'e_mfa',t:'ct_ia2',kind:'ev'},{s:'e_mfa',t:'ct_ac2',kind:'ev'},
+    {s:'e_enc',t:'ct_sc28',kind:'ev'},{s:'e_enc',t:'ct_sc12',kind:'ev'},
+    {s:'e_log',t:'ct_au2',kind:'ev'},{s:'e_log',t:'ct_au9',kind:'ev'},
+    {s:'e_vuln',t:'ct_ra5',kind:'ev'},{s:'e_vuln',t:'ct_si2',kind:'ev'},
+    {s:'e_inc',t:'ct_ir4',kind:'ev'},{s:'e_ep',t:'ct_si4',kind:'ev'},
+    {s:'e_priv',t:'ct_ac2',kind:'ev'},{s:'e_priv',t:'ct_ac3',kind:'ev'},
+    {s:'e_patch',t:'ct_si2',kind:'ev'},
+    {s:'ct_sc12',t:'ct_sc28',kind:'hard'},{s:'ct_sc28',t:'ct_au9',kind:'hard'},
+    {s:'ct_ac2',t:'ct_ac3',kind:'hard'},{s:'ct_au2',t:'ct_au9',kind:'hard'},
+    {s:'ct_ra5',t:'ct_si2',kind:'hard'},
+  ];
+  return {nodes:[...conns,...evs,...ctrls],edges};
+}
+
+function _sphereLayout(nodes){
+  const byType={connector:[],evidence:[],control:[]};
+  nodes.forEach(n=>byType[n.type].push(n));
+  const radii={connector:210,evidence:125,control:55};
+  Object.entries(byType).forEach(([type,ns])=>{
+    const R=radii[type];
+    ns.forEach((n,i)=>{
+      const phi=Math.acos(1-2*(i+.5)/Math.max(ns.length,1));
+      const theta=Math.PI*(1+Math.sqrt(5))*i;
+      n.x=R*Math.sin(phi)*Math.cos(theta);
+      n.y=R*Math.sin(phi)*Math.sin(theta);
+      n.z=R*Math.cos(phi);
+      n.vx=n.vy=n.vz=0;
+    });
+  });
+}
+
+function _forceSimulate(nodes,edges,idx,steps){
+  for(let s=0;s<steps;s++){
+    const k=.018*(1-s/steps);
+    for(let i=0;i<nodes.length;i++){
+      const a=nodes[i];
+      for(let j=i+1;j<nodes.length;j++){
+        const b=nodes[j];
+        const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;
+        const f=80/(dx*dx+dy*dy+dz*dz+1);
+        a.vx+=f*dx;a.vy+=f*dy;a.vz+=f*dz;
+        b.vx-=f*dx;b.vy-=f*dy;b.vz-=f*dz;
+      }
+    }
+    edges.forEach(({s:si,t:ti})=>{
+      const a=idx[si],b=idx[ti];if(!a||!b)return;
+      const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z;
+      const d=Math.sqrt(dx*dx+dy*dy+dz*dz)+.001;
+      const target=a.type===b.type?60:90;
+      const f=(d-target)/d*k;
+      a.vx+=f*dx;a.vy+=f*dy;a.vz+=f*dz;
+      b.vx-=f*dx;b.vy-=f*dy;b.vz-=f*dz;
+    });
+    nodes.forEach(n=>{n.x+=n.vx;n.y+=n.vy;n.z+=n.vz;n.vx*=.6;n.vy*=.6;n.vz*=.6;});
+  }
+}
+
+function _rotProj(n,W,H){
+  const cosX=Math.cos(GRAPH.rotX),sinX=Math.sin(GRAPH.rotX);
+  const cosY=Math.cos(GRAPH.rotY),sinY=Math.sin(GRAPH.rotY);
+  const y1=n.y*cosX-n.z*sinX,z1=n.y*sinX+n.z*cosX;
+  const x2=n.x*cosY+z1*sinY,z2=-n.x*sinY+z1*cosY;
+  const fov=320*GRAPH.zoom,z=z2+380;
+  return{x:W/2+x2*fov/z,y:H/2+y1*fov/z,z:z2,sc:fov/z};
+}
+
+function _gDraw(){
+  const cv=GRAPH.canvas,ctx=GRAPH.ctx;if(!cv||!ctx)return;
+  const W=cv._w,H=cv._h;
+  ctx.clearRect(0,0,W,H);
+  if(!cv._stars) cv._stars=Array.from({length:90},()=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.2+.2}));
+  ctx.fillStyle='rgba(200,210,255,.2)';
+  cv._stars.forEach(s=>{ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();});
+  const vis=_gVisible();
+  const pm={};GRAPH.nodes.forEach(n=>{const p=_rotProj(n,W,H);pm[n.id]={...p};});
+  const sorted=GRAPH.nodes.map(n=>({n,p:pm[n.id]})).sort((a,b)=>a.p.z-b.p.z);
+  GRAPH.edges.forEach(({s:si,t:ti,kind})=>{
+    if(!vis.has(si)||!vis.has(ti))return;
+    const ps=pm[si],pt=pm[ti];if(!ps||!pt)return;
+    const hiS=GRAPH.sel&&(GRAPH.sel===si||GRAPH.sel===ti);
+    const hiH=GRAPH.hov&&(GRAPH.hov===si||GRAPH.hov===ti);
+    const al=hiS?.85:hiH?.5:GRAPH.filter==='all'?.18:.1;
+    ctx.beginPath();ctx.moveTo(ps.x,ps.y);ctx.lineTo(pt.x,pt.y);
+    ctx.strokeStyle=kind==='hard'?`rgba(248,113,113,${al})`:kind==='ev'?`rgba(74,222,128,${al})`:`rgba(91,156,246,${al})`;
+    ctx.lineWidth=kind==='hard'?1.8:.85;ctx.stroke();
+  });
+  sorted.forEach(({n,p})=>{
+    if(!vis.has(n.id))return;
+    const r=n.r*p.sc*2.2,hi=GRAPH.hov===n.id||GRAPH.sel===n.id;
+    if(hi){ctx.beginPath();ctx.arc(p.x,p.y,r+5,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.1)';ctx.fill();}
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    ctx.fillStyle=n.color+(hi?'ff':'cc');ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=.7;ctx.stroke();
+    const minR=n.type==='connector'?5:n.type==='control'?4:3;
+    if(r>minR||hi){
+      ctx.font=`${Math.min(11,r*.85+7)}px ui-monospace,monospace`;
+      ctx.fillStyle=hi?'#fff':'rgba(220,230,255,.7)';
+      ctx.textAlign='center';ctx.fillText(n.label,p.x,p.y+r+10);
+    }
+  });
+}
+
+function _gVisible(){
+  if(GRAPH.filter==='all')return new Set(GRAPH.nodes.map(n=>n.id));
+  if(GRAPH.filter==='connector')return new Set(GRAPH.nodes.filter(n=>n.type==='connector').map(n=>n.id));
+  if(GRAPH.filter==='control')return new Set(GRAPH.nodes.filter(n=>n.type!=='connector').map(n=>n.id));
+  return new Set(GRAPH.nodes.map(n=>n.id));
+}
+
+function _gHit(mx,my){
+  const vis=_gVisible();const cv=GRAPH.canvas;if(!cv)return null;
+  const W=cv._w,H=cv._h;
+  let best=null,bestD=Infinity;
+  GRAPH.nodes.forEach(n=>{
+    if(!vis.has(n.id))return;
+    const p=_rotProj(n,W,H);const r=n.r*p.sc*2.2+5;
+    const d=Math.hypot(mx-p.x,my-p.y);
+    if(d<r&&d<bestD){bestD=d;best=n;}
+  });
+  return best;
+}
+
+function _gShowInfo(n){
+  const panel=document.getElementById('ginfo');if(!panel)return;
+  if(!n){panel.style.display='none';return;}
+  const out=GRAPH.edges.filter(e=>e.s===n.id).map(e=>GRAPH.idx[e.t]?.label||e.t);
+  const inn=GRAPH.edges.filter(e=>e.t===n.id).map(e=>GRAPH.idx[e.s]?.label||e.s);
+  panel.style.display='block';
+  panel.innerHTML=`<div style="color:#e4e4ed;font-weight:600;font-size:12px;margin-bottom:5px">${n.label}</div>
+    <div style="color:#6b7280;font-size:10px;text-transform:uppercase;letter-spacing:.5px">${n.type}${n.status?' · '+n.status:''}</div>
+    ${inn.length?`<div style="margin-top:6px;font-size:11px"><span style="color:#6b7280">Depends on: </span>${inn.slice(0,4).join(', ')}</div>`:''}
+    ${out.length?`<div style="margin-top:3px;font-size:11px"><span style="color:#6b7280">Affects: </span>${out.slice(0,4).join(', ')}</div>`:''}
+    ${n.cat?`<div style="margin-top:3px;font-size:11px;color:#6b7280">Category: ${n.cat}</div>`:''}`;
+}
+
+function _gSetFilter(f){
+  GRAPH.filter=f;
+  ['gfAll','gfConn','gfCtrl'].forEach((id,i)=>{
+    const b=document.getElementById(id);if(!b)return;
+    const a=['all','connector','control'][i]===f;
+    b.className='gbtn'+(a?' on':'');
+  });
+}
+
+function _gMountCanvas(container){
+  if(GRAPH.animId){cancelAnimationFrame(GRAPH.animId);GRAPH.animId=null;}
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:relative;height:520px;border-radius:8px;overflow:hidden';
+  const cv=document.createElement('canvas');
+  cv.id='gcanvas';wrap.appendChild(cv);
+  const hud=document.createElement('div');hud.className='ghud';
+  hud.innerHTML=`<div class="gleg">
+    <div style="font-size:11px;font-weight:500;color:#e4e4ed;margin-bottom:6px;letter-spacing:.4px">KNOWLEDGE GRAPH</div>
+    ${[['Connectors',GC.connector,'dot'],['Evidence types',GC.evidence,'dot'],
+       ['Controls (pass)',GC.pass,'dot'],['Controls (fail)',GC.fail,'dot'],
+       ['Controls (at risk)',GC.risk,'dot'],['Dependency edge','rgba(248,113,113,.7)','line']]
+    .map(([l,c,t])=>`<div class="gleg-item"><div class="${t==='line'?'gleg-line':'gleg-dot'}" style="background:${c}"></div><span>${l}</span></div>`).join('')}
+  </div>
+  <div class="gctrl">
+    <div id="ginfo"></div>
+    <div style="display:flex;gap:6px">
+      <button id="gfAll" class="gbtn on" onclick="_gSetFilter('all')">All</button>
+      <button id="gfConn" class="gbtn" onclick="_gSetFilter('connector')">Connectors</button>
+      <button id="gfCtrl" class="gbtn" onclick="_gSetFilter('control')">Controls</button>
+    </div>
+    <div style="font-size:10px;color:rgba(155,168,192,.45);text-align:right">drag · scroll · click node</div>
+  </div>`;
+  wrap.appendChild(hud);container.appendChild(wrap);
+
+  const dpr=window.devicePixelRatio||1;
+  const W=wrap.offsetWidth||660,H=520;
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
+  cv._w=W;cv._h=H;
+  GRAPH.canvas=cv;GRAPH.ctx=cv.getContext('2d');GRAPH.ctx.scale(dpr,dpr);
+
+  // events
+  cv.addEventListener('mousedown',e=>{
+    const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    const hit=_gHit(mx,my);
+    if(hit){GRAPH.sel=GRAPH.sel===hit.id?null:hit.id;_gShowInfo(GRAPH.sel?hit:null);}
+    else{GRAPH.drag=true;GRAPH.lmx=e.clientX;GRAPH.lmy=e.clientY;}
+  });
+  cv.addEventListener('mousemove',e=>{
+    const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    if(GRAPH.drag){GRAPH.rotY+=(e.clientX-GRAPH.lmx)*.006;GRAPH.rotX+=(e.clientY-GRAPH.lmy)*.006;GRAPH.lmx=e.clientX;GRAPH.lmy=e.clientY;}
+    const hit=_gHit(mx,my);GRAPH.hov=hit?hit.id:null;
+    cv.style.cursor=hit?'pointer':GRAPH.drag?'grabbing':'grab';
+  });
+  cv.addEventListener('mouseup',()=>{GRAPH.drag=false;});
+  cv.addEventListener('mouseleave',()=>{GRAPH.drag=false;GRAPH.hov=null;});
+  cv.addEventListener('wheel',e=>{GRAPH.zoom=Math.max(.4,Math.min(2.8,GRAPH.zoom-e.deltaY*.001));e.preventDefault();},{passive:false});
+  cv.addEventListener('touchstart',e=>{const t=e.touches[0];GRAPH.lmx=t.clientX;GRAPH.lmy=t.clientY;GRAPH.drag=true;e.preventDefault();},{passive:false});
+  cv.addEventListener('touchmove',e=>{const t=e.touches[0];GRAPH.rotY+=(t.clientX-GRAPH.lmx)*.006;GRAPH.rotX+=(t.clientY-GRAPH.lmy)*.006;GRAPH.lmx=t.clientX;GRAPH.lmy=t.clientY;e.preventDefault();},{passive:false});
+  cv.addEventListener('touchend',()=>{GRAPH.drag=false;});
+
+  let lastT=0;
+  function loop(t){GRAPH.animId=requestAnimationFrame(loop);if(!GRAPH.drag)GRAPH.rotY+=(t-lastT)*.00007;lastT=t;_gDraw();}
+  requestAnimationFrame(loop);
+}
+
+async function _gLoadLive(){
+  try{
+    // status gives us connector nodes
+    const st=await api('/connectors/status?tenant_id='+(CFG.tenant||'default'));
+    // graph stats for dependency graph
+    const dep=await api('/controls/SC-12/dependencies');
+    const stats=dep.graph_stats||{};
+    // build enriched nodes from live data
+    const connNodes=st.slice(0,10).map(c=>({
+      id:'c_'+c.key,label:c.name.split(' ')[0],type:'connector',
+      cat:c.category,color:{cloud:'#5b9cf6',identity:'#a78bfa',devops:'#fb923c',itsm:'#38bdf8',security:'#f43f5e',grc:'#34d399',saas:'#fbbf24',endpoint:'#94a3b8'}[c.category]||'#5b9cf6',
+      r:9+Math.min(c.evidence_count||0,3),mode:c.mode
+    }));
+    return null; // fall through to demo for simplicity in layout
+  }catch(e){return null;}
+}
+
+function rGraph(){
+  const m=main(),v=view('3D Knowledge Graph','Live control-dependency + connector→evidence→control chain — drag, zoom, click any node');
+  const host=el('div');v.appendChild(host);m.appendChild(v);
+  const ex=el('div','callout');
+  ex.innerHTML='<b>Three layers in one graph.</b> Outer ring: <span style="color:#5b9cf6">connectors</span> that collect evidence. Middle: <span style="color:#4ade80">evidence concepts</span> they produce. Inner cluster: <span style="color:#22d3ee">controls</span> satisfied by that evidence — with <span style="color:#f87171">hard dependency edges</span> between controls showing the blast-radius cascade. Colors show compliance status.';
+  host.appendChild(ex);
+  // build graph data
+  const g=_buildDemoGraph();
+  GRAPH.nodes=g.nodes;GRAPH.edges=g.edges;
+  GRAPH.idx={};GRAPH.nodes.forEach(n=>GRAPH.idx[n.id]=n);
+  _sphereLayout(GRAPH.nodes);
+  _forceSimulate(GRAPH.nodes,GRAPH.edges,GRAPH.idx,120);
+  // stats bar
+  const stats=el('div','kpis');stats.style.gridTemplateColumns='repeat(4,1fr)';stats.style.marginBottom='12px';
+  const connCount=GRAPH.nodes.filter(n=>n.type==='connector').length;
+  const evCount=GRAPH.nodes.filter(n=>n.type==='evidence').length;
+  const ctrlPass=GRAPH.nodes.filter(n=>n.type==='control'&&n.status==='pass').length;
+  const ctrlFail=GRAPH.nodes.filter(n=>n.type==='control'&&n.status!=='pass').length;
+  [['Connectors',connCount,'var(--hi)'],['Evidence types',evCount,'var(--pass)'],['Controls (pass)',ctrlPass,'var(--pass)'],['Controls (fail/risk)',ctrlFail,'var(--fail)']]
+    .forEach(([l,n,c])=>{const k=el('div','kpi');k.style.setProperty('--accent',c);k.innerHTML=`<div class="k">${l}</div><div class="v">${n}</div>`;stats.appendChild(k);});
+  host.appendChild(stats);
+  // mount canvas
+  _gMountCanvas(host);
+  // live data enrichment (silently fills in real sync status if available)
+  if(!DATA._demo){_gLoadLive().catch(()=>{});}
+}
+
+/* ============================ SELECTORS + BOOT ============================ */
+function hydrateSelectors(){
+  const fw=$('#fw');if(fw&&!fw._init){fw._init=true;
+    const opts=['<option value="">All frameworks</option>'].concat((DATA.frameworks||[]).map(f=>`<option>${f}</option>`));
+    fw.innerHTML=opts.join('');fw.onchange=loadAll;}
+  const tn=$('#tenant');if(tn&&!tn._init){tn._init=true;
+    const tenants=Array.from(new Set([CFG.tenant,'default','acme','globex'].filter(Boolean)));
+    tn.innerHTML=tenants.map(t=>`<option ${t===CFG.tenant?'selected':''}>${t}</option>`).join('');
+    tn.onchange=()=>{CFG.tenant=tn.value;saveCfg();loadAll();};}
+}
+function boot(){
+  buildRail();
+  $('#gear').onclick=()=>{$('#cfgBase').value=CFG.base;$('#cfgKey').value=CFG.key;$('#cfgModal').classList.add('on');};
+  $('#cfgCancel').onclick=()=>$('#cfgModal').classList.remove('on');
+  $('#cfgModal').onclick=e=>{if(e.target===$('#cfgModal'))$('#cfgModal').classList.remove('on');};
+  $('#cfgSave').onclick=()=>{CFG.base=$('#cfgBase').value.trim();CFG.key=$('#cfgKey').value.trim();saveCfg();$('#cfgModal').classList.remove('on');toast('Saved — reloading data');loadAll();};
+  $('#refresh').onclick=()=>{toast('Refreshing…');loadAll();};
+  const ready=(document.fonts&&document.fonts.ready)?document.fonts.ready:Promise.resolve();
+  ready.finally(loadAll);
+}
+boot();
+</script>
+</body>
+</html>
