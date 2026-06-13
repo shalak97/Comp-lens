@@ -1,0 +1,51 @@
+name: Wire dashboard into API (robust)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Place dashboard into app/static/
+        run: |
+          mkdir -p app/static
+          if [ -f dashboard.html ]; then
+            cp -f dashboard.html app/static/dashboard.html
+            rm -f dashboard.html
+            echo "copied root dashboard.html -> app/static/ and removed root copy"
+          elif [ -f app/static/dashboard.html ]; then
+            echo "no root file; app/static/dashboard.html already present"
+          else
+            echo "::error::No dashboard.html at repo root or app/static/. Upload to root first."
+            exit 1
+          fi
+
+      - name: Ensure /dashboard route in main.py (idempotent)
+        run: |
+          if grep -q "_serve_dashboard" app/main.py; then
+            echo "route already present -- skipping"
+          else
+            echo "CgojIOKUgOKUgCBzdGF0aWMgZGFzaGJvYXJkIGNvbnNvbGUg4pSA4pSACmltcG9ydCBvcyBhcyBfb3MKZnJvbSBmYXN0YXBpLnJlc3BvbnNlcyBpbXBvcnQgRmlsZVJlc3BvbnNlIGFzIF9GaWxlUmVzcG9uc2UKZnJvbSBmYXN0YXBpLnN0YXRpY2ZpbGVzIGltcG9ydCBTdGF0aWNGaWxlcyBhcyBfU3RhdGljRmlsZXMKCl9TVEFUSUNfRElSID0gX29zLnBhdGguam9pbihfb3MucGF0aC5kaXJuYW1lKF9fZmlsZV9fKSwgInN0YXRpYyIpCmlmIF9vcy5wYXRoLmlzZGlyKF9TVEFUSUNfRElSKToKICAgIGFwcC5tb3VudCgiL3N0YXRpYyIsIF9TdGF0aWNGaWxlcyhkaXJlY3Rvcnk9X1NUQVRJQ19ESVIpLCBuYW1lPSJzdGF0aWMiKQoKICAgIEBhcHAuZ2V0KCIvZGFzaGJvYXJkIiwgaW5jbHVkZV9pbl9zY2hlbWE9RmFsc2UpCiAgICBkZWYgX3NlcnZlX2Rhc2hib2FyZCgpOgogICAgICAgIHJldHVybiBfRmlsZVJlc3BvbnNlKF9vcy5wYXRoLmpvaW4oX1NUQVRJQ19ESVIsICJkYXNoYm9hcmQuaHRtbCIpKQo=" | base64 -d >> app/main.py
+            echo "route appended to app/main.py"
+          fi
+
+      - name: Verify main.py compiles
+        run: |
+          python3 -m py_compile app/main.py && echo "main.py compiles"
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing to commit -- already wired"
+          else
+            git commit -m "chore: wire latest dashboard into app/static and serve at /dashboard"
+            git push
+          fi
