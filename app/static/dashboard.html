@@ -421,25 +421,106 @@ function drawSpark(cvs, vals){
 }
 
 /* ============ CONTROLS ============ */
+const CTRL={view:"automated",fw:"NIST_800_53",family:"all",q:"",frameworks:null,families:null,rows:null};
+const DEMO_CATALOG_FW=[
+  {framework:"NIST_800_53",label:"NIST SP 800-53 Rev 5",authority:"NIST",control_count:1196},
+  {framework:"ISO_27001_2022",label:"ISO/IEC 27001:2022 Annex A",authority:"ISO",control_count:93},
+];
+function _demoCatalog(){
+  const fams=[["AC","Access Control"],["AU","Audit and Accountability"],["SC","System & Communications"],["IA","Identification & Authentication"],["RA","Risk Assessment"],["CM","Configuration Management"],["IR","Incident Response"],["CP","Contingency Planning"]];
+  const out=[];fams.forEach(([fid,fam])=>{for(let i=1;i<=10;i++)out.push({id:fid+"-"+i,title:fam+" requirement "+i,family:fam,family_id:fid,kind:"control",automated:Math.random()<.15});});
+  return out;
+}
 RENDER.controls = async function() {
-  const m=main(), v=view("Control Catalog","Unified controls mapped across NIST, ISO 27001, SOC 2, CIS and AI frameworks");
+  const m=main(), v=view("Control Catalog","Automated controls plus the full NIST 800-53 and ISO 27001 reference libraries");
   m.appendChild(v);const host=el("div");v.appendChild(host);
-  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading controls…</div>`;
-  const {data}=await load("/controls", DEMO.controls);
-  const ctrls=Array.isArray(data)?data:(data.controls||[]);
-  host.innerHTML="";
-  const card=el("div","card");
-  card.innerHTML=`<h3>Controls</h3><div class="sub">${ctrls.length} controls in catalog</div>`;
-  const wrap=el("div","scroll");
-  const rows=ctrls.slice(0,200).map(c=>{
-    const fw=c.frameworks||{};
-    const chips=Object.keys(fw).slice(0,5).map(k=>`<span class="badge b-dim">${k}</span>`).join(" ");
-    return `<tr><td class="mono">${esc(c.control_id)}</td><td>${esc(c.title||"")}</td>
-      <td>${esc(c.domain||"")}</td><td><span class="badge ${SEV_BADGE[c.severity]||"b-dim"}">${esc(c.severity||"—")}</span></td>
-      <td>${chips}</td></tr>`;}).join("");
-  wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Title</th><th>Domain</th><th>Severity</th><th>Frameworks</th></tr></thead><tbody>${rows}</tbody></table>`;
-  card.appendChild(wrap);host.appendChild(card);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading catalog…</div>`;
+  // load framework list once
+  if(!CTRL.frameworks){
+    const {data}=await load("/catalog/frameworks",DEMO_CATALOG_FW);
+    CTRL.frameworks=Array.isArray(data)&&data.length?data:DEMO_CATALOG_FW;
+  }
+  renderControls(host);
 };
+
+async function renderControls(host){
+  host.innerHTML="";
+  // top toggle: Automated vs Reference library
+  const seg=el("div","segrow");
+  const tA=el("button","seg"+(CTRL.view==="automated"?" on":""));tA.textContent="⚡ Automated (live-assessed)";
+  tA.onclick=()=>{CTRL.view="automated";renderControls(host);};
+  const tR=el("button","seg"+(CTRL.view==="reference"?" on":""));tR.textContent="📚 Full reference library";
+  tR.onclick=()=>{CTRL.view="reference";renderControls(host);};
+  seg.appendChild(tA);seg.appendChild(tR);host.appendChild(seg);
+
+  if(CTRL.view==="automated"){
+    const {data}=await load("/controls",DEMO.controls);
+    const ctrls=Array.isArray(data)?data:(data.controls||[]);
+    const kp=el("div","kpis");
+    [["Automated controls",ctrls.length,"have live pass/fail evaluators","var(--pass)"],
+     ["High severity",ctrls.filter(c=>c.severity==="high"||c.severity==="critical").length,"prioritized","var(--fail)"],
+     ["Domains",[...new Set(ctrls.map(c=>c.domain))].length,"coverage areas","var(--hi)"]]
+     .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+    host.appendChild(kp);
+    const card=el("div","card");
+    card.innerHTML=`<h3>Automated controls</h3><div class="sub">${ctrls.length} controls assessed automatically from connector evidence</div>`;
+    const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Title</th><th>Domain</th><th>Severity</th><th>Frameworks</th></tr></thead><tbody>${
+      ctrls.map(c=>{const fw=c.frameworks||{};const chips=Object.keys(fw).slice(0,5).map(k=>`<span class="badge b-dim">${esc(k)}</span>`).join(" ");
+        return `<tr><td class="mono">${esc(c.control_id)}</td><td>${esc(c.title||"")}</td><td>${esc(c.domain||"")}</td>
+          <td><span class="badge ${SEV_BADGE[c.severity]||"b-dim"}">${esc(c.severity||"—")}</span></td><td>${chips}</td></tr>`;}).join("")}</tbody></table>`;
+    card.appendChild(wrap);host.appendChild(card);
+    return;
+  }
+
+  // reference library view
+  const fwCard=el("div","card");
+  fwCard.innerHTML=`<h3>Reference library</h3><div class="sub">Full official control catalogs — ${CTRL.frameworks.map(f=>f.control_count+" "+f.authority).join(", ")}. Controls marked ⚡ are also automated.</div>`;
+  // framework picker
+  const fwSeg=el("div","segrow");
+  CTRL.frameworks.forEach(f=>{const b=el("button","seg"+(CTRL.fw===f.framework?" on":""));b.textContent=`${f.label} (${f.control_count})`;
+    b.onclick=()=>{CTRL.fw=f.framework;CTRL.family="all";CTRL.families=null;CTRL.rows=null;renderControls(host);};fwSeg.appendChild(b);});
+  fwCard.appendChild(fwSeg);
+  host.appendChild(fwCard);
+
+  // load families + controls for current fw
+  const wrap=el("div","card");wrap.innerHTML=`<div class="empty"><span class="spin"></span> Loading ${esc(CTRL.fw)}…</div>`;host.appendChild(wrap);
+  if(!CTRL.families){
+    const {data}=await load("/catalog/families?framework="+encodeURIComponent(CTRL.fw),
+      [{family:"Access Control",family_id:"AC",count:147},{family:"Audit and Accountability",family_id:"AU",count:60}]);
+    CTRL.families=Array.isArray(data)?data:[];
+  }
+  const path="/catalog?framework="+encodeURIComponent(CTRL.fw)+(CTRL.family!=="all"?"&family="+encodeURIComponent(CTRL.family):"");
+  const {data:cd}=await load(path,_demoCatalog());
+  const all=Array.isArray(cd)?cd:[];
+  // family filter chips
+  wrap.innerHTML="";
+  const famRow=el("div","segrow");
+  const allB=el("button","seg"+(CTRL.family==="all"?" on":""));allB.textContent="All families";
+  allB.onclick=()=>{CTRL.family="all";renderControls(host);};famRow.appendChild(allB);
+  (CTRL.families||[]).forEach(f=>{const b=el("button","seg"+(CTRL.family===f.family_id?" on":""));b.textContent=`${f.family_id} (${f.count})`;b.title=f.family;
+    b.onclick=()=>{CTRL.family=f.family_id;renderControls(host);};famRow.appendChild(b);});
+  wrap.appendChild(famRow);
+  // search
+  const search=el("input");search.placeholder="Filter by control ID or title…";
+  search.style.cssText="width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px 11px;color:var(--txt);font-size:13px;margin-bottom:12px";
+  search.value=CTRL.q;
+  wrap.appendChild(search);
+  const tableWrap=el("div","scroll");wrap.appendChild(tableWrap);
+  const autoCount=all.filter(c=>c.automated).length;
+  const drawRows=()=>{
+    const q=CTRL.q.toLowerCase();
+    const filtered=all.filter(c=>!q||(c.id||"").toLowerCase().includes(q)||(c.title||"").toLowerCase().includes(q));
+    tableWrap.innerHTML=`<div class="sub" style="margin-bottom:8px">${filtered.length} of ${all.length} controls${CTRL.family!=="all"?" in "+esc(CTRL.family):""} · ${autoCount} automated ⚡</div>
+      <table><thead><tr><th>Control</th><th>Title</th><th>Family</th><th>Status</th></tr></thead><tbody>${
+      filtered.slice(0,500).map(c=>`<tr><td class="mono">${esc(c.id)}</td><td>${esc(c.title||"")}</td>
+        <td>${esc(c.family||c.family_id||"")}</td>
+        <td>${c.automated?'<span class="badge b-pass">⚡ automated</span>':'<span class="badge b-dim">reference</span>'}</td></tr>`).join("")}
+      ${filtered.length>500?`<tr><td colspan="4" style="color:var(--mid);text-align:center">+ ${filtered.length-500} more — narrow by family or search</td></tr>`:""}</tbody></table>`;
+  };
+  search.oninput=()=>{CTRL.q=search.value;drawRows();};
+  drawRows();
+}
 
 /* ============ FINDINGS ============ */
 RENDER.findings = async function() {
