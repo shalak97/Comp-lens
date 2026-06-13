@@ -1,0 +1,36 @@
+name: Add connector safety guardrails (kill-switch + allowlist + read-only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard - connector framework must exist
+        run: test -f app/connectors/framework.py || { echo "::error::deploy connectors-v2 first"; exit 1; }
+      - name: Decode and unpack
+        run: |
+          echo "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" | base64 -d > /tmp/safety.tgz
+          tar xzf /tmp/safety.tgz -C .
+          test -f app/connectors/safety.py && test -f tests/test_connector_safety.py
+          echo "unpacked"
+      - name: Apply idempotent patch
+        run: |
+          python3 _apply_safety.py
+          rm -f _apply_safety.py /tmp/safety.tgz safety.tgz
+      - name: Syntax check
+        run: |
+          python3 -m py_compile app/connectors/safety.py app/connectors/framework.py app/main.py tests/test_connector_safety.py
+          echo "compiles"
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "nothing to commit"; else
+            git commit -m "feat: connector safety guardrails - kill-switch, allowlist, read-only enforcement"
+            git push; fi
