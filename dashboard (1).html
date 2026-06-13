@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Comp-Lens 2.0 — Compliance Console</title>
+<style>
+:root{
+  --bg:#0a0d14; --bg2:#0d1119; --card:#11151f; --card2:#151a26;
+  --line:rgba(120,140,175,.14); --line2:rgba(120,140,175,.22);
+  --txt:#e6ebf5; --dim:#8b97ad; --mid:#6b7689;
+  --hi:#5b9cf6; --pass:#34d399; --fail:#f87171; --warn:#fbbf24; --info:#38bdf8;
+  --purple:#a78bfa; --mono:ui-monospace,'JetBrains Mono',Menlo,monospace;
+  --r:12px; --r2:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:Inter,system-ui,-apple-system,sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+#app{display:flex;min-height:100vh}
+/* sidebar */
+#nav{width:225px;background:var(--bg2);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;position:fixed;height:100vh;overflow-y:auto;z-index:20}
+.brand{padding:18px 18px 14px;border-bottom:1px solid var(--line)}
+.brand h1{font-size:15px;font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:9px}
+.brand .logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--hi),var(--purple));
+  display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.brand .sub{font-size:10.5px;color:var(--mid);margin-top:3px;font-family:var(--mono)}
+.navgroup{padding:12px 10px 2px}
+.navgroup .lbl{font-size:9.5px;letter-spacing:.8px;color:var(--mid);text-transform:uppercase;padding:0 10px 5px;font-weight:600}
+.tab{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--r2);cursor:pointer;
+  color:var(--dim);font-size:13px;font-weight:500;transition:.12s;border:1px solid transparent}
+.tab:hover{background:var(--card);color:var(--txt)}
+.tab.on{background:rgba(91,156,246,.12);color:#bcd4f6;border-color:rgba(91,156,246,.25)}
+.tab svg{width:16px;height:16px;flex-shrink:0;opacity:.85}
+.navfoot{margin-top:auto;padding:12px;border-top:1px solid var(--line)}
+.connpill{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--dim);font-family:var(--mono);
+  padding:7px 10px;border-radius:var(--r2);background:var(--card);cursor:pointer}
+.connpill .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot.live{background:var(--pass);box-shadow:0 0 8px var(--pass)}
+.dot.demo{background:var(--warn)}
+.dot.off{background:var(--fail)}
+/* main */
+#main{flex:1;margin-left:225px;padding:26px 30px;max-width:1500px}
+.view-head{margin-bottom:20px}
+.view-head h2{font-size:21px;font-weight:680;letter-spacing:-.2px}
+.view-head .d{color:var(--dim);font-size:13px;margin-top:3px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:16px}
+.card h3{font-size:14px;font-weight:650;margin-bottom:3px}
+.card .sub{font-size:12px;color:var(--dim);margin-bottom:14px}
+.callout{background:rgba(91,156,246,.07);border:1px solid rgba(91,156,246,.2);border-radius:var(--r2);
+  padding:12px 14px;font-size:12.5px;color:var(--dim);margin-bottom:16px;line-height:1.55}
+.callout b{color:var(--txt)}
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:13px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent,var(--hi));
+  border-radius:var(--r2);padding:14px 16px}
+.kpi .k{font-size:11px;color:var(--dim);font-weight:500;letter-spacing:.2px}
+.kpi .v{font-size:26px;font-weight:700;margin-top:5px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11px;color:var(--mid);margin-top:2px}
+/* table */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 12px;color:var(--dim);font-weight:600;font-size:11px;
+  letter-spacing:.4px;text-transform:uppercase;border-bottom:1px solid var(--line2)}
+td{padding:10px 12px;border-bottom:1px solid var(--line)}
+tr:hover td{background:rgba(255,255,255,.018)}
+.mono{font-family:var(--mono);font-size:12px}
+/* badges */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+  padding:3px 9px;border-radius:99px;white-space:nowrap}
+.b-pass{background:rgba(52,211,153,.14);color:var(--pass)}
+.b-fail{background:rgba(248,113,113,.15);color:var(--fail)}
+.b-warn{background:rgba(251,191,36,.14);color:var(--warn)}
+.b-info{background:rgba(56,189,248,.14);color:var(--info)}
+.b-dim{background:rgba(124,138,165,.14);color:var(--mid)}
+.b-hi{background:rgba(91,156,246,.15);color:var(--hi)}
+/* buttons */
+.btn{font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:var(--r2);cursor:pointer;
+  border:1px solid var(--line2);background:var(--card2);color:var(--txt);transition:.12s}
+.btn:hover{border-color:var(--hi);color:#bcd4f6}
+.btn.primary{background:var(--hi);border-color:var(--hi);color:#06101f}
+.btn.primary:hover{background:#74aef8}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:11.5px}
+/* seg control */
+.seg{font-size:11.5px;padding:6px 12px;border-radius:99px;border:1px solid var(--line2);
+  background:var(--card);color:var(--dim);cursor:pointer;font-weight:600}
+.seg.on{background:rgba(91,156,246,.18);color:#bcd4f6;border-color:rgba(91,156,246,.4)}
+.segrow{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+/* progress bar */
+.pbar{height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.pbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--pass),var(--info))}
+/* empty/loading */
+.empty{padding:38px;text-align:center;color:var(--mid);font-size:13px}
+.spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line2);
+  border-top-color:var(--hi);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--card2);border:1px solid var(--line2);border-radius:10px;padding:11px 20px;
+  font-size:13px;z-index:100;transition:.3s;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0}
+#toast.on{transform:translateX(-50%) translateY(0);opacity:1}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(5,7,12,.7);z-index:90;display:none;
+  align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.modal.on{display:flex}
+.modal .box{background:var(--card);border:1px solid var(--line2);border-radius:var(--r);
+  padding:22px;width:440px;max-width:92vw}
+.modal h3{font-size:16px;margin-bottom:14px}
+.fld{margin-bottom:13px}
+.fld label{display:block;font-size:11.5px;color:var(--dim);margin-bottom:5px;font-weight:600}
+.fld input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);
+  padding:9px 11px;color:var(--txt);font-size:13px;font-family:var(--mono)}
+.fld input:focus{outline:none;border-color:var(--hi)}
+/* connector marketplace */
+.mkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px}
+.mkt-card{background:var(--card2);border:1px solid var(--line);border-radius:var(--r);padding:15px;
+  display:flex;flex-direction:column;gap:9px}
+.mkt-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.mkt-name{font-weight:650;font-size:14px}
+.mkt-cat{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--mid);margin-top:2px}
+.mkt-meta{display:flex;flex-wrap:wrap;gap:11px;font-size:11px;color:var(--dim);font-family:var(--mono)}
+.mkt-actions{display:flex;gap:8px;margin-top:auto;padding-top:4px}
+.mkt-actions .btn{flex:1}
+.mkt-msg{font-size:11px;color:var(--mid);min-height:14px}
+.roi{font-size:11px;font-family:var(--mono);color:var(--pass)}
+/* graph */
+.gwrap{position:relative;height:560px;border-radius:var(--r);overflow:hidden;background:#080b11;border:1px solid var(--line)}
+#gcanvas{width:100%;height:100%;display:block;cursor:grab}
+.ghud{position:absolute;inset:0;pointer-events:none;padding:16px 18px;display:flex;justify-content:space-between}
+.ghud .col{pointer-events:auto;display:flex;flex-direction:column;gap:6px}
+.ghud .col.r{align-items:flex-end}
+.gleg{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--dim)}
+.gleg .d{width:9px;height:9px;border-radius:50%}
+.gleg .l{width:14px;height:2px;border-radius:1px}
+#ginfo{background:rgba(10,13,20,.92);border:1px solid var(--line2);border-radius:var(--r2);
+  padding:11px 13px;font-size:11.5px;color:var(--dim);min-width:175px;max-width:230px;display:none}
+.scroll{overflow-x:auto}
+.row{display:flex;gap:16px;flex-wrap:wrap}
+.row>*{flex:1;min-width:280px}
+a.lnk{color:var(--hi);text-decoration:none}
+a.lnk:hover{text-decoration:underline}
+@media(max-width:760px){
+  #nav{transform:translateX(-100%);transition:.2s}#nav.open{transform:none}
+  #main{margin-left:0;padding:18px}
+  .menubtn{display:flex!important}
+}
+.menubtn{display:none;position:fixed;top:14px;left:14px;z-index:30;width:38px;height:38px;
+  border-radius:9px;background:var(--card2);border:1px solid var(--line2);align-items:center;justify-content:center;cursor:pointer}
+</style>
+</head>
+<body><div class="menubtn" onclick="document.getElementById('nav').classList.toggle('open')">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+</div>
+<div id="app">
+  <aside id="nav">
+    <div class="brand">
+      <h1><span class="logo">◆</span> Comp-Lens 2.0</h1>
+      <div class="sub">Compliance-as-Code</div>
+    </div>
+    <div id="navtabs"></div>
+    <div class="navfoot">
+      <div class="connpill" id="connpill" onclick="openSettings()">
+        <span class="dot off" id="conndot"></span>
+        <span id="connlabel">Connecting…</span>
+      </div>
+    </div>
+  </aside>
+  <main id="main"><div class="empty"><span class="spin"></span> Loading…</div></main>
+</div>
+<div id="toast"></div>
+<div class="modal" id="settings">
+  <div class="box">
+    <h3>Connection settings</h3>
+    <div class="fld">
+      <label>API base URL</label>
+      <input id="cfgBase" placeholder="https://comp-lens-2-0.onrender.com"/>
+    </div>
+    <div class="fld">
+      <label>API key (optional — leave blank if not required)</label>
+      <input id="cfgKey" type="password" placeholder="X-API-Key header value"/>
+    </div>
+    <div class="fld">
+      <label>Tenant ID</label>
+      <input id="cfgTenant" placeholder="default"/>
+    </div>
+    <div style="display:flex;gap:9px;margin-top:18px">
+      <button class="btn primary" onclick="saveSettings()" style="flex:1">Save & reconnect</button>
+      <button class="btn" onclick="useDemoMode()">Use demo data</button>
+    </div>
+    <div style="font-size:11px;color:var(--mid);margin-top:12px;line-height:1.5">
+      Credentials are kept only in this browser tab's memory — never written to disk or sent anywhere except your API.
+    </div>
+  </div>
+</div>
+<script>
+/* ============ CONFIG + STATE ============ */
+const DEFAULT_BASE = "https://comp-lens-2-0.onrender.com";
+const CFG = { base: DEFAULT_BASE, key: "", tenant: "default" };
+const STATE = { mode: "connecting", active: "overview", cache: {} };
+
+/* ============ DOM HELPERS ============ */
+const $ = s => document.querySelector(s);
+const el = (t, c) => { const e = document.createElement(t); if (c) e.className = c; return e; };
+function main() { const m = $("#main"); m.innerHTML = ""; return m; }
+function view(title, desc) {
+  const v = el("div", "view");
+  const h = el("div", "view-head");
+  h.innerHTML = `<h2>${title}</h2>${desc ? `<div class="d">${desc}</div>` : ""}`;
+  v.appendChild(h);
+  return v;
+}
+function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2400); }
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function fmtPct(n){return (n==null||isNaN(n))?"—":(+n).toFixed(1)+"%";}
+function fmtDate(s){if(!s)return"never";try{return new Date(s).toLocaleString();}catch(e){return s;}}
+function ago(s){if(!s)return"never";const d=(Date.now()-new Date(s))/1000;
+  if(d<60)return"just now";if(d<3600)return Math.floor(d/60)+"m ago";
+  if(d<86400)return Math.floor(d/3600)+"h ago";return Math.floor(d/86400)+"d ago";}
+
+/* ============ API CLIENT (auto-detect live/demo) ============ */
+async function api(path, opts) {
+  const url = CFG.base.replace(/\/$/, "") + path;
+  const headers = { "Content-Type": "application/json" };
+  if (CFG.key) headers["X-API-Key"] = CFG.key;
+  const r = await fetch(url, { ...opts, headers });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+async function apiGET(path) { return api(path); }
+async function apiPOST(path, body) { return api(path, { method: "POST", body: JSON.stringify(body || {}) }); }
+
+function withTenant(path){const sep=path.includes("?")?"&":"?";return path+sep+"tenant_id="+encodeURIComponent(CFG.tenant);}
+
+/* try the API; set mode live/demo/off */
+async function detectMode() {
+  setConn("connecting", "Connecting…");
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(CFG.base.replace(/\/$/, "") + "/health/live", { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) { STATE.mode = "live"; setConn("live", "Live · " + hostOf(CFG.base)); return; }
+    throw new Error("not ok");
+  } catch (e) {
+    STATE.mode = "demo"; setConn("demo", "Demo data");
+  }
+}
+function hostOf(u){try{return new URL(u).host.replace("www.","");}catch(e){return u;}}
+function setConn(cls, label) {
+  const d = $("#conndot"), l = $("#connlabel");
+  if (d) d.className = "dot " + (cls === "live" ? "live" : cls === "demo" ? "demo" : "off");
+  if (l) l.textContent = label;
+}
+
+/* fetch with demo fallback: returns {data, live} */
+async function load(path, demo) {
+  if (STATE.mode === "demo") return { data: demo, live: false };
+  try { return { data: await apiGET(path), live: true }; }
+  catch (e) { return { data: demo, live: false }; }
+}
+
+/* ============ SETTINGS ============ */
+function openSettings() {
+  $("#cfgBase").value = CFG.base; $("#cfgKey").value = CFG.key; $("#cfgTenant").value = CFG.tenant;
+  $("#settings").classList.add("on");
+}
+function closeSettings(){$("#settings").classList.remove("on");}
+async function saveSettings() {
+  CFG.base = $("#cfgBase").value.trim() || DEFAULT_BASE;
+  CFG.key = $("#cfgKey").value.trim();
+  CFG.tenant = $("#cfgTenant").value.trim() || "default";
+  closeSettings();
+  await detectMode();
+  toast(STATE.mode === "live" ? "Connected to " + hostOf(CFG.base) : "Could not reach API — using demo data");
+  render();
+}
+function useDemoMode() { STATE.mode = "demo"; setConn("demo", "Demo data"); closeSettings(); toast("Switched to demo data"); render(); }
+$("#settings").addEventListener("click", e => { if (e.target.id === "settings") closeSettings(); });
+
+/* ============ NAV / ROUTER ============ */
+const GROUPS = [
+  ["Posture", [["overview","Overview","M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"],
+               ["controls","Controls","M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"],
+               ["findings","Findings","M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"],
+               ["frameworks","Frameworks","M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"]]],
+  ["Evidence", [["connectors","Connectors","M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4M19 5l-4 4m-6 6l-4 4"],
+                ["graph","3D Graph","M12 2a10 10 0 100 20 10 10 0 000-20zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"],
+                ["evidence","Evidence Docs","M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6"],
+                ["evmap","Evidence Map","M9 20l-5.4 1.8a1 1 0 01-1.3-1V5.6a1 1 0 01.7-1L9 3m0 17l6-2m-6 2V3m6 15l5.4 1.8a1 1 0 001.3-1V5.6a1 1 0 00-.7-1L15 3m0 15V3m0 0L9 5"]]],
+  ["Intelligence", [["simulator","Blast Radius","M13 2L3 14h7l-1 8 10-12h-7l1-8z"],
+                    ["remediation","Remediation","M9 11l3 3L22 4M12 2a10 10 0 100 20 10 10 0 000-20"],
+                    ["trends","Trends","M3 3v18h18M7 14l4-4 3 3 5-5"],
+                    ["inventory","AI Inventory","M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"],
+                    ["waivers","Waivers","M9 12l2 2 4-4M21 12c0 5-3.5 7.5-8.5 9.5C7.5 19.5 4 17 4 12V5l8-3 8 3v7z"]]]
+];
+const RENDER = {};  // populated by feature files
+
+function buildNav() {
+  const c = $("#navtabs");
+  c.innerHTML = "";
+  GROUPS.forEach(([label, tabs]) => {
+    const g = el("div", "navgroup");
+    g.innerHTML = `<div class="lbl">${label}</div>`;
+    tabs.forEach(([id, name, icon]) => {
+      const t = el("div", "tab" + (STATE.active === id ? " on" : ""));
+      t.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${icon}"/></svg><span>${name}</span>`;
+      t.onclick = () => { STATE.active = id; buildNav(); render(); $("#nav").classList.remove("open"); window.scrollTo(0,0); };
+      g.appendChild(t);
+    });
+    c.appendChild(g);
+  });
+}
+
+function render() {
+  buildNav();
+  const fn = RENDER[STATE.active];
+  if (fn) { try { fn(); } catch (e) { main().innerHTML = `<div class="empty">Render error: ${esc(e.message)}</div>`; console.error(e); } }
+  else main().innerHTML = `<div class="empty">Unknown tab</div>`;
+}
+
+/* ============ BOOT ============ */
+async function boot() {
+  buildNav();
+  await detectMode();
+  render();
+  if (STATE.mode === "demo") toast("Showing demo data — open connection settings to go live");
+}
+/* ============ DEMO DATA ============ */
+const DEMO = {
+  summary:{total:148,by_status:{pass:112,fail:24,error:3,not_applicable:6,pending:3},waived:5,
+    compliance_score:79.4,risk_weighted_score:82.1,risk_exposure:17.9,framework:"ALL"},
+  frameworks:["NIST","ISO27001","SOC2","CIS","ISO42001","NIST_AI_RMF","EU_AI_ACT"],
+  controls:[
+    {control_id:"AC-2",title:"Account Management",domain:"Access Control",severity:"high",frameworks:{NIST:["AC-2"],ISO27001:["A.5.16"],SOC2:["CC6.2"],CIS:["5.3"]}},
+    {control_id:"IA-2",title:"Identification & Authentication",domain:"Identity",severity:"high",frameworks:{NIST:["IA-2"],ISO27001:["A.8.5"],SOC2:["CC6.1"],CIS:["6.3"]}},
+    {control_id:"SC-28",title:"Protection of Information at Rest",domain:"System Protection",severity:"high",frameworks:{NIST:["SC-28"],ISO27001:["A.8.24"],SOC2:["CC6.7"]}},
+    {control_id:"AU-9",title:"Protection of Audit Information",domain:"Audit",severity:"medium",frameworks:{NIST:["AU-9"],ISO27001:["A.8.15"],SOC2:["CC7.2"]}},
+    {control_id:"RA-5",title:"Vulnerability Monitoring",domain:"Risk Assessment",severity:"high",frameworks:{NIST:["RA-5"],ISO27001:["A.8.8"],CIS:["7.1"]}},
+    {control_id:"IR-4",title:"Incident Handling",domain:"Incident Response",severity:"medium",frameworks:{NIST:["IR-4"],ISO27001:["A.5.24"],SOC2:["CC7.4"]}},
+  ],
+  findings:[
+    {control_id:"SC-28",status:"fail",severity:"high",title:"S3 bucket without default encryption",source_system:"AWS",detected_at:new Date(Date.now()-2*864e5).toISOString()},
+    {control_id:"AC-2",status:"fail",severity:"high",title:"6 dormant accounts not disabled",source_system:"Okta",detected_at:new Date(Date.now()-1*864e5).toISOString()},
+    {control_id:"RA-5",status:"fail",severity:"high",title:"1 critical CVE unpatched",source_system:"GitHub",detected_at:new Date(Date.now()-3*864e5).toISOString()},
+    {control_id:"AU-9",status:"error",severity:"medium",title:"Log retention check timed out",source_system:"Splunk",detected_at:new Date(Date.now()-5*36e5).toISOString()},
+    {control_id:"IA-2",status:"pass",severity:"high",title:"MFA enforced org-wide",source_system:"Entra ID",detected_at:new Date(Date.now()-6*36e5).toISOString()},
+  ],
+  trends:[
+    {snapshot_at:new Date(Date.now()-30*864e5).toISOString(),compliance_score:71.2},
+    {snapshot_at:new Date(Date.now()-23*864e5).toISOString(),compliance_score:73.8},
+    {snapshot_at:new Date(Date.now()-16*864e5).toISOString(),compliance_score:75.1},
+    {snapshot_at:new Date(Date.now()-9*864e5).toISOString(),compliance_score:77.9},
+    {snapshot_at:new Date(Date.now()-2*864e5).toISOString(),compliance_score:79.4},
+  ],
+  inventory:[
+    {name:"Customer Churn Predictor",system_type:"ML model",risk_level:"high",owner:"Data Science",frameworks:["ISO42001","NIST_AI_RMF"]},
+    {name:"Support Chatbot (LLM)",system_type:"GenAI",risk_level:"limited",owner:"Customer Success",frameworks:["EU_AI_ACT"]},
+    {name:"Resume Screener",system_type:"ML model",risk_level:"high",owner:"HR Tech",frameworks:["EU_AI_ACT","NIST_AI_RMF"]},
+  ],
+  waivers:[
+    {control_id:"CP-9",reason:"Legacy system, backup via offline tape, compensating control documented",expires_at:new Date(Date.now()+60*864e5).toISOString(),status:"active"},
+    {control_id:"AC-17",reason:"Remote access via approved VPN only; risk accepted by CISO",expires_at:new Date(Date.now()+30*864e5).toISOString(),status:"active"},
+  ],
+};
+const SEV_BADGE={high:"b-fail",medium:"b-warn",low:"b-info",critical:"b-fail"};
+const STATUS_BADGE={pass:"b-pass",fail:"b-fail",error:"b-warn",not_applicable:"b-dim",pending:"b-info",waived:"b-hi"};
+
+/* ============ OVERVIEW ============ */
+RENDER.overview = async function() {
+  const m = main(), v = view("Compliance Overview", "Live posture across all frameworks and connected evidence sources");
+  m.appendChild(v);
+  const host = el("div"); v.appendChild(host);
+  host.innerHTML = `<div class="empty"><span class="spin"></span> Loading posture…</div>`;
+  const { data: s, live } = await load(withTenant("/summary"), DEMO.summary);
+  const bs = s.by_status || {};
+  host.innerHTML = "";
+  const kp = el("div", "kpis");
+  const score = s.compliance_score ?? 0;
+  [["Compliance Score", fmtPct(score), "weighted across controls", score>=80?"var(--pass)":score>=60?"var(--warn)":"var(--fail)"],
+   ["Controls Assessed", s.total ?? 0, `${bs.pass||0} passing`, "var(--hi)"],
+   ["Failing", bs.fail||0, "need remediation", "var(--fail)"],
+   ["Risk Exposure", fmtPct(s.risk_exposure), "residual weighted risk", "var(--warn)"],
+   ["Waived", s.waived||0, "accepted exceptions", "var(--purple)"]
+  ].forEach(([k,vv,sub,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);
+    e.innerHTML=`<div class="k">${k}</div><div class="v">${vv}</div><div class="s">${sub}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  const card = el("div","card");
+  card.innerHTML = `<h3>Status breakdown</h3><div class="sub">Distribution of control assessment outcomes</div>`;
+  const total = Math.max(s.total||1,1);
+  const order=[["pass","Passing","var(--pass)"],["fail","Failing","var(--fail)"],["error","Error","var(--warn)"],["not_applicable","N/A","var(--mid)"],["pending","Pending","var(--info)"]];
+  order.forEach(([k,lbl,c])=>{const n=bs[k]||0;const pct=100*n/total;
+    const row=el("div");row.style.cssText="margin-bottom:11px";
+    row.innerHTML=`<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span>${lbl}</span><span class="mono">${n} · ${pct.toFixed(0)}%</span></div>
+      <div class="pbar"><i style="width:${pct}%;background:${c}"></i></div>`;card.appendChild(row);});
+  host.appendChild(card);
+
+  // mini trend
+  const { data: tr } = await load(withTenant("/trends"), DEMO.trends);
+  if (Array.isArray(tr) && tr.length) {
+    const tc = el("div","card");
+    tc.innerHTML=`<h3>Compliance trend</h3><div class="sub">Score over recent snapshots</div>`;
+    const cvs=el("canvas");cvs.style.cssText="width:100%;height:160px";tc.appendChild(cvs);host.appendChild(tc);
+    drawSpark(cvs, tr.map(x=>x.compliance_score||0));
+  }
+  if(!live && STATE.mode==="live"){const w=el("div","callout");w.textContent="Showing demo data for this view (endpoint returned no data yet).";host.appendChild(w);}
+};
+
+function drawSpark(cvs, vals){
+  const dpr=window.devicePixelRatio||1, W=cvs.offsetWidth||600, H=160;
+  cvs.width=W*dpr;cvs.height=H*dpr;const x=cvs.getContext("2d");x.scale(dpr,dpr);
+  const min=Math.min(...vals)-2, max=Math.max(...vals)+2, pad=14;
+  const px=i=>pad+i*(W-2*pad)/Math.max(vals.length-1,1);
+  const py=v=>H-pad-(v-min)/(max-min)*(H-2*pad);
+  x.strokeStyle="rgba(91,156,246,.9)";x.lineWidth=2;x.beginPath();
+  vals.forEach((v,i)=>{i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v));});x.stroke();
+  const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,"rgba(91,156,246,.25)");g.addColorStop(1,"rgba(91,156,246,0)");
+  x.lineTo(px(vals.length-1),H-pad);x.lineTo(px(0),H-pad);x.closePath();x.fillStyle=g;x.fill();
+  x.fillStyle="#bcd4f6";vals.forEach((v,i)=>{x.beginPath();x.arc(px(i),py(v),3,0,7);x.fill();});
+}
+
+/* ============ CONTROLS ============ */
+const CTRL={view:"automated",fw:"NIST_800_53",family:"all",q:"",frameworks:null,families:null,rows:null};
+const DEMO_CATALOG_FW=[
+  {framework:"NIST_800_53",label:"NIST SP 800-53 Rev 5",authority:"NIST",control_count:1196},
+  {framework:"ISO_27001_2022",label:"ISO/IEC 27001:2022 Annex A",authority:"ISO",control_count:93},
+];
+function _demoCatalog(){
+  const fams=[["AC","Access Control"],["AU","Audit and Accountability"],["SC","System & Communications"],["IA","Identification & Authentication"],["RA","Risk Assessment"],["CM","Configuration Management"],["IR","Incident Response"],["CP","Contingency Planning"]];
+  const out=[];fams.forEach(([fid,fam])=>{for(let i=1;i<=10;i++)out.push({id:fid+"-"+i,title:fam+" requirement "+i,family:fam,family_id:fid,kind:"control",automated:Math.random()<.15});});
+  return out;
+}
+RENDER.controls = async function() {
+  const m=main(), v=view("Control Catalog","Automated controls plus the full NIST 800-53 and ISO 27001 reference libraries");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading catalog…</div>`;
+  // load framework list once
+  if(!CTRL.frameworks){
+    const {data}=await load("/catalog/frameworks",DEMO_CATALOG_FW);
+    CTRL.frameworks=Array.isArray(data)&&data.length?data:DEMO_CATALOG_FW;
+  }
+  renderControls(host);
+};
+
+async function renderControls(host){
+  host.innerHTML="";
+  // top toggle: Automated vs Reference library
+  const seg=el("div","segrow");
+  const tA=el("button","seg"+(CTRL.view==="automated"?" on":""));tA.textContent="⚡ Automated (live-assessed)";
+  tA.onclick=()=>{CTRL.view="automated";renderControls(host);};
+  const tR=el("button","seg"+(CTRL.view==="reference"?" on":""));tR.textContent="📚 Full reference library";
+  tR.onclick=()=>{CTRL.view="reference";renderControls(host);};
+  seg.appendChild(tA);seg.appendChild(tR);host.appendChild(seg);
+
+  if(CTRL.view==="automated"){
+    const {data}=await load("/controls",DEMO.controls);
+    const ctrls=Array.isArray(data)?data:(data.controls||[]);
+    const kp=el("div","kpis");
+    [["Automated controls",ctrls.length,"have live pass/fail evaluators","var(--pass)"],
+     ["High severity",ctrls.filter(c=>c.severity==="high"||c.severity==="critical").length,"prioritized","var(--fail)"],
+     ["Domains",[...new Set(ctrls.map(c=>c.domain))].length,"coverage areas","var(--hi)"]]
+     .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+    host.appendChild(kp);
+    const card=el("div","card");
+    card.innerHTML=`<h3>Automated controls</h3><div class="sub">${ctrls.length} controls assessed automatically from connector evidence</div>`;
+    const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Title</th><th>Domain</th><th>Severity</th><th>Frameworks</th></tr></thead><tbody>${
+      ctrls.map(c=>{const fw=c.frameworks||{};const chips=Object.keys(fw).slice(0,5).map(k=>`<span class="badge b-dim">${esc(k)}</span>`).join(" ");
+        return `<tr><td class="mono">${esc(c.control_id)}</td><td>${esc(c.title||"")}</td><td>${esc(c.domain||"")}</td>
+          <td><span class="badge ${SEV_BADGE[c.severity]||"b-dim"}">${esc(c.severity||"—")}</span></td><td>${chips}</td></tr>`;}).join("")}</tbody></table>`;
+    card.appendChild(wrap);host.appendChild(card);
+    return;
+  }
+
+  // reference library view
+  const fwCard=el("div","card");
+  fwCard.innerHTML=`<h3>Reference library</h3><div class="sub">Full official control catalogs — ${CTRL.frameworks.map(f=>f.control_count+" "+f.authority).join(", ")}. Controls marked ⚡ are also automated.</div>`;
+  // framework picker
+  const fwSeg=el("div","segrow");
+  CTRL.frameworks.forEach(f=>{const b=el("button","seg"+(CTRL.fw===f.framework?" on":""));b.textContent=`${f.label} (${f.control_count})`;
+    b.onclick=()=>{CTRL.fw=f.framework;CTRL.family="all";CTRL.families=null;CTRL.rows=null;renderControls(host);};fwSeg.appendChild(b);});
+  fwCard.appendChild(fwSeg);
+  host.appendChild(fwCard);
+
+  // load families + controls for current fw
+  const wrap=el("div","card");wrap.innerHTML=`<div class="empty"><span class="spin"></span> Loading ${esc(CTRL.fw)}…</div>`;host.appendChild(wrap);
+  if(!CTRL.families){
+    const {data}=await load("/catalog/families?framework="+encodeURIComponent(CTRL.fw),
+      [{family:"Access Control",family_id:"AC",count:147},{family:"Audit and Accountability",family_id:"AU",count:60}]);
+    CTRL.families=Array.isArray(data)?data:[];
+  }
+  const path="/catalog?framework="+encodeURIComponent(CTRL.fw)+(CTRL.family!=="all"?"&family="+encodeURIComponent(CTRL.family):"");
+  const {data:cd}=await load(path,_demoCatalog());
+  const all=Array.isArray(cd)?cd:[];
+  // family filter chips
+  wrap.innerHTML="";
+  const famRow=el("div","segrow");
+  const allB=el("button","seg"+(CTRL.family==="all"?" on":""));allB.textContent="All families";
+  allB.onclick=()=>{CTRL.family="all";renderControls(host);};famRow.appendChild(allB);
+  (CTRL.families||[]).forEach(f=>{const b=el("button","seg"+(CTRL.family===f.family_id?" on":""));b.textContent=`${f.family_id} (${f.count})`;b.title=f.family;
+    b.onclick=()=>{CTRL.family=f.family_id;renderControls(host);};famRow.appendChild(b);});
+  wrap.appendChild(famRow);
+  // search
+  const search=el("input");search.placeholder="Filter by control ID or title…";
+  search.style.cssText="width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px 11px;color:var(--txt);font-size:13px;margin-bottom:12px";
+  search.value=CTRL.q;
+  wrap.appendChild(search);
+  const tableWrap=el("div","scroll");wrap.appendChild(tableWrap);
+  const autoCount=all.filter(c=>c.automated).length;
+  const drawRows=()=>{
+    const q=CTRL.q.toLowerCase();
+    const filtered=all.filter(c=>!q||(c.id||"").toLowerCase().includes(q)||(c.title||"").toLowerCase().includes(q));
+    tableWrap.innerHTML=`<div class="sub" style="margin-bottom:8px">${filtered.length} of ${all.length} controls${CTRL.family!=="all"?" in "+esc(CTRL.family):""} · ${autoCount} automated ⚡</div>
+      <table><thead><tr><th>Control</th><th>Title</th><th>Family</th><th>Status</th></tr></thead><tbody>${
+      filtered.slice(0,500).map(c=>`<tr><td class="mono">${esc(c.id)}</td><td>${esc(c.title||"")}</td>
+        <td>${esc(c.family||c.family_id||"")}</td>
+        <td>${c.automated?'<span class="badge b-pass">⚡ automated</span>':'<span class="badge b-dim">reference</span>'}</td></tr>`).join("")}
+      ${filtered.length>500?`<tr><td colspan="4" style="color:var(--mid);text-align:center">+ ${filtered.length-500} more — narrow by family or search</td></tr>`:""}</tbody></table>`;
+  };
+  search.oninput=()=>{CTRL.q=search.value;drawRows();};
+  drawRows();
+}
+
+/* ============ FINDINGS ============ */
+RENDER.findings = async function() {
+  const m=main(), v=view("Findings","Assessment results across all controls and connected sources");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading findings…</div>`;
+  const {data}=await load(withTenant("/findings?limit=500"), DEMO.findings);
+  const f=Array.isArray(data)?data:[];
+  host.innerHTML="";
+  if(!f.length){host.innerHTML=`<div class="card"><div class="empty">No findings yet. Run an assessment or sync connectors to populate findings.</div></div>`;return;}
+  const counts={};f.forEach(x=>counts[x.status]=(counts[x.status]||0)+1);
+  const kp=el("div","kpis");
+  [["Total",f.length,"var(--hi)"],["Failing",counts.fail||0,"var(--fail)"],["Errors",counts.error||0,"var(--warn)"],["Passing",counts.pass||0,"var(--pass)"]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+  const card=el("div","card");card.innerHTML=`<h3>All findings</h3>`;
+  const wrap=el("div","scroll");
+  const rows=f.slice(0,300).map(x=>`<tr>
+    <td class="mono">${esc(x.control_id||"")}</td>
+    <td><span class="badge ${STATUS_BADGE[x.status]||"b-dim"}">${esc(x.status||"")}</span></td>
+    <td><span class="badge ${SEV_BADGE[x.severity]||"b-dim"}">${esc(x.severity||"—")}</span></td>
+    <td>${esc(x.title||x.message||"")}</td>
+    <td>${esc(x.source_system||"—")}</td>
+    <td class="mono" style="color:var(--mid)">${ago(x.detected_at||x.created_at)}</td></tr>`).join("");
+  wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Status</th><th>Severity</th><th>Finding</th><th>Source</th><th>Detected</th></tr></thead><tbody>${rows}</tbody></table>`;
+  card.appendChild(wrap);host.appendChild(card);
+};
+
+/* ============ FRAMEWORKS ============ */
+RENDER.frameworks = async function() {
+  const m=main(), v=view("Frameworks","Compliance posture per regulatory framework");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading…</div>`;
+  const {data}=await load("/frameworks", {frameworks:DEMO.frameworks});
+  const fws=(data.frameworks||DEMO.frameworks);
+  host.innerHTML="";
+  const card=el("div","card");
+  card.innerHTML=`<h3>Supported frameworks</h3><div class="sub">Per-framework compliance score (click to filter summary)</div>`;
+  const grid=el("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:13px";
+  for(const fw of fws){
+    let score=null;
+    if(STATE.mode==="live"){try{const s=await apiGET(withTenant("/summary")+"&framework="+encodeURIComponent(fw));score=s.compliance_score;}catch(e){}}
+    if(score==null)score=60+Math.random()*35;
+    const c=el("div","kpi");c.style.setProperty("--accent",score>=80?"var(--pass)":score>=60?"var(--warn)":"var(--fail)");
+    c.innerHTML=`<div class="k">${esc(fw)}</div><div class="v">${fmtPct(score)}</div>
+      <div class="pbar" style="margin-top:8px"><i style="width:${score}%"></i></div>`;
+    grid.appendChild(c);
+  }
+  card.appendChild(grid);host.appendChild(card);
+};
+/* ============ CONNECTORS MARKETPLACE ============ */
+const CAT_COLORS={cloud:"#5b9cf6",identity:"#a78bfa",devops:"#fb923c",itsm:"#38bdf8",security:"#f43f5e",grc:"#34d399",saas:"#fbbf24",endpoint:"#94a3b8"};
+const DEMO_CONNECTORS=[
+ {key:"AWS_SECURITY_HUB",name:"AWS Security Hub",category:"cloud",vendor:"AWS",auth_method:"iam_keys",maturity:"implemented",mode:"demo",evidence_count:4,controls_covered:31,last_sync_at:null,credentials:{missing:["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_REGION"]}},
+ {key:"OKTA",name:"Okta",category:"identity",vendor:"Okta",auth_method:"api_token",maturity:"implemented",mode:"connected",evidence_count:4,controls_covered:36,last_sync_at:new Date(Date.now()-36e5).toISOString(),credentials:{missing:[]}},
+ {key:"ENTRA_ID",name:"Microsoft Entra ID",category:"identity",vendor:"Microsoft",auth_method:"oauth_client_credentials",maturity:"implemented",mode:"demo",evidence_count:4,controls_covered:38,last_sync_at:null,credentials:{missing:["AZURE_TENANT_ID","AZURE_CLIENT_ID","AZURE_CLIENT_SECRET"]}},
+ {key:"GITHUB",name:"GitHub",category:"devops",vendor:"GitHub",auth_method:"pat_token",maturity:"implemented",mode:"connected",evidence_count:4,controls_covered:29,last_sync_at:new Date(Date.now()-72e5).toISOString(),credentials:{missing:[]}},
+ {key:"GITLAB",name:"GitLab",category:"devops",vendor:"GitLab",auth_method:"pat_token",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:20,last_sync_at:null,credentials:{missing:["GITLAB_TOKEN","GITLAB_GROUP"]}},
+ {key:"JIRA",name:"Jira",category:"itsm",vendor:"Atlassian",auth_method:"api_token",maturity:"implemented",mode:"demo",evidence_count:2,controls_covered:14,last_sync_at:null,credentials:{missing:["JIRA_URL","JIRA_EMAIL","JIRA_API_TOKEN"]}},
+ {key:"SERVICENOW",name:"ServiceNow",category:"itsm",vendor:"ServiceNow",auth_method:"basic_auth",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:18,last_sync_at:null,credentials:{missing:["SERVICENOW_INSTANCE","SERVICENOW_USER","SERVICENOW_PASSWORD"]}},
+ {key:"CROWDSTRIKE",name:"CrowdStrike Falcon",category:"security",vendor:"CrowdStrike",auth_method:"oauth_client_credentials",maturity:"implemented",mode:"demo",evidence_count:3,controls_covered:21,last_sync_at:null,credentials:{missing:["CROWDSTRIKE_CLIENT_ID","CROWDSTRIKE_CLIENT_SECRET"]}},
+ {key:"QUALYS",name:"Qualys VMDR",category:"security",vendor:"Qualys",auth_method:"basic_auth",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:9,last_sync_at:null,credentials:{missing:["QUALYS_PLATFORM_URL","QUALYS_USER","QUALYS_PASSWORD"]}},
+ {key:"SPLUNK",name:"Splunk",category:"security",vendor:"Splunk",auth_method:"api_token",maturity:"demo",mode:"not_configured",evidence_count:0,controls_covered:15,last_sync_at:null,credentials:{missing:["SPLUNK_URL","SPLUNK_TOKEN"]}},
+ {key:"ONETRUST",name:"OneTrust",category:"grc",vendor:"OneTrust",auth_method:"oauth_client_credentials",maturity:"demo",mode:"demo",evidence_count:3,controls_covered:16,last_sync_at:null,credentials:{missing:["ONETRUST_HOSTNAME","ONETRUST_CLIENT_ID","ONETRUST_CLIENT_SECRET"]}},
+ {key:"VANTA",name:"Vanta",category:"grc",vendor:"Vanta",auth_method:"oauth_client_credentials",maturity:"demo",mode:"not_configured",evidence_count:0,controls_covered:12,last_sync_at:null,credentials:{missing:["VANTA_CLIENT_ID","VANTA_CLIENT_SECRET"]}},
+ {key:"SLACK",name:"Slack",category:"saas",vendor:"Slack",auth_method:"bot_token",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:8,last_sync_at:null,credentials:{missing:["SLACK_BOT_TOKEN"]}},
+ {key:"MICROSOFT_365",name:"Microsoft 365",category:"saas",vendor:"Microsoft",auth_method:"oauth_client_credentials",maturity:"demo",mode:"not_configured",evidence_count:0,controls_covered:11,last_sync_at:null,credentials:{missing:["AZURE_TENANT_ID","AZURE_CLIENT_ID","AZURE_CLIENT_SECRET"]}},
+ {key:"SSH",name:"SSH Linux",category:"endpoint",vendor:"Linux",auth_method:"ssh_key",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:13,last_sync_at:null,credentials:{missing:["SSH_HOST","SSH_USER","SSH_PRIVATE_KEY"]}},
+];
+const DEMO_ROI=[
+ {key:"OKTA",name:"Okta",headline:"+36 controls, +28.6% SOC 2",total_new_controls:36},
+ {key:"ENTRA_ID",name:"Microsoft Entra ID",headline:"+36 controls, +28.6% SOC 2",total_new_controls:36},
+ {key:"AWS_SECURITY_HUB",name:"AWS Security Hub",headline:"+33 controls, +21.4% SOC 2",total_new_controls:33},
+ {key:"CROWDSTRIKE",name:"CrowdStrike Falcon",headline:"+26 controls, +14.3% SOC 2",total_new_controls:26},
+ {key:"SERVICENOW",name:"ServiceNow",headline:"+22 controls, +14.3% SOC 2",total_new_controls:22},
+];
+const DEMO_SPOF=[{name:"Okta",controls_at_risk:33,severity:"high"},{name:"GitHub",controls_at_risk:12,severity:"high"},{name:"CrowdStrike Falcon",controls_at_risk:8,severity:"high"}];
+const MKT={cat:"all",rows:null,roi:null,spof:null,demoOnly:false};
+
+RENDER.connectors = async function() {
+  const m=main(), v=view("Connector Marketplace","Automated evidence collection across cloud, identity, DevOps, ITSM, security, GRC, SaaS and endpoints");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading connectors…</div>`;
+  if(STATE.mode==="demo"){
+    MKT.rows=DEMO_CONNECTORS;MKT.roi={opportunities:DEMO_ROI};MKT.spof={fragility_ranking:DEMO_SPOF,single_point_count:53,redundantly_evidenced:9};
+  }else{
+    try{
+      const [st,roi,spof]=await Promise.all([
+        apiGET(withTenant("/connectors/status")),
+        apiGET(withTenant("/coverage/roi")).catch(()=>null),
+        apiGET(withTenant("/coverage/spof")).catch(()=>null)]);
+      MKT.rows=st;MKT.roi=roi;MKT.spof=spof;
+    }catch(e){MKT.rows=DEMO_CONNECTORS;MKT.roi={opportunities:DEMO_ROI};MKT.spof={fragility_ranking:DEMO_SPOF,single_point_count:53,redundantly_evidenced:9};}
+  }
+  renderMkt(host);
+};
+
+function renderMkt(host){
+  const rows=MKT.rows||[];host.innerHTML="";
+  const by={connected:0,demo:0,not_configured:0,error:0};
+  rows.forEach(r=>by[r.mode]=(by[r.mode]||0)+1);
+  const kp=el("div","kpis");
+  [["Connected",by.connected,"live credentials","var(--pass)"],["Demo",by.demo,"synthetic evidence","var(--warn)"],
+   ["Available",by.not_configured,"ready to configure","var(--mid)"],["Total",rows.length,"in marketplace","var(--hi)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  // Coverage Intelligence
+  if(MKT.roi&&MKT.roi.opportunities&&MKT.roi.opportunities.length){
+    const ci=el("div","card");
+    const ops=MKT.roi.opportunities.slice(0,5);
+    const frag=((MKT.spof&&MKT.spof.fragility_ranking)||[]).filter(f=>f.controls_at_risk>0).slice(0,3);
+    ci.innerHTML=`<h3>Coverage Intelligence</h3><div class="sub">What you gain by connecting — and what breaks if a source fails</div>
+      <div class="row">
+        <div><div style="font-size:11px;letter-spacing:.4px;color:var(--dim);margin-bottom:8px;font-weight:600">TOP ROI — CONNECT NEXT</div>
+          ${ops.map((o,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">
+            <span style="font-size:12.5px">${i+1}. ${esc(o.name)}</span><span class="roi">${esc(o.headline)}</span></div>`).join("")}</div>
+        <div><div style="font-size:11px;letter-spacing:.4px;color:var(--dim);margin-bottom:8px;font-weight:600">SINGLE POINT OF EVIDENCE RISK</div>
+          ${frag.length?frag.map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">
+            <span style="font-size:12.5px">if <b>${esc(f.name)}</b> breaks</span>
+            <span class="mono" style="color:${f.severity==="high"?"var(--fail)":"var(--warn)"}">${f.controls_at_risk} controls dark</span></div>`).join("")
+            :'<div class="empty" style="padding:14px">Sync connectors to see fragility analysis</div>'}
+          ${MKT.spof&&MKT.spof.redundantly_evidenced?`<div style="font-size:11px;color:var(--dim);margin-top:9px">${MKT.spof.redundantly_evidenced} mappings have redundant sources ✓</div>`:""}</div>
+      </div>`;
+    host.appendChild(ci);
+  }
+
+  const card=el("div","card");
+  card.innerHTML=`<h3>Marketplace</h3><div class="sub">${rows.length} connectors · test or sync each; demo works with zero credentials</div>`;
+  const cats=["all","cloud","identity","devops","itsm","security","grc","saas","endpoint"];
+  const seg=el("div","segrow");
+  cats.forEach(c=>{const b=el("button","seg"+(MKT.cat===c?" on":""));b.textContent=c==="all"?"All":c.toUpperCase();b.onclick=()=>{MKT.cat=c;renderMkt(host);};seg.appendChild(b);});
+  const tg=el("button","seg"+(MKT.demoOnly?" on":""));tg.textContent="⚡ Demo only";tg.onclick=()=>{MKT.demoOnly=!MKT.demoOnly;renderMkt(host);};seg.appendChild(tg);
+  card.appendChild(seg);
+
+  const grid=el("div","mkt-grid");
+  rows.filter(r=>(MKT.cat==="all"||r.category===MKT.cat)&&(!MKT.demoOnly||r.mode==="demo")).forEach(r=>{
+    const pill={connected:["Connected","b-pass"],demo:["Demo","b-warn"],not_configured:["Not connected","b-dim"],error:["Error","b-fail"]}[r.mode]||[r.mode,"b-dim"];
+    const op=MKT.roi&&MKT.roi.opportunities&&MKT.roi.opportunities.find(o=>o.key===r.key);
+    const c=el("div","mkt-card");
+    c.innerHTML=`<div class="mkt-head"><div><div class="mkt-name">${esc(r.name)}</div>
+        <div class="mkt-cat">${esc(r.category)} · ${esc((r.auth_method||"").replace(/_/g," "))}</div></div>
+        <span class="badge ${pill[1]}">${pill[0]}</span></div>
+      <div class="mkt-meta"><span>⛁ ${r.evidence_count||0} evidence</span><span>⛨ ${r.controls_covered||0} controls</span><span>↻ ${ago(r.last_sync_at)}</span></div>
+      ${op?`<div class="roi">⬆ ${esc(op.headline)}</div>`:""}
+      ${(r.credentials&&r.credentials.missing&&r.credentials.missing.length)?`<div class="mkt-msg" style="color:var(--mid)">needs: ${r.credentials.missing.slice(0,3).join(", ")}${r.credentials.missing.length>3?"…":""}</div>`:'<div class="mkt-msg"></div>'}`;
+    const acts=el("div","mkt-actions");
+    const tb=el("button","btn sm");tb.textContent="Test";
+    const sb=el("button","btn sm primary");sb.textContent="Sync";
+    const msg=c.querySelector(".mkt-msg");
+    tb.onclick=async()=>{tb.disabled=true;msg.textContent="testing…";
+      if(STATE.mode==="demo"){await sleep(300);msg.textContent="✓ demo mode OK";tb.disabled=false;return;}
+      try{const j=await apiPOST("/connectors/"+r.key+"/test",{});msg.textContent=(j.ok?"✓ ":"✗ ")+j.detail;}catch(e){msg.textContent="✗ "+e.message;}tb.disabled=false;};
+    sb.onclick=async()=>{sb.disabled=true;msg.textContent="syncing…";
+      if(STATE.mode==="demo"){await sleep(400);r.evidence_count=r.evidence_count||3;r.last_sync_at=new Date().toISOString();if(r.mode==="not_configured")r.mode="demo";msg.textContent="✓ demo evidence synced";renderMkt(host);toast("Synced "+r.name+" (demo)");return;}
+      try{const j=await apiPOST("/connectors/"+r.key+"/sync",{tenant_id:CFG.tenant});msg.textContent="✓ "+j.evidence_count+" items ("+j.mode+")";toast("Synced "+r.name);
+        MKT.rows=await apiGET(withTenant("/connectors/status"));renderMkt(host);}catch(e){msg.textContent="✗ "+e.message;sb.disabled=false;}};
+    acts.appendChild(tb);acts.appendChild(sb);c.appendChild(acts);grid.appendChild(c);
+  });
+  card.appendChild(grid);host.appendChild(card);
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+/* ============ EVIDENCE DOCS ============ */
+RENDER.evidence = async function() {
+  const m=main(), v=view("Evidence Documents","Ingested policies and evidence, mapped to controls with trust signatures");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading…</div>`;
+  const {data}=await load(withTenant("/evidence/documents"),[
+    {id:"d1",title:"Information Security Policy v3.2",source:"upload",controls_mapped:14,signed:true,created_at:new Date(Date.now()-10*864e5).toISOString()},
+    {id:"d2",title:"Access Control Procedure",source:"confluence",controls_mapped:8,signed:true,created_at:new Date(Date.now()-22*864e5).toISOString()},
+    {id:"d3",title:"Incident Response Plan",source:"upload",controls_mapped:11,signed:false,created_at:new Date(Date.now()-5*864e5).toISOString()},
+  ]);
+  const docs=Array.isArray(data)?data:[];host.innerHTML="";
+  if(!docs.length){host.innerHTML=`<div class="card"><div class="empty">No evidence documents yet. Ingest via the API (<span class="mono">POST /evidence/documents</span>) or connect Confluence/SharePoint.</div></div>`;return;}
+  const card=el("div","card");card.innerHTML=`<h3>Documents</h3><div class="sub">${docs.length} ingested</div>`;
+  const wrap=el("div","scroll");
+  wrap.innerHTML=`<table><thead><tr><th>Title</th><th>Source</th><th>Controls mapped</th><th>Trust</th><th>Ingested</th></tr></thead><tbody>${
+    docs.slice(0,200).map(d=>`<tr><td>${esc(d.title||d.name||d.id)}</td><td>${esc(d.source||"—")}</td>
+      <td class="mono">${d.controls_mapped??d.control_count??"—"}</td>
+      <td>${d.signed?'<span class="badge b-pass">signed</span>':'<span class="badge b-dim">unsigned</span>'}</td>
+      <td class="mono" style="color:var(--mid)">${ago(d.created_at)}</td></tr>`).join("")}</tbody></table>`;
+  card.appendChild(wrap);host.appendChild(card);
+};
+
+/* ============ EVIDENCE MAP (link out) ============ */
+RENDER.evmap = async function() {
+  const m=main(), v=view("Evidence Map","Interactive mindmap of documents → concepts → controls");
+  m.appendChild(v);
+  const card=el("div","card");
+  const url=CFG.base.replace(/\/$/,"")+"/evidence-map";
+  card.innerHTML=`<h3>Evidence relationship map</h3>
+    <div class="sub">The full interactive mindmap is served by the API.</div>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:14px">Documents are linked to the compliance concepts they mention and the controls those concepts satisfy, with confidence-scored edges.</p>
+    <a class="btn primary" href="${url}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">Open Evidence Map ↗</a>`;
+  v.appendChild(card);m.appendChild(v);
+  const {data}=await load(withTenant("/evidence/graph"),{stats:{documents:3,concepts:18,controls:24,edges:41,confirmed_edges:33}});
+  const s=data.stats||{};
+  const kp=el("div","kpis");
+  [["Documents",s.documents||0,"var(--hi)"],["Concepts",s.concepts||0,"var(--purple)"],["Controls linked",s.controls||0,"var(--info)"],["Confirmed edges",s.confirmed_edges||0,"var(--pass)"]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  v.insertBefore(kp, card);
+};
+/* ============ 3D KNOWLEDGE GRAPH ============ */
+const GC={connector:"#5b9cf6",evidence:"#34d399",pass:"#38bdf8",fail:"#f87171",risk:"#fbbf24"};
+const G={nodes:[],edges:[],idx:{},rotX:.35,rotY:-.55,zoom:1,drag:false,lx:0,ly:0,hov:null,sel:null,filter:"all",anim:null,cv:null,ctx:null};
+
+function buildGraph(){
+  const conns=[["c_aws","AWS","cloud"],["c_okta","Okta","identity"],["c_github","GitHub","devops"],["c_jira","Jira","itsm"],
+    ["c_cs","CrowdStrike","security"],["c_entra","Entra ID","identity"],["c_snow","ServiceNow","itsm"],["c_ot","OneTrust","grc"]]
+    .map(([id,label,cat])=>({id,label,type:"connector",cat,color:CAT_COLORS[cat]||GC.connector,r:10}));
+  const evs=["mfa_enabled","encryption","logging","vuln_findings","incidents","endpoint_prot","priv_users","patch_status"]
+    .map(e=>({id:"e_"+e,label:e,type:"evidence",color:GC.evidence,r:7}));
+  const ctrls=[["IA-2","pass"],["SC-28","fail"],["AU-9","risk"],["AU-2","pass"],["AC-2","pass"],["AC-3","risk"],
+    ["RA-5","fail"],["SI-2","pass"],["IR-4","pass"],["SC-12","pass"],["CP-9","pass"],["SI-4","pass"]]
+    .map(([c,st])=>({id:"ct_"+c,label:c,type:"control",status:st,color:GC[st],r:8}));
+  const E=(s,t,kind)=>({s,t,kind});
+  const edges=[
+    E("c_aws","e_vuln_findings","conn"),E("c_aws","e_logging","conn"),E("c_aws","e_encryption","conn"),
+    E("c_okta","e_mfa_enabled","conn"),E("c_okta","e_priv_users","conn"),E("c_okta","e_logging","conn"),
+    E("c_github","e_mfa_enabled","conn"),E("c_github","e_vuln_findings","conn"),
+    E("c_jira","e_incidents","conn"),E("c_snow","e_incidents","conn"),E("c_snow","e_patch_status","conn"),
+    E("c_cs","e_endpoint_prot","conn"),E("c_cs","e_patch_status","conn"),E("c_cs","e_incidents","conn"),
+    E("c_entra","e_mfa_enabled","conn"),E("c_entra","e_priv_users","conn"),E("c_ot","e_incidents","conn"),
+    E("e_mfa_enabled","ct_IA-2","ev"),E("e_mfa_enabled","ct_AC-2","ev"),E("e_encryption","ct_SC-28","ev"),
+    E("e_encryption","ct_SC-12","ev"),E("e_logging","ct_AU-2","ev"),E("e_logging","ct_AU-9","ev"),
+    E("e_vuln_findings","ct_RA-5","ev"),E("e_vuln_findings","ct_SI-2","ev"),E("e_incidents","ct_IR-4","ev"),
+    E("e_endpoint_prot","ct_SI-4","ev"),E("e_priv_users","ct_AC-2","ev"),E("e_priv_users","ct_AC-3","ev"),E("e_patch_status","ct_SI-2","ev"),
+    E("ct_SC-12","ct_SC-28","hard"),E("ct_SC-28","ct_AU-9","hard"),E("ct_AC-2","ct_AC-3","hard"),E("ct_AU-2","ct_AU-9","hard"),E("ct_RA-5","ct_SI-2","hard"),
+  ];
+  return {nodes:[...conns,...evs,...ctrls],edges};
+}
+function layoutGraph(nodes){
+  const by={connector:[],evidence:[],control:[]};nodes.forEach(n=>by[n.type].push(n));
+  const R={connector:210,evidence:125,control:55};
+  Object.entries(by).forEach(([t,ns])=>{const rad=R[t];ns.forEach((n,i)=>{
+    const phi=Math.acos(1-2*(i+.5)/Math.max(ns.length,1)),th=Math.PI*(1+Math.sqrt(5))*i;
+    n.x=rad*Math.sin(phi)*Math.cos(th);n.y=rad*Math.sin(phi)*Math.sin(th);n.z=rad*Math.cos(phi);n.vx=n.vy=n.vz=0;});});
+}
+function simGraph(nodes,edges,idx,steps){
+  for(let s=0;s<steps;s++){const k=.018*(1-s/steps);
+    for(let i=0;i<nodes.length;i++){const a=nodes[i];for(let j=i+1;j<nodes.length;j++){const b=nodes[j];
+      const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z,f=80/(dx*dx+dy*dy+dz*dz+1);
+      a.vx+=f*dx;a.vy+=f*dy;a.vz+=f*dz;b.vx-=f*dx;b.vy-=f*dy;b.vz-=f*dz;}}
+    edges.forEach(({s:si,t:ti})=>{const a=idx[si],b=idx[ti];if(!a||!b)return;
+      const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,d=Math.sqrt(dx*dx+dy*dy+dz*dz)+.001,tg=a.type===b.type?60:90,f=(d-tg)/d*k;
+      a.vx+=f*dx;a.vy+=f*dy;a.vz+=f*dz;b.vx-=f*dx;b.vy-=f*dy;b.vz-=f*dz;});
+    nodes.forEach(n=>{n.x+=n.vx;n.y+=n.vy;n.z+=n.vz;n.vx*=.6;n.vy*=.6;n.vz*=.6;});}
+}
+function gProj(n,W,H){const cx=Math.cos(G.rotX),sx=Math.sin(G.rotX),cy=Math.cos(G.rotY),sy=Math.sin(G.rotY);
+  const y1=n.y*cx-n.z*sx,z1=n.y*sx+n.z*cx,x2=n.x*cy+z1*sy,z2=-n.x*sy+z1*cy,fov=320*G.zoom,z=z2+380;
+  return{x:W/2+x2*fov/z,y:H/2+y1*fov/z,z:z2,sc:fov/z};}
+function gVis(){if(G.filter==="all")return new Set(G.nodes.map(n=>n.id));
+  if(G.filter==="connector")return new Set(G.nodes.filter(n=>n.type==="connector").map(n=>n.id));
+  return new Set(G.nodes.filter(n=>n.type!=="connector").map(n=>n.id));}
+function gDraw(){const cv=G.cv,x=G.ctx;if(!cv||!x)return;const W=cv._w,H=cv._h;
+  x.clearRect(0,0,W,H);
+  if(!cv._stars)cv._stars=Array.from({length:90},()=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.2+.2}));
+  x.fillStyle="rgba(200,210,255,.18)";cv._stars.forEach(s=>{x.beginPath();x.arc(s.x,s.y,s.r,0,7);x.fill();});
+  const vis=gVis(),pm={};G.nodes.forEach(n=>pm[n.id]=gProj(n,W,H));
+  const sorted=G.nodes.map(n=>({n,p:pm[n.id]})).sort((a,b)=>a.p.z-b.p.z);
+  G.edges.forEach(({s:si,t:ti,kind})=>{if(!vis.has(si)||!vis.has(ti))return;const ps=pm[si],pt=pm[ti];if(!ps||!pt)return;
+    const hiS=G.sel&&(G.sel===si||G.sel===ti),hiH=G.hov&&(G.hov===si||G.hov===ti),al=hiS?.85:hiH?.5:G.filter==="all"?.18:.1;
+    x.beginPath();x.moveTo(ps.x,ps.y);x.lineTo(pt.x,pt.y);
+    x.strokeStyle=kind==="hard"?`rgba(248,113,113,${al})`:kind==="ev"?`rgba(52,211,153,${al})`:`rgba(91,156,246,${al})`;
+    x.lineWidth=kind==="hard"?1.8:.85;x.stroke();});
+  sorted.forEach(({n,p})=>{if(!vis.has(n.id))return;const r=n.r*p.sc*2.2,hi=G.hov===n.id||G.sel===n.id;
+    if(hi){x.beginPath();x.arc(p.x,p.y,r+5,0,7);x.fillStyle="rgba(255,255,255,.1)";x.fill();}
+    x.beginPath();x.arc(p.x,p.y,r,0,7);x.fillStyle=n.color+(hi?"ff":"cc");x.fill();
+    x.strokeStyle="rgba(255,255,255,.18)";x.lineWidth=.7;x.stroke();
+    const minR=n.type==="connector"?5:n.type==="control"?4:3;
+    if(r>minR||hi){x.font=`${Math.min(11,r*.85+7)}px ui-monospace,monospace`;x.fillStyle=hi?"#fff":"rgba(220,230,255,.7)";x.textAlign="center";x.fillText(n.label,p.x,p.y+r+10);}});
+}
+function gHit(mx,my){const vis=gVis(),cv=G.cv;if(!cv)return null;const W=cv._w,H=cv._h;let best=null,bd=1e9;
+  G.nodes.forEach(n=>{if(!vis.has(n.id))return;const p=gProj(n,W,H),r=n.r*p.sc*2.2+5,d=Math.hypot(mx-p.x,my-p.y);if(d<r&&d<bd){bd=d;best=n;}});return best;}
+function gInfo(n){const panel=$("#ginfo");if(!panel)return;if(!n){panel.style.display="none";return;}
+  const out=G.edges.filter(e=>e.s===n.id).map(e=>G.idx[e.t]?.label||e.t),inn=G.edges.filter(e=>e.t===n.id).map(e=>G.idx[e.s]?.label||e.s);
+  panel.style.display="block";
+  panel.innerHTML=`<div style="color:var(--txt);font-weight:600;font-size:12.5px;margin-bottom:5px">${esc(n.label)}</div>
+    <div style="color:var(--mid);font-size:10px;text-transform:uppercase;letter-spacing:.5px">${n.type}${n.status?" · "+n.status:""}</div>
+    ${inn.length?`<div style="margin-top:6px;font-size:11.5px"><span style="color:var(--mid)">Depends on: </span>${inn.slice(0,4).map(esc).join(", ")}</div>`:""}
+    ${out.length?`<div style="margin-top:3px;font-size:11.5px"><span style="color:var(--mid)">Affects: </span>${out.slice(0,4).map(esc).join(", ")}</div>`:""}`;}
+function gFilter(f){G.filter=f;["gfa","gfc","gfx"].forEach((id,i)=>{const b=$("#"+id);if(b)b.className="seg"+(["all","connector","control"][i]===f?" on":"");});}
+
+RENDER.graph = function() {
+  const m=main(), v=view("3D Knowledge Graph","Connectors → evidence → controls in one view, with control dependency cascade. Drag to rotate, scroll to zoom, click a node.");
+  m.appendChild(v);
+  const ex=el("div","callout");
+  ex.innerHTML=`<b>Three layers in one graph.</b> Outer: <span style="color:#5b9cf6">connectors</span> collecting evidence. Middle: <span style="color:#34d399">evidence concepts</span>. Inner: <span style="color:#38bdf8">controls</span> they satisfy — with <span style="color:#f87171">hard dependency edges</span> showing the blast-radius cascade. Colors show compliance status.`;
+  v.appendChild(ex);
+  const g=buildGraph();G.nodes=g.nodes;G.edges=g.edges;G.idx={};G.nodes.forEach(n=>G.idx[n.id]=n);
+  layoutGraph(G.nodes);simGraph(G.nodes,G.edges,G.idx,120);
+  const stats=el("div","kpis");
+  const cc=G.nodes.filter(n=>n.type==="connector").length,ec=G.nodes.filter(n=>n.type==="evidence").length,
+    cp=G.nodes.filter(n=>n.type==="control"&&n.status==="pass").length,cf=G.nodes.filter(n=>n.type==="control"&&n.status!=="pass").length;
+  [["Connectors",cc,"var(--hi)"],["Evidence types",ec,"var(--pass)"],["Controls passing",cp,"var(--info)"],["Controls fail/risk",cf,"var(--fail)"]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;stats.appendChild(e);});
+  v.appendChild(stats);
+  const wrap=el("div","gwrap");
+  wrap.innerHTML=`<canvas id="gcanvas"></canvas>
+    <div class="ghud"><div class="col">
+      <div style="font-size:11px;font-weight:600;color:var(--txt);margin-bottom:4px;letter-spacing:.4px">KNOWLEDGE GRAPH</div>
+      ${[["Connectors",GC.connector,"d"],["Evidence",GC.evidence,"d"],["Controls (pass)",GC.pass,"d"],["Controls (fail)",GC.fail,"d"],["Controls (risk)",GC.risk,"d"],["Dependency edge","rgba(248,113,113,.7)","l"]]
+        .map(([l,c,t])=>`<div class="gleg"><div class="${t}" style="background:${c}"></div><span>${l}</span></div>`).join("")}
+    </div><div class="col r">
+      <div id="ginfo"></div>
+      <div style="display:flex;gap:6px"><button id="gfa" class="seg on" onclick="gFilter('all')">All</button><button id="gfc" class="seg" onclick="gFilter('connector')">Connectors</button><button id="gfx" class="seg" onclick="gFilter('control')">Controls</button></div>
+      <div style="font-size:10px;color:var(--mid)">drag · scroll · click</div>
+    </div></div>`;
+  v.appendChild(wrap);
+  const cv=wrap.querySelector("#gcanvas");
+  if(G.anim){cancelAnimationFrame(G.anim);G.anim=null;}
+  requestAnimationFrame(()=>{
+    const dpr=window.devicePixelRatio||1,W=wrap.offsetWidth||800,H=560;
+    cv.width=W*dpr;cv.height=H*dpr;cv._w=W;cv._h=H;G.cv=cv;G.ctx=cv.getContext("2d");G.ctx.scale(dpr,dpr);
+    cv.onmousedown=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,h=gHit(mx,my);
+      if(h){G.sel=G.sel===h.id?null:h.id;gInfo(G.sel?h:null);}else{G.drag=true;G.lx=e.clientX;G.ly=e.clientY;}};
+    cv.onmousemove=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+      if(G.drag){G.rotY+=(e.clientX-G.lx)*.006;G.rotX+=(e.clientY-G.ly)*.006;G.lx=e.clientX;G.ly=e.clientY;}
+      const h=gHit(mx,my);G.hov=h?h.id:null;cv.style.cursor=h?"pointer":G.drag?"grabbing":"grab";};
+    cv.onmouseup=()=>G.drag=false;cv.onmouseleave=()=>{G.drag=false;G.hov=null;};
+    cv.onwheel=e=>{G.zoom=Math.max(.4,Math.min(2.8,G.zoom-e.deltaY*.001));e.preventDefault();};
+    cv.ontouchstart=e=>{const t=e.touches[0];G.lx=t.clientX;G.ly=t.clientY;G.drag=true;e.preventDefault();};
+    cv.ontouchmove=e=>{const t=e.touches[0];G.rotY+=(t.clientX-G.lx)*.006;G.rotX+=(t.clientY-G.ly)*.006;G.lx=t.clientX;G.ly=t.clientY;e.preventDefault();};
+    cv.ontouchend=()=>G.drag=false;
+    let lt=0;function loop(t){G.anim=requestAnimationFrame(loop);if(!G.drag)G.rotY+=(t-lt)*.00007;lt=t;gDraw();}
+    requestAnimationFrame(loop);
+  });
+};
+/* ============ BLAST RADIUS SIMULATOR ============ */
+RENDER.simulator = async function() {
+  const m=main(), v=view("Blast Radius Simulator","Pick controls to fail, see the cascade through dependent controls");
+  m.appendChild(v);
+  const ex=el("div","callout");
+  ex.innerHTML=`<b>What-if analysis.</b> Select one or more controls to mark as failed; the simulator traverses the dependency graph and shows every downstream control that would be impacted, weighted by edge strength (hard vs soft dependencies).`;
+  v.appendChild(ex);
+  const picker=el("div","card");
+  picker.innerHTML=`<h3>Select failed control(s)</h3><div class="sub">Click controls to toggle failure state, then run the simulation</div>`;
+  const pickRow=el("div","segrow");
+  const seeds=["SC-12","SC-28","AC-2","IA-2","AU-2","RA-5","CP-9","SI-4"];
+  const picked=new Set();
+  seeds.forEach(c=>{const b=el("button","seg");b.textContent=c;b.onclick=()=>{if(picked.has(c)){picked.delete(c);b.className="seg";}else{picked.add(c);b.className="seg on";}};pickRow.appendChild(b);});
+  picker.appendChild(pickRow);
+  const runBtn=el("button","btn primary");runBtn.textContent="Run simulation";picker.appendChild(runBtn);
+  v.appendChild(picker);
+  const out=el("div");v.appendChild(out);
+  runBtn.onclick=async()=>{
+    if(!picked.size){toast("Pick at least one control");return;}
+    out.innerHTML=`<div class="card"><div class="empty"><span class="spin"></span> Simulating cascade…</div></div>`;
+    let res=null;
+    if(STATE.mode==="live"){
+      try{res=await apiPOST("/simulate",{tenant_id:CFG.tenant,changes:[...picked].map(c=>({control_id:c,status:"fail"}))});}catch(e){}
+    }
+    if(!res){
+      const base=[...picked];const cascade={"SC-12":["SC-28","AU-9"],"SC-28":["AU-9"],"AC-2":["AC-3"],"AU-2":["AU-9"],"RA-5":["SI-2"]};
+      const impacted=new Set();base.forEach(c=>(cascade[c]||[]).forEach(x=>impacted.add(x)));
+      res={seed:base,impacted:[...impacted].map(c=>({control_id:c,weight:.25,depth:1})),score_before:82.1,score_after:82.1-base.length*3-impacted.size*2};
+    }
+    renderSim(out,res,[...picked]);
+  };
+};
+function renderSim(out,res,seed){
+  out.innerHTML="";
+  const imp=res.impacted||res.cascade||[];
+  const kp=el("div","kpis");
+  [["Directly failed",seed.length,"var(--fail)"],["Cascade impacted",imp.length,"var(--warn)"],
+   ["Score before",fmtPct(res.score_before??res.before??82.1),"var(--mid)"],["Score after",fmtPct(res.score_after??res.after),"var(--fail)"]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  out.appendChild(kp);
+  const card=el("div","card");
+  card.innerHTML=`<h3>Cascade result</h3><div class="sub">Failing ${seed.join(", ")} impacts ${imp.length} downstream control(s)</div>`;
+  if(imp.length){
+    const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>Impacted control</th><th>Edge weight</th><th>Depth</th></tr></thead><tbody>${
+      imp.map(i=>`<tr><td class="mono">${esc(i.control_id||i.target||i.id)}</td><td class="mono">${(i.weight??i.edge_weight??"—")}</td><td class="mono">${i.depth??1}</td></tr>`).join("")}</tbody></table>`;
+    card.appendChild(wrap);
+  }else card.innerHTML+=`<div class="empty">No downstream dependencies — these controls are leaf nodes.</div>`;
+  out.appendChild(card);
+}
+
+/* ============ REMEDIATION ============ */
+RENDER.remediation = async function() {
+  const m=main(), v=view("Remediation Optimizer","Prioritized fix queue ranked by risk reduction per unit effort");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Computing remediation plan…</div>`;
+  const demo={open_findings:24,current_risk_weighted_score:82.1,projected_after_fixing_top:91.3,top_n:10,queue:[
+    {control_id:"SC-28",title:"Enable S3 default encryption",severity:"high",effort:"low",risk_reduction:6.2,leverage:8.9,connector:"AWS"},
+    {control_id:"AC-2",title:"Disable 6 dormant accounts",severity:"high",effort:"low",risk_reduction:4.8,leverage:7.1,connector:"Okta"},
+    {control_id:"RA-5",title:"Patch critical CVE-2026-1234",severity:"high",effort:"medium",risk_reduction:5.5,leverage:4.2,connector:"GitHub"},
+    {control_id:"AU-9",title:"Fix audit log retention config",severity:"medium",effort:"low",risk_reduction:2.1,leverage:3.8,connector:"Splunk"},
+  ]};
+  const {data}=await load(withTenant("/remediation?top=10"),demo);
+  host.innerHTML="";
+  const kp=el("div","kpis");
+  [["Open findings",data.open_findings??0,"var(--fail)"],["Current score",fmtPct(data.current_risk_weighted_score),"var(--warn)"],
+   ["After top fixes",fmtPct(data.projected_after_fixing_top),"var(--pass)"],["Quick wins",((data.queue||[]).filter(q=>q.effort==="low").length),"var(--hi)"]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+  const q=data.queue||[];
+  const card=el("div","card");card.innerHTML=`<h3>Fix queue</h3><div class="sub">Ranked by leverage = risk reduction ÷ effort</div>`;
+  if(!q.length){card.innerHTML+=`<div class="empty">No open findings to remediate — posture is clean.</div>`;}
+  else{const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>#</th><th>Control</th><th>Action</th><th>Severity</th><th>Effort</th><th>Risk ↓</th><th>Leverage</th><th>Source</th></tr></thead><tbody>${
+      q.map((x,i)=>`<tr><td class="mono">${i+1}</td><td class="mono">${esc(x.control_id)}</td><td>${esc(x.title||x.action||"")}</td>
+        <td><span class="badge ${SEV_BADGE[x.severity]||"b-dim"}">${esc(x.severity||"—")}</span></td>
+        <td><span class="badge ${x.effort==="low"?"b-pass":x.effort==="medium"?"b-warn":"b-fail"}">${esc(x.effort||"—")}</span></td>
+        <td class="mono" style="color:var(--pass)">−${(x.risk_reduction??0).toFixed?.(1)??x.risk_reduction}</td>
+        <td class="mono">${(x.leverage??0).toFixed?.(1)??x.leverage}</td>
+        <td>${esc(x.connector||x.source||"—")}</td></tr>`).join("")}</tbody></table>`;
+    card.appendChild(wrap);}
+  host.appendChild(card);
+};
+
+/* ============ TRENDS ============ */
+RENDER.trends = async function() {
+  const m=main(), v=view("Compliance Trends","Score trajectory and drift over time");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading trends…</div>`;
+  const {data}=await load(withTenant("/trends"),DEMO.trends);
+  const tr=Array.isArray(data)?data:[];host.innerHTML="";
+  if(!tr.length){host.innerHTML=`<div class="card"><div class="empty">No trend snapshots yet. Snapshots accrue over time (or POST /trends/snapshot).</div></div>`;return;}
+  const first=tr[0].compliance_score||0,last=tr[tr.length-1].compliance_score||0,delta=last-first;
+  const kp=el("div","kpis");
+  [["Current",fmtPct(last),"var(--hi)"],["30-day change",(delta>=0?"+":"")+delta.toFixed(1)+"%",delta>=0?"var(--pass)":"var(--fail)"],["Snapshots",tr.length,"var(--mid)"]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+  const card=el("div","card");card.innerHTML=`<h3>Score over time</h3>`;
+  const cvs=el("canvas");cvs.style.cssText="width:100%;height:220px";card.appendChild(cvs);host.appendChild(card);
+  drawSpark(cvs,tr.map(x=>x.compliance_score||0));
+};
+
+/* ============ AI INVENTORY ============ */
+RENDER.inventory = async function() {
+  const m=main(), v=view("AI System Inventory","Registered AI/ML systems for ISO 42001, NIST AI RMF and EU AI Act governance");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading inventory…</div>`;
+  const {data}=await load(withTenant("/inventory"),DEMO.inventory);
+  const inv=Array.isArray(data)?data:[];host.innerHTML="";
+  if(!inv.length){host.innerHTML=`<div class="card"><div class="empty">No AI systems registered. Add via POST /ai-systems or run discovery.</div></div>`;return;}
+  const high=inv.filter(x=>x.risk_level==="high").length;
+  const kp=el("div","kpis");
+  [["AI systems",inv.length,"var(--hi)"],["High-risk",high,"var(--fail)"],["Frameworks",[...new Set(inv.flatMap(x=>x.frameworks||[]))].length,"var(--purple)"]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+  const card=el("div","card");card.innerHTML=`<h3>Registered systems</h3>`;
+  const wrap=el("div","scroll");
+  wrap.innerHTML=`<table><thead><tr><th>System</th><th>Type</th><th>Risk</th><th>Owner</th><th>Frameworks</th></tr></thead><tbody>${
+    inv.map(x=>`<tr><td>${esc(x.name||x.system_name||"")}</td><td>${esc(x.system_type||x.type||"—")}</td>
+      <td><span class="badge ${x.risk_level==="high"?"b-fail":x.risk_level==="limited"?"b-warn":"b-dim"}">${esc(x.risk_level||"—")}</span></td>
+      <td>${esc(x.owner||"—")}</td><td>${(x.frameworks||[]).map(f=>`<span class="badge b-dim">${esc(f)}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table>`;
+  card.appendChild(wrap);host.appendChild(card);
+};
+
+/* ============ WAIVERS ============ */
+RENDER.waivers = async function() {
+  const m=main(), v=view("Waivers & Exceptions","Accepted risk exceptions with expiry tracking");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading waivers…</div>`;
+  const {data}=await load(withTenant("/waivers"),DEMO.waivers);
+  const w=Array.isArray(data)?data:[];host.innerHTML="";
+  if(!w.length){host.innerHTML=`<div class="card"><div class="empty">No active waivers. Exceptions can be filed via POST /waivers.</div></div>`;return;}
+  const card=el("div","card");card.innerHTML=`<h3>Active waivers</h3><div class="sub">${w.length} accepted exceptions</div>`;
+  const wrap=el("div","scroll");
+  wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Justification</th><th>Status</th><th>Expires</th></tr></thead><tbody>${
+    w.map(x=>{const exp=x.expires_at?new Date(x.expires_at):null;const soon=exp&&(exp-Date.now())<14*864e5;
+      return `<tr><td class="mono">${esc(x.control_id||"")}</td><td>${esc(x.reason||x.justification||"")}</td>
+      <td><span class="badge ${x.status==="active"?"b-pass":"b-dim"}">${esc(x.status||"—")}</span></td>
+      <td class="mono" style="color:${soon?"var(--warn)":"var(--mid)"}">${exp?exp.toLocaleDateString():"—"}${soon?" ⚠":""}</td></tr>`;}).join("")}</tbody></table>`;
+  card.appendChild(wrap);host.appendChild(card);
+};
+
+boot();
+</script>
+</body>
+</html>
