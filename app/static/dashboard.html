@@ -598,7 +598,7 @@ const DEMO_ROI=[
  {key:"SERVICENOW",name:"ServiceNow",headline:"+22 controls, +14.3% SOC 2",total_new_controls:22},
 ];
 const DEMO_SPOF=[{name:"Okta",controls_at_risk:33,severity:"high"},{name:"GitHub",controls_at_risk:12,severity:"high"},{name:"CrowdStrike Falcon",controls_at_risk:8,severity:"high"}];
-const MKT={cat:"all",rows:null,roi:null,spof:null,demoOnly:false};
+const MKT={cat:"all",rows:null,roi:null,spof:null,demoOnly:false,safety:null};
 
 RENDER.connectors = async function() {
   const m=main(), v=view("Connector Marketplace","Automated evidence collection across cloud, identity, DevOps, ITSM, security, GRC, SaaS and endpoints");
@@ -606,20 +606,37 @@ RENDER.connectors = async function() {
   host.innerHTML=`<div class="empty"><span class="spin"></span> Loading connectors…</div>`;
   if(STATE.mode==="demo"){
     MKT.rows=DEMO_CONNECTORS;MKT.roi={opportunities:DEMO_ROI};MKT.spof={fragility_ranking:DEMO_SPOF,single_point_count:53,redundantly_evidenced:9};
+    MKT.safety={live_enabled:false,allowlist:[],mode:"SAFE",summary:"All connectors locked to demo — no live API calls possible.",read_only_enforced:true};
   }else{
     try{
-      const [st,roi,spof]=await Promise.all([
+      const [st,roi,spof,safety]=await Promise.all([
         apiGET(withTenant("/connectors/status")),
         apiGET(withTenant("/coverage/roi")).catch(()=>null),
-        apiGET(withTenant("/coverage/spof")).catch(()=>null)]);
-      MKT.rows=st;MKT.roi=roi;MKT.spof=spof;
-    }catch(e){MKT.rows=DEMO_CONNECTORS;MKT.roi={opportunities:DEMO_ROI};MKT.spof={fragility_ranking:DEMO_SPOF,single_point_count:53,redundantly_evidenced:9};}
+        apiGET(withTenant("/coverage/spof")).catch(()=>null),
+        apiGET("/connectors/safety").catch(()=>null)]);
+      MKT.rows=st;MKT.roi=roi;MKT.spof=spof;MKT.safety=safety;
+    }catch(e){MKT.rows=DEMO_CONNECTORS;MKT.roi={opportunities:DEMO_ROI};MKT.spof={fragility_ranking:DEMO_SPOF,single_point_count:53,redundantly_evidenced:9};MKT.safety={live_enabled:false,allowlist:[],mode:"SAFE",summary:"All connectors locked to demo — no live API calls possible.",read_only_enforced:true};}
   }
   renderMkt(host);
 };
 
 function renderMkt(host){
   const rows=MKT.rows||[];host.innerHTML="";
+  // ── safety banner ──
+  if(MKT.safety){
+    const sf=MKT.safety,safe=sf.mode==="SAFE";
+    const banner=el("div");
+    banner.style.cssText=`display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:var(--r);margin-bottom:16px;
+      background:${safe?"rgba(52,211,153,.08)":"rgba(251,191,36,.1)"};border:1px solid ${safe?"rgba(52,211,153,.3)":"rgba(251,191,36,.4)"}`;
+    banner.innerHTML=`<span style="font-size:20px">${safe?"🔒":"🔓"}</span>
+      <div style="flex:1">
+        <div style="font-weight:650;font-size:13px;color:${safe?"var(--pass)":"var(--warn)"}">
+          ${safe?"SAFE MODE — live API calls blocked":"LIVE MODE ENABLED"}</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:2px">${esc(sf.summary)}${sf.read_only_enforced?" · read-only enforced":""}</div>
+      </div>
+      ${sf.allowlist&&sf.allowlist.length?`<div style="font-size:11px;color:var(--dim);font-family:var(--mono)">live: ${sf.allowlist.map(esc).join(", ")}</div>`:""}`;
+    host.appendChild(banner);
+  }
   const by={connected:0,demo:0,not_configured:0,error:0};
   rows.forEach(r=>by[r.mode]=(by[r.mode]||0)+1);
   const kp=el("div","kpis");
@@ -660,8 +677,11 @@ function renderMkt(host){
   rows.filter(r=>(MKT.cat==="all"||r.category===MKT.cat)&&(!MKT.demoOnly||r.mode==="demo")).forEach(r=>{
     const pill={connected:["Connected","b-pass"],demo:["Demo","b-warn"],not_configured:["Not connected","b-dim"],error:["Error","b-fail"]}[r.mode]||[r.mode,"b-dim"];
     const op=MKT.roi&&MKT.roi.opportunities&&MKT.roi.opportunities.find(o=>o.key===r.key);
+    const sf=MKT.safety;
+    const canLive=r.auth_method==="none"||(sf&&sf.live_enabled&&sf.allowlist&&sf.allowlist.includes(r.key));
+    const lockIcon=r.auth_method==="none"?"":(canLive?'<span title="live calls allowed for this connector" style="font-size:12px">🔓</span>':'<span title="locked to demo — cannot call its real API" style="font-size:12px">🔒</span>');
     const c=el("div","mkt-card");
-    c.innerHTML=`<div class="mkt-head"><div><div class="mkt-name">${esc(r.name)}</div>
+    c.innerHTML=`<div class="mkt-head"><div><div class="mkt-name">${esc(r.name)} ${lockIcon}</div>
         <div class="mkt-cat">${esc(r.category)} · ${esc((r.auth_method||"").replace(/_/g," "))}</div></div>
         <span class="badge ${pill[1]}">${pill[0]}</span></div>
       <div class="mkt-meta"><span>⛁ ${r.evidence_count||0} evidence</span><span>⛨ ${r.controls_covered||0} controls</span><span>↻ ${ago(r.last_sync_at)}</span></div>
