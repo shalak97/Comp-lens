@@ -229,6 +229,8 @@ async function api(path, opts) {
 }
 async function apiGET(path) { return api(path); }
 async function apiPOST(path, body) { return api(path, { method: "POST", body: JSON.stringify(body || {}) }); }
+async function apiPATCH(path, body) { return api(withTenant(path), { method: "PATCH", body: JSON.stringify(body || {}) }); }
+async function apiDELETE(path) { return api(withTenant(path), { method: "DELETE" }); }
 
 function withTenant(path){const sep=path.includes("?")?"&":"?";return path+sep+"tenant_id="+encodeURIComponent(CFG.tenant);}
 
@@ -292,7 +294,9 @@ const GROUPS = [
                     ["remediation","Remediation","M9 11l3 3L22 4M12 2a10 10 0 100 20 10 10 0 000-20"],
                     ["trends","Trends","M3 3v18h18M7 14l4-4 3 3 5-5"],
                     ["inventory","AI Inventory","M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"],
-                    ["waivers","Waivers","M9 12l2 2 4-4M21 12c0 5-3.5 7.5-8.5 9.5C7.5 19.5 4 17 4 12V5l8-3 8 3v7z"]]]
+                    ["waivers","Waivers","M9 12l2 2 4-4M21 12c0 5-3.5 7.5-8.5 9.5C7.5 19.5 4 17 4 12V5l8-3 8 3v7z"]]],
+  ["Risk & Vendors", [["risks","Risk Register","M12 2L2 7v10l10 5 10-5V7L12 2zm0 4l6 3v6l-6 3-6-3V9l6-3z M12 8v4m0 3h.01"],
+                      ["vendors","Vendors (TPRM)","M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01M9 18v.01"]]]
 ];
 const RENDER = {};  // populated by feature files
 
@@ -1054,6 +1058,246 @@ RENDER.waivers = async function() {
       <td class="mono" style="color:${soon?"var(--warn)":"var(--mid)"}">${exp?exp.toLocaleDateString():"—"}${soon?" ⚠":""}</td></tr>`;}).join("")}</tbody></table>`;
   card.appendChild(wrap);host.appendChild(card);
 };
+
+/* ============ GRC RISK REGISTER (Vanta/Drata style) ============ */
+const RISK_BAND={critical:["b-fail","var(--fail)"],high:["b-warn","var(--warn)"],medium:["b-info","var(--info)"],low:["b-pass","var(--pass)"]};
+const RISK_STAGES=[["identified","Identified"],["assessed","Assessed"],["treated","Treated"],["monitoring","Monitoring"],["closed","Closed"]];
+const DEMO_RISKS=[
+  {id:"r1",title:"Unpatched production database",category:"technical",owner:"Infrastructure",likelihood:4,impact:5,inherent_score:20,inherent_band:"critical",residual_score:8,residual_band:"medium",treatment:"mitigate",status:"treated",linked_control:"RA-5",review_date:new Date(Date.now()+20*864e5).toISOString()},
+  {id:"r2",title:"Vendor data processing without DPA",category:"third_party",owner:"Legal",likelihood:3,impact:4,inherent_score:12,inherent_band:"high",residual_score:6,residual_band:"medium",treatment:"transfer",status:"monitoring",linked_vendor_id:"v3",review_date:new Date(Date.now()-5*864e5).toISOString()},
+  {id:"r3",title:"Insider access to PII not reviewed",category:"operational",owner:"Security",likelihood:3,impact:4,inherent_score:12,inherent_band:"high",residual_score:9,residual_band:"medium",treatment:"mitigate",status:"assessed",linked_control:"AC-2",review_date:new Date(Date.now()+45*864e5).toISOString()},
+  {id:"r4",title:"Single cloud region — no DR failover",category:"operational",owner:"Infrastructure",likelihood:2,impact:5,inherent_score:10,inherent_band:"medium",residual_score:10,residual_band:"medium",treatment:"accept",status:"monitoring",linked_control:"CP-9",review_date:new Date(Date.now()+60*864e5).toISOString()},
+  {id:"r5",title:"Phishing susceptibility (no training)",category:"operational",owner:"People Ops",likelihood:4,impact:2,inherent_score:8,inherent_band:"medium",residual_score:4,residual_band:"low",treatment:"mitigate",status:"identified",review_date:null},
+];
+const RISK={rows:null,filter:"all"};
+
+RENDER.risks = async function(){
+  const m=main(),v=view("Risk Register","Identify, score, treat and monitor enterprise risks — likelihood × impact with treatment decisions");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading risks…</div>`;
+  const {data}=await load(withTenant("/grc/risks"),DEMO_RISKS);
+  RISK.rows=Array.isArray(data)?data:[];
+  renderRisks(host);
+};
+
+function renderRisks(host){
+  const rows=RISK.rows||[];host.innerHTML="";
+  // KPIs
+  const bands={critical:0,high:0,medium:0,low:0};let overdue=0;const now=Date.now();
+  rows.forEach(r=>{bands[r.inherent_band]=(bands[r.inherent_band]||0)+1;if(r.review_date&&new Date(r.review_date)<now)overdue++;});
+  const kp=el("div","kpis");
+  [["Total risks",rows.length,"in register","var(--hi)"],["🔴 Critical",bands.critical,"need action","var(--fail)"],
+   ["🟠 High",bands.high,"elevated","var(--warn)"],["⏰ Overdue reviews",overdue,"past review date",overdue?"var(--fail)":"var(--pass)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  // lifecycle pipeline
+  const pipe=el("div","card");
+  pipe.innerHTML=`<h3>Risk lifecycle</h3><div class="sub">Risks flow from identification to closure</div>`;
+  const stages=el("div");stages.style.cssText="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap";
+  RISK_STAGES.forEach(([id,label],i)=>{
+    const n=rows.filter(r=>r.status===id).length;
+    const seg=el("div");seg.style.cssText="flex:1;min-width:120px;background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:12px 14px;position:relative";
+    seg.innerHTML=`<div style="font-size:11px;color:var(--mid);text-transform:uppercase;letter-spacing:.4px">${label}</div>
+      <div style="font-size:22px;font-weight:700;margin-top:4px">${n}</div>
+      ${i<RISK_STAGES.length-1?'<div style="position:absolute;right:-6px;top:50%;color:var(--mid);font-size:14px">→</div>':''}`;
+    stages.appendChild(seg);
+  });
+  pipe.appendChild(stages);host.appendChild(pipe);
+
+  // register table + add button
+  const card=el("div","card");
+  const head=el("div");head.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px";
+  head.innerHTML=`<div><h3 style="margin:0">Risk register</h3><div class="sub" style="margin:0">${rows.length} risks · sorted by inherent score</div></div>`;
+  const addBtn=el("button","btn primary sm");addBtn.textContent="+ Add risk";addBtn.onclick=()=>openRiskModal(host);
+  head.appendChild(addBtn);card.appendChild(head);
+  const wrap=el("div","scroll");
+  if(!rows.length){wrap.innerHTML=`<div class="empty">No risks yet. Click "+ Add risk" to start your register.</div>`;}
+  else{wrap.innerHTML=`<table><thead><tr><th>Risk</th><th>Category</th><th>Owner</th><th>Inherent</th><th>Residual</th><th>Treatment</th><th>Status</th><th>Review</th><th></th></tr></thead><tbody>${
+    rows.map(r=>{const ib=RISK_BAND[r.inherent_band]||["b-dim"],rb=RISK_BAND[r.residual_band]||["b-dim"];
+      const od=r.review_date&&new Date(r.review_date)<now;
+      return `<tr><td>${esc(r.title)}</td><td>${esc((r.category||"").replace(/_/g," "))}</td><td>${esc(r.owner||"—")}</td>
+        <td><span class="badge ${ib[0]}">${r.inherent_score} ${r.inherent_band}</span></td>
+        <td><span class="badge ${rb[0]}">${r.residual_score}</span></td>
+        <td><span class="badge b-dim">${esc(r.treatment)}</span></td>
+        <td><span class="badge b-hi">${esc((r.status||"").replace(/_/g," "))}</span></td>
+        <td class="mono" style="color:${od?'var(--fail)':'var(--mid)'};font-size:11px">${r.review_date?new Date(r.review_date).toLocaleDateString():"—"}${od?" ⚠":""}</td>
+        <td><button class="btn sm" data-rid="${r.id}" style="padding:3px 8px">Edit</button></td></tr>`;}).join("")}</tbody></table>`;}
+  card.appendChild(wrap);host.appendChild(card);
+  wrap.querySelectorAll("[data-rid]").forEach(b=>b.onclick=()=>{const r=rows.find(x=>x.id===b.dataset.rid);openRiskModal(host,r);});
+}
+
+function openRiskModal(host,risk){
+  const ex=risk||{};
+  const modal=el("div","modal on");
+  modal.innerHTML=`<div class="box" style="width:480px">
+    <h3>${risk?"Edit risk":"Add risk"}</h3>
+    <div class="fld"><label>Title</label><input id="rk_title" value="${esc(ex.title||"")}"/></div>
+    <div class="fld"><label>Owner</label><input id="rk_owner" value="${esc(ex.owner||"")}"/></div>
+    <div style="display:flex;gap:10px">
+      <div class="fld" style="flex:1"><label>Likelihood (1-5)</label><input id="rk_like" type="number" min="1" max="5" value="${ex.likelihood||3}"/></div>
+      <div class="fld" style="flex:1"><label>Impact (1-5)</label><input id="rk_imp" type="number" min="1" max="5" value="${ex.impact||3}"/></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="fld" style="flex:1"><label>Treatment</label><select id="rk_treat" style="width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px;color:var(--txt)">
+        ${["mitigate","accept","transfer","avoid"].map(t=>`<option ${ex.treatment===t?"selected":""}>${t}</option>`).join("")}</select></div>
+      <div class="fld" style="flex:1"><label>Status</label><select id="rk_status" style="width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px;color:var(--txt)">
+        ${["identified","assessed","treated","monitoring","closed"].map(s=>`<option ${ex.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
+    </div>
+    <div style="display:flex;gap:9px;margin-top:14px">
+      <button class="btn primary" id="rk_save" style="flex:1">${risk?"Save changes":"Add risk"}</button>
+      ${risk?'<button class="btn" id="rk_del" style="color:var(--fail)">Delete</button>':''}
+      <button class="btn" id="rk_cancel">Cancel</button>
+    </div></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();
+  modal.addEventListener("click",e=>{if(e.target===modal)close();});
+  modal.querySelector("#rk_cancel").onclick=close;
+  modal.querySelector("#rk_save").onclick=async()=>{
+    const body={title:modal.querySelector("#rk_title").value.trim(),owner:modal.querySelector("#rk_owner").value.trim(),
+      likelihood:+modal.querySelector("#rk_like").value,impact:+modal.querySelector("#rk_imp").value,
+      treatment:modal.querySelector("#rk_treat").value,status:modal.querySelector("#rk_status").value};
+    if(!body.title){toast("Title required");return;}
+    if(STATE.mode==="demo"){
+      const sc=body.likelihood*body.impact,band=sc>=20?"critical":sc>=12?"high":sc>=6?"medium":"low";
+      if(risk)Object.assign(risk,body,{inherent_score:sc,inherent_band:band,residual_score:sc,residual_band:band});
+      else RISK.rows.unshift({id:"r"+Date.now(),...body,inherent_score:sc,inherent_band:band,residual_score:sc,residual_band:band,review_date:null});
+      close();renderRisks(host);toast(risk?"Risk updated":"Risk added");return;}
+    try{if(risk){await apiPATCH("/grc/risks/"+risk.id,body);}else{await apiPOST(withTenant("/grc/risks"),body);}
+      RISK.rows=await apiGET(withTenant("/grc/risks"));close();renderRisks(host);toast(risk?"Risk updated":"Risk added");
+    }catch(e){toast("Error: "+e.message);}};
+  if(risk){modal.querySelector("#rk_del").onclick=async()=>{
+    if(STATE.mode==="demo"){RISK.rows=RISK.rows.filter(x=>x.id!==risk.id);close();renderRisks(host);toast("Risk deleted");return;}
+    try{await apiDELETE("/grc/risks/"+risk.id);RISK.rows=await apiGET(withTenant("/grc/risks"));close();renderRisks(host);toast("Risk deleted");}catch(e){toast("Error: "+e.message);}};}
+}
+
+/* ============ TPRM VENDORS (Vanta/Drata/OneTrust style) ============ */
+const VENDOR_STAGES=[["onboarding","Onboarding"],["assessment","Assessment"],["active","Active"],["offboarding","Offboarding"]];
+const VRISK_BAND={critical:["b-fail"],high:["b-warn"],medium:["b-info"],low:["b-pass"]};
+const ASSESS_BADGE={not_started:["b-dim","Not started"],sent:["b-info","Sent"],in_review:["b-warn","In review"],approved:["b-pass","Approved"],flagged:["b-fail","Flagged"]};
+const DEMO_VENDORS=[
+  {id:"v1",name:"Amazon Web Services",category:"cloud",stage:"active",risk_tier:"high",assessment_state:"approved",assessment_score:94,computed_risk:"low",data_access:"financial",has_dpa:true,has_soc2:true,next_review:new Date(Date.now()+120*864e5).toISOString()},
+  {id:"v2",name:"Okta",category:"identity",stage:"active",risk_tier:"high",assessment_state:"approved",assessment_score:88,computed_risk:"low",data_access:"pii",has_dpa:true,has_soc2:true,next_review:new Date(Date.now()+90*864e5).toISOString()},
+  {id:"v3",name:"DataPipe Analytics",category:"analytics",stage:"assessment",risk_tier:"high",assessment_state:"flagged",assessment_score:38,computed_risk:"critical",data_access:"pii",has_dpa:false,has_soc2:false,next_review:new Date(Date.now()-3*864e5).toISOString()},
+  {id:"v4",name:"Slack",category:"collaboration",stage:"active",risk_tier:"medium",assessment_state:"approved",assessment_score:79,computed_risk:"medium",data_access:"pii",has_dpa:true,has_soc2:true,next_review:new Date(Date.now()+150*864e5).toISOString()},
+  {id:"v5",name:"FreshMailer",category:"marketing",stage:"onboarding",risk_tier:"medium",assessment_state:"sent",assessment_score:null,computed_risk:"medium",data_access:"pii",has_dpa:false,has_soc2:false,next_review:null},
+  {id:"v6",name:"LegacyBackup Co",category:"infrastructure",stage:"offboarding",risk_tier:"low",assessment_state:"approved",assessment_score:62,computed_risk:"medium",data_access:"none",has_dpa:true,has_soc2:false,next_review:null},
+];
+const VND={rows:null};
+
+RENDER.vendors = async function(){
+  const m=main(),v=view("Third-Party Risk (TPRM)","Vendor lifecycle from onboarding through assessment, monitoring and offboarding");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading vendors…</div>`;
+  const {data}=await load(withTenant("/tprm/vendors"),DEMO_VENDORS);
+  VND.rows=Array.isArray(data)?data:[];
+  renderVendors(host);
+};
+
+function renderVendors(host){
+  const rows=VND.rows||[];host.innerHTML="";
+  const risk={critical:0,high:0,medium:0,low:0};let needsAssess=0,missingDpa=0,overdue=0;const now=Date.now();
+  rows.forEach(v=>{risk[v.computed_risk]=(risk[v.computed_risk]||0)+1;
+    if(["not_started","sent"].includes(v.assessment_state))needsAssess++;
+    if(["pii","phi","financial"].includes(v.data_access)&&!v.has_dpa)missingDpa++;
+    if(v.next_review&&new Date(v.next_review)<now)overdue++;});
+  const kp=el("div","kpis");
+  [["Total vendors",rows.length,"tracked","var(--hi)"],["🔴 Critical risk",risk.critical,"need attention","var(--fail)"],
+   ["📋 Need assessment",needsAssess,"not yet approved","var(--warn)"],["⚠ Missing DPA",missingDpa,"PII without agreement",missingDpa?"var(--fail)":"var(--pass)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  // lifecycle pipeline
+  const pipe=el("div","card");
+  pipe.innerHTML=`<h3>Vendor lifecycle</h3><div class="sub">Vendors progress through onboarding to offboarding</div>`;
+  const stages=el("div");stages.style.cssText="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap";
+  VENDOR_STAGES.forEach(([id,label],i)=>{
+    const vs=rows.filter(v=>v.stage===id);
+    const seg=el("div");seg.style.cssText="flex:1;min-width:130px;background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:12px 14px;position:relative";
+    seg.innerHTML=`<div style="font-size:11px;color:var(--mid);text-transform:uppercase;letter-spacing:.4px">${label}</div>
+      <div style="font-size:22px;font-weight:700;margin-top:4px">${vs.length}</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:2px">${vs.slice(0,2).map(v=>esc(v.name)).join(", ")||"—"}</div>
+      ${i<VENDOR_STAGES.length-1?'<div style="position:absolute;right:-6px;top:50%;color:var(--mid)">→</div>':''}`;
+    stages.appendChild(seg);
+  });
+  pipe.appendChild(stages);host.appendChild(pipe);
+
+  // register
+  const card=el("div","card");
+  const head=el("div");head.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px";
+  head.innerHTML=`<div><h3 style="margin:0">Vendor register</h3><div class="sub" style="margin:0">${rows.length} vendors</div></div>`;
+  const addBtn=el("button","btn primary sm");addBtn.textContent="+ Add vendor";addBtn.onclick=()=>openVendorModal(host);
+  head.appendChild(addBtn);card.appendChild(head);
+  const wrap=el("div","scroll");
+  if(!rows.length){wrap.innerHTML=`<div class="empty">No vendors yet. Click "+ Add vendor" to start.</div>`;}
+  else{wrap.innerHTML=`<table><thead><tr><th>Vendor</th><th>Category</th><th>Stage</th><th>Risk</th><th>Assessment</th><th>Data</th><th>DPA</th><th>Review</th><th></th></tr></thead><tbody>${
+    rows.map(v=>{const rb=VRISK_BAND[v.computed_risk]||["b-dim"],as=ASSESS_BADGE[v.assessment_state]||["b-dim",v.assessment_state];
+      const od=v.next_review&&new Date(v.next_review)<now;const dpaGap=["pii","phi","financial"].includes(v.data_access)&&!v.has_dpa;
+      return `<tr><td>${esc(v.name)}</td><td>${esc(v.category||"—")}</td>
+        <td><span class="badge b-hi">${esc(v.stage)}</span></td>
+        <td><span class="badge ${rb[0]}">${esc(v.computed_risk)}${v.assessment_score!=null?" ("+v.assessment_score+")":""}</span></td>
+        <td><span class="badge ${as[0]}">${as[1]}</span></td>
+        <td class="mono" style="font-size:11px">${esc(v.data_access||"none")}</td>
+        <td>${v.has_dpa?'<span class="badge b-pass">yes</span>':(dpaGap?'<span class="badge b-fail">missing ⚠</span>':'<span class="badge b-dim">n/a</span>')}</td>
+        <td class="mono" style="color:${od?'var(--fail)':'var(--mid)'};font-size:11px">${v.next_review?new Date(v.next_review).toLocaleDateString():"—"}${od?" ⚠":""}</td>
+        <td><button class="btn sm" data-vid="${v.id}" style="padding:3px 8px">Edit</button></td></tr>`;}).join("")}</tbody></table>`;}
+  card.appendChild(wrap);host.appendChild(card);
+  wrap.querySelectorAll("[data-vid]").forEach(b=>b.onclick=()=>{const v=rows.find(x=>x.id===b.dataset.vid);openVendorModal(host,v);});
+}
+
+function openVendorModal(host,vendor){
+  const ex=vendor||{};
+  const modal=el("div","modal on");
+  const sel=(id,opts,cur)=>`<select id="${id}" style="width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px;color:var(--txt)">${opts.map(o=>`<option ${cur===o?"selected":""}>${o}</option>`).join("")}</select>`;
+  modal.innerHTML=`<div class="box" style="width:500px">
+    <h3>${vendor?"Edit vendor":"Add vendor"}</h3>
+    <div class="fld"><label>Name</label><input id="vn_name" value="${esc(ex.name||"")}"/></div>
+    <div style="display:flex;gap:10px">
+      <div class="fld" style="flex:1"><label>Category</label><input id="vn_cat" value="${esc(ex.category||"")}"/></div>
+      <div class="fld" style="flex:1"><label>Stage</label>${sel("vn_stage",["onboarding","assessment","active","offboarding","terminated"],ex.stage||"onboarding")}</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="fld" style="flex:1"><label>Risk tier</label>${sel("vn_tier",["critical","high","medium","low"],ex.risk_tier||"medium")}</div>
+      <div class="fld" style="flex:1"><label>Assessment</label>${sel("vn_assess",["not_started","sent","in_review","approved","flagged"],ex.assessment_state||"not_started")}</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="fld" style="flex:1"><label>Score (0-100)</label><input id="vn_score" type="number" min="0" max="100" value="${ex.assessment_score!=null?ex.assessment_score:""}"/></div>
+      <div class="fld" style="flex:1"><label>Data access</label>${sel("vn_data",["none","pii","phi","financial"],ex.data_access||"none")}</div>
+    </div>
+    <div style="display:flex;gap:18px;margin-bottom:10px">
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="vn_dpa" ${ex.has_dpa?"checked":""}/> Has DPA</label>
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="vn_soc2" ${ex.has_soc2?"checked":""}/> Has SOC 2</label>
+    </div>
+    <div style="display:flex;gap:9px;margin-top:8px">
+      <button class="btn primary" id="vn_save" style="flex:1">${vendor?"Save changes":"Add vendor"}</button>
+      ${vendor?'<button class="btn" id="vn_del" style="color:var(--fail)">Delete</button>':''}
+      <button class="btn" id="vn_cancel">Cancel</button>
+    </div></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();
+  modal.addEventListener("click",e=>{if(e.target===modal)close();});
+  modal.querySelector("#vn_cancel").onclick=close;
+  const band=(sc,tier)=>sc==null?tier:sc>=85?"low":sc>=65?"medium":sc>=40?"high":"critical";
+  modal.querySelector("#vn_save").onclick=async()=>{
+    const sc=modal.querySelector("#vn_score").value;
+    const body={name:modal.querySelector("#vn_name").value.trim(),category:modal.querySelector("#vn_cat").value.trim(),
+      stage:modal.querySelector("#vn_stage").value,risk_tier:modal.querySelector("#vn_tier").value,
+      assessment_state:modal.querySelector("#vn_assess").value,data_access:modal.querySelector("#vn_data").value,
+      has_dpa:modal.querySelector("#vn_dpa").checked,has_soc2:modal.querySelector("#vn_soc2").checked,
+      assessment_score:sc===""?null:+sc};
+    if(!body.name){toast("Name required");return;}
+    if(STATE.mode==="demo"){
+      const cr=band(body.assessment_score,body.risk_tier);
+      if(vendor)Object.assign(vendor,body,{computed_risk:cr});
+      else VND.rows.unshift({id:"v"+Date.now(),...body,computed_risk:cr,next_review:null});
+      close();renderVendors(host);toast(vendor?"Vendor updated":"Vendor added");return;}
+    try{if(vendor){await apiPATCH("/tprm/vendors/"+vendor.id,body);}else{await apiPOST(withTenant("/tprm/vendors"),body);}
+      VND.rows=await apiGET(withTenant("/tprm/vendors"));close();renderVendors(host);toast(vendor?"Vendor updated":"Vendor added");
+    }catch(e){toast("Error: "+e.message);}};
+  if(vendor){modal.querySelector("#vn_del").onclick=async()=>{
+    if(STATE.mode==="demo"){VND.rows=VND.rows.filter(x=>x.id!==vendor.id);close();renderVendors(host);toast("Vendor deleted");return;}
+    try{await apiDELETE("/tprm/vendors/"+vendor.id);VND.rows=await apiGET(withTenant("/tprm/vendors"));close();renderVendors(host);toast("Vendor deleted");}catch(e){toast("Error: "+e.message);}};}
+}
 
 boot();
 </script>
