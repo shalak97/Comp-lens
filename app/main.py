@@ -113,6 +113,12 @@ def connectors_catalog(category: str | None = None,
     return [{k: v for k, v in c.items()} for c in items]
 
 
+@app.get("/connectors/safety", tags=["connectors"])
+def connectors_safety(_: Principal = Depends(require_principal)) -> dict:
+    from app.connectors import safety as _sfty
+    return _sfty.safety_state()
+
+
 @app.get("/connectors/status", tags=["connectors"])
 def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
                       p: Principal = Depends(require_principal)) -> list[dict]:

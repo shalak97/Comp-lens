@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.connectors import catalog as cat
 from app.connectors.evidence_profiles import demo_evidence
+from app.connectors import safety as _safety
 from app.models import ConnectorEvidenceItem, ConnectorSyncState, utc_now
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -64,15 +65,19 @@ def status_one(db: Session, c: Dict[str, Any], tenant_id: str = "default") -> Di
     if not c.get("env_vars"):
         mode = "demo"
     elif env["complete"] and c.get("registry_key"):
-        inst = _registry_connector(c)
-        if inst is not None:
-            try:
-                healthy = bool(inst.healthcheck())
-                mode = "connected" if healthy else "error"
-            except Exception:
-                mode, healthy = "error", False
+        if not _safety.live_allowed(c["key"], c.get("auth_method"))["allowed"]:
+            mode = "demo"  # guardrail: creds present but live calls blocked
         else:
-            mode = "error"
+            inst = _registry_connector(c)
+            if inst is not None:
+                try:
+                    _safety.assert_read_only("healthcheck")
+                    healthy = bool(inst.healthcheck())
+                    mode = "connected" if healthy else "error"
+                except Exception:
+                    mode, healthy = "error", False
+            else:
+                mode = "error"
     elif env["complete"]:
         mode = "demo"  # creds set but no live client built yet
     sync = db.execute(select(ConnectorSyncState).where(
@@ -106,7 +111,8 @@ def supported_controls(c: Dict[str, Any]) -> Dict[str, List[str]]:
 
 def test_connection(c: Dict[str, Any]) -> Dict[str, Any]:
     env = _env_state(c)
-    if env["complete"] and c.get("registry_key"):
+    _gate = _safety.live_allowed(c["key"], c.get("auth_method"))
+    if env["complete"] and c.get("registry_key") and _gate["allowed"]:
         inst = _registry_connector(c)
         if inst is not None:
             try:
@@ -116,6 +122,9 @@ def test_connection(c: Dict[str, Any]) -> Dict[str, Any]:
             except Exception as exc:  # noqa: BLE001
                 return {"key": c["key"], "ok": False, "mode": "live",
                         "detail": f"connection error: {type(exc).__name__}"}
+    if env["complete"] and not _gate["allowed"]:
+        return {"key": c["key"], "ok": True, "mode": "demo",
+                "detail": f"demo (guardrail: {_gate['reason']})"}
     if env["missing"]:
         return {"key": c["key"], "ok": True, "mode": "demo",
                 "detail": f"demo mode (set {', '.join(env['missing'][:4])} for live)"}
@@ -141,6 +150,8 @@ def _normalize(c: Dict[str, Any], items: List[Dict[str, Any]], mode: str) -> Lis
 def _try_live_collect(c: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     """Best-effort live evidence via the registered connector's telemetry API.
     Retries once. Returns None to signal demo fallback."""
+    if not _safety.live_allowed(c["key"], c.get("auth_method"))["allowed"]:
+        return None  # guardrail: live evidence collection blocked -> demo
     inst = _registry_connector(c)
     if inst is None or not _env_state(c)["complete"]:
         return None
@@ -152,6 +163,7 @@ def _try_live_collect(c: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
             continue
         for attempt in (1, 2):
             try:
+                _safety.assert_read_only("collect_telemetry")
                 tel = inst.collect_telemetry(nist[0], None, {})
                 items.append({"evidence_type": et, "title": f"{c['name']} telemetry: {et}",
                               "signals": tel, "status": "info"})
