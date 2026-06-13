@@ -296,7 +296,8 @@ const GROUPS = [
                     ["inventory","AI Inventory","M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"],
                     ["waivers","Waivers","M9 12l2 2 4-4M21 12c0 5-3.5 7.5-8.5 9.5C7.5 19.5 4 17 4 12V5l8-3 8 3v7z"]]],
   ["Risk & Vendors", [["risks","Risk Register","M12 2L2 7v10l10 5 10-5V7L12 2zm0 4l6 3v6l-6 3-6-3V9l6-3z M12 8v4m0 3h.01"],
-                      ["vendors","Vendors (TPRM)","M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01M9 18v.01"]]]
+                      ["vendors","Vendors (TPRM)","M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01M9 18v.01"],
+                      ["trustgraph","Trust Graph","M12 2v6m0 8v6M5 12H2m20 0h-3M6.3 6.3L4 4m16 2.3L17.7 6.3M6.3 17.7L4 20m13.7-2.3L20 20M9 12a3 3 0 116 0 3 3 0 01-6 0z"]]]
 ];
 const RENDER = {};  // populated by feature files
 
@@ -1264,6 +1265,10 @@ function openVendorModal(host,vendor){
       <div class="fld" style="flex:1"><label>Score (0-100)</label><input id="vn_score" type="number" min="0" max="100" value="${ex.assessment_score!=null?ex.assessment_score:""}"/></div>
       <div class="fld" style="flex:1"><label>Data access</label>${sel("vn_data",["none","pii","phi","financial"],ex.data_access||"none")}</div>
     </div>
+    <div class="fld"><label>Linked connector (ties live telemetry to this vendor)</label>
+      <select id="vn_conn" style="width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px;color:var(--txt)">
+        <option value="">— none —</option>
+        ${(MKT.rows||DEMO_CONNECTORS).map(co=>`<option value="${co.key}" ${ex.linked_connector_key===co.key?"selected":""}>${esc(co.name)}</option>`).join("")}</select></div>
     <div style="display:flex;gap:18px;margin-bottom:10px">
       <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="vn_dpa" ${ex.has_dpa?"checked":""}/> Has DPA</label>
       <label style="font-size:13px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="vn_soc2" ${ex.has_soc2?"checked":""}/> Has SOC 2</label>
@@ -1284,6 +1289,7 @@ function openVendorModal(host,vendor){
       stage:modal.querySelector("#vn_stage").value,risk_tier:modal.querySelector("#vn_tier").value,
       assessment_state:modal.querySelector("#vn_assess").value,data_access:modal.querySelector("#vn_data").value,
       has_dpa:modal.querySelector("#vn_dpa").checked,has_soc2:modal.querySelector("#vn_soc2").checked,
+      linked_connector_key:modal.querySelector("#vn_conn").value||null,
       assessment_score:sc===""?null:+sc};
     if(!body.name){toast("Name required");return;}
     if(STATE.mode==="demo"){
@@ -1297,6 +1303,154 @@ function openVendorModal(host,vendor){
   if(vendor){modal.querySelector("#vn_del").onclick=async()=>{
     if(STATE.mode==="demo"){VND.rows=VND.rows.filter(x=>x.id!==vendor.id);close();renderVendors(host);toast("Vendor deleted");return;}
     try{await apiDELETE("/tprm/vendors/"+vendor.id);VND.rows=await apiGET(withTenant("/tprm/vendors"));close();renderVendors(host);toast("Vendor deleted");}catch(e){toast("Error: "+e.message);}};}
+}
+
+/* ============ TRUST GRAPH (connector→control→risk←vendor) ============ */
+const TG_COLORS={vendor:"#a78bfa",connector:"#5b9cf6",control:"#34d399",risk:"#f87171"};
+const TG_DEMO={
+  nodes:[
+    {id:"vendor:v1",type:"vendor",label:"Okta Inc",live:true},
+    {id:"vendor:v2",type:"vendor",label:"DataPipe Analytics",live:false},
+    {id:"connector:OKTA",type:"connector",label:"Okta",live:true,fresh:true},
+    {id:"connector:GITHUB",type:"connector",label:"GitHub",live:true,fresh:true},
+    {id:"control:AC-2",type:"control",label:"AC-2",strength:1,status:"evidenced"},
+    {id:"control:IA-2",type:"control",label:"IA-2",strength:1,status:"evidenced"},
+    {id:"control:SA-15",type:"control",label:"SA-15",strength:0.5,status:"weak"},
+    {id:"control:RA-5",type:"control",label:"RA-5",strength:0,status:"unevidenced"},
+    {id:"risk:r1",type:"risk",label:"Dormant accounts",inherent:16,residual:6,strength:1},
+    {id:"risk:r2",type:"risk",label:"Vendor data leak",inherent:12,residual:12,strength:0},
+    {id:"risk:r3",type:"risk",label:"Unpatched CVEs",inherent:20,residual:20,strength:0},
+  ],
+  edges:[
+    {from:"vendor:v1",to:"connector:OKTA",kind:"operates"},
+    {from:"connector:OKTA",to:"control:AC-2",kind:"evidences",strength:1},
+    {from:"connector:OKTA",to:"control:IA-2",kind:"evidences",strength:1},
+    {from:"connector:GITHUB",to:"control:SA-15",kind:"evidences",strength:0.5},
+    {from:"control:AC-2",to:"risk:r1",kind:"mitigates",strength:1},
+    {from:"vendor:v2",to:"risk:r2",kind:"owns"},
+    {from:"control:RA-5",to:"risk:r3",kind:"mitigates",strength:0},
+  ],
+  stats:{vendors:2,connectors:2,controls:4,risks:3,live_connectors:2,unevidenced_controls:1}
+};
+const TG={data:null,nodes:[],edges:[],idx:{},rotX:.3,rotY:-.5,zoom:1,drag:false,lx:0,ly:0,hov:null,sel:null,anim:null,cv:null,ctx:null,filter:"all"};
+
+RENDER.trustgraph = async function(){
+  const m=main(),v=view("Trust Graph","The live chain: vendors operate connectors → connectors evidence controls → controls mitigate risks. Telemetry flows through.");
+  m.appendChild(v);
+  const ex=el("div","callout");
+  ex.innerHTML=`<b>One connected system.</b> <span style="color:#a78bfa">Vendors</span> operate <span style="color:#5b9cf6">connectors</span> that collect evidence for <span style="color:#34d399">controls</span>, which mitigate <span style="color:#f87171">risks</span>. A control with no live evidence (faded) provides no real mitigation — so its risk stays high. Drag to rotate, scroll to zoom, click a node.`;
+  v.appendChild(ex);
+  const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Computing trust graph…</div>`;
+  const {data}=await load(withTenant("/trust/graph"),TG_DEMO);
+  TG.data=data&&data.nodes?data:TG_DEMO;
+  renderTrustGraph(host);
+};
+
+function renderTrustGraph(host){
+  host.innerHTML="";
+  const s=TG.data.stats||{};
+  const kp=el("div","kpis");
+  [["Vendors",s.vendors||0,"third parties","var(--purple)"],["Live connectors",s.live_connectors||0,"feeding evidence","var(--hi)"],
+   ["Controls",s.controls||0,"in the chain","var(--pass)"],["⚠ Unevidenced",s.unevidenced_controls||0,"controls with no live proof",s.unevidenced_controls?"var(--fail)":"var(--pass)"]]
+   .forEach(([k,n,sub,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${sub}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  // build 3D layout
+  TG.nodes=TG.data.nodes.map(n=>({...n}));TG.edges=TG.data.edges;TG.idx={};TG.nodes.forEach(n=>TG.idx[n.id]=n);
+  tgLayout();tgSim(90);
+  const wrap=el("div","gwrap");
+  wrap.innerHTML=`<canvas id="tgcanvas"></canvas>
+    <div class="ghud"><div class="col">
+      <div style="font-size:11px;font-weight:600;color:var(--txt);margin-bottom:4px;letter-spacing:.4px">TRUST CHAIN</div>
+      ${[["Vendor",TG_COLORS.vendor],["Connector",TG_COLORS.connector],["Control",TG_COLORS.control],["Risk",TG_COLORS.risk]]
+        .map(([l,c])=>`<div class="gleg"><div class="d" style="background:${c}"></div><span>${l}</span></div>`).join("")}
+      <div class="gleg" style="margin-top:4px"><div class="d" style="background:#34d399;opacity:.3"></div><span>faded = no live evidence</span></div>
+    </div><div class="col r">
+      <div id="tginfo" style="background:rgba(10,13,20,.92);border:1px solid var(--line2);border-radius:var(--r2);padding:11px 13px;font-size:11.5px;color:var(--dim);min-width:185px;max-width:240px;display:none"></div>
+      <div style="font-size:10px;color:var(--mid)">drag · scroll · click</div>
+    </div></div>`;
+  host.appendChild(wrap);
+
+  // telemetry note
+  const note=el("div","card");
+  note.innerHTML=`<h3>How telemetry flows</h3>
+    <div class="sub">Risk residual scores are computed live from evidence strength — not hand-typed</div>
+    <table style="width:100%"><thead><tr><th>Risk</th><th>Inherent</th><th>Live residual</th><th>Evidence strength</th></tr></thead><tbody>${
+    TG.nodes.filter(n=>n.type==="risk").map(r=>{const drop=r.inherent-r.residual;
+      return `<tr><td>${esc(r.label)}</td><td class="mono">${r.inherent}</td>
+        <td class="mono" style="color:${drop>0?'var(--pass)':'var(--fail)'}">${r.residual}${drop>0?` (−${drop})`:" (no mitigation)"}</td>
+        <td><div class="pbar" style="width:90px;display:inline-block;vertical-align:middle"><i style="width:${(r.strength||0)*100}%"></i></div> <span class="mono" style="font-size:11px">${((r.strength||0)*100).toFixed(0)}%</span></td></tr>`;}).join("")}</tbody></table>`;
+  host.appendChild(note);
+
+  const cv=wrap.querySelector("#tgcanvas");
+  if(TG.anim){cancelAnimationFrame(TG.anim);TG.anim=null;}
+  requestAnimationFrame(()=>{
+    const dpr=window.devicePixelRatio||1,W=wrap.offsetWidth||800,H=560;
+    cv.width=W*dpr;cv.height=H*dpr;cv._w=W;cv._h=H;TG.cv=cv;TG.ctx=cv.getContext("2d");TG.ctx.scale(dpr,dpr);
+    cv.onmousedown=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,h=tgHit(mx,my);
+      if(h){TG.sel=TG.sel===h.id?null:h.id;tgInfo(TG.sel?h:null);}else{TG.drag=true;TG.lx=e.clientX;TG.ly=e.clientY;}};
+    cv.onmousemove=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+      if(TG.drag){TG.rotY+=(e.clientX-TG.lx)*.006;TG.rotX+=(e.clientY-TG.ly)*.006;TG.lx=e.clientX;TG.ly=e.clientY;}
+      const h=tgHit(mx,my);TG.hov=h?h.id:null;cv.style.cursor=h?"pointer":TG.drag?"grabbing":"grab";};
+    cv.onmouseup=()=>TG.drag=false;cv.onmouseleave=()=>{TG.drag=false;TG.hov=null;};
+    cv.onwheel=e=>{TG.zoom=Math.max(.4,Math.min(2.6,TG.zoom-e.deltaY*.001));e.preventDefault();};
+    cv.ontouchstart=e=>{const t=e.touches[0];TG.lx=t.clientX;TG.ly=t.clientY;TG.drag=true;e.preventDefault();};
+    cv.ontouchmove=e=>{const t=e.touches[0];TG.rotY+=(t.clientX-TG.lx)*.006;TG.rotX+=(t.clientY-TG.ly)*.006;TG.lx=t.clientX;TG.ly=t.clientY;e.preventDefault();};
+    cv.ontouchend=()=>TG.drag=false;
+    let lt=0;function loop(t){TG.anim=requestAnimationFrame(loop);if(!TG.drag)TG.rotY+=(t-lt)*.00006;lt=t;tgDraw();}
+    requestAnimationFrame(loop);
+  });
+}
+function tgLayout(){
+  // layer by type along x: vendor -> connector -> control -> risk
+  const layers={vendor:-260,connector:-90,control:90,risk:260};
+  const byType={vendor:[],connector:[],control:[],risk:[]};
+  TG.nodes.forEach(n=>byType[n.type]&&byType[n.type].push(n));
+  Object.entries(byType).forEach(([t,arr])=>{arr.forEach((n,i)=>{
+    const ang=arr.length>1?(i/(arr.length-1)-.5):0;
+    n.x=layers[t];n.y=ang*260;n.z=Math.sin(i*1.7)*60;n.vx=n.vy=n.vz=0;});});
+}
+function tgSim(steps){for(let s=0;s<steps;s++){const k=.02*(1-s/steps);
+  TG.edges.forEach(e=>{const a=TG.idx[e.from],b=TG.idx[e.to];if(!a||!b)return;
+    const dy=b.y-a.y,dz=b.z-a.z,f=k*.3;a.vy+=f*dy;a.vz+=f*dz;b.vy-=f*dy;b.vz-=f*dz;});
+  for(let i=0;i<TG.nodes.length;i++)for(let j=i+1;j<TG.nodes.length;j++){const a=TG.nodes[i],b=TG.nodes[j];
+    if(a.type!==b.type)continue;const dy=a.y-b.y,dz=a.z-b.z,d2=dy*dy+dz*dz+1,f=180/d2;a.vy+=f*dy/Math.sqrt(d2);a.vz+=f*dz/Math.sqrt(d2);b.vy-=f*dy/Math.sqrt(d2);b.vz-=f*dz/Math.sqrt(d2);}
+  TG.nodes.forEach(n=>{n.y+=n.vy*.1;n.z+=n.vz*.1;n.vy*=.7;n.vz*=.7;});}}
+function tgProj(n,W,H){const cx=Math.cos(TG.rotX),sx=Math.sin(TG.rotX),cy=Math.cos(TG.rotY),sy=Math.sin(TG.rotY);
+  const y1=n.y*cx-n.z*sx,z1=n.y*sx+n.z*cx,x2=n.x*cy+z1*sy,z2=-n.x*sy+z1*cy,fov=340*TG.zoom,z=z2+440;
+  return{x:W/2+x2*fov/z,y:H/2+y1*fov/z,z:z2,sc:fov/z};}
+function tgDraw(){const cv=TG.cv,x=TG.ctx;if(!cv||!x)return;const W=cv._w,H=cv._h;x.clearRect(0,0,W,H);
+  const pm={};TG.nodes.forEach(n=>pm[n.id]=tgProj(n,W,H));
+  TG.edges.forEach(e=>{const a=pm[e.from],b=pm[e.to];if(!a||!b)return;
+    const hl=TG.sel&&(e.from===TG.sel||e.to===TG.sel),hh=TG.hov&&(e.from===TG.hov||e.to===TG.hov);
+    const st=e.strength==null?1:e.strength;const al=hl?.9:hh?.6:.2+st*.3;
+    const col=e.kind==="operates"?`rgba(167,139,250,${al})`:e.kind==="evidences"?`rgba(91,156,246,${al})`:e.kind==="mitigates"?`rgba(52,211,153,${al})`:`rgba(248,113,113,${al})`;
+    x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.strokeStyle=col;x.lineWidth=e.kind==="mitigates"&&st>=1?2.2:1.1;
+    if(e.kind==="mitigates"&&st<0.3)x.setLineDash([4,4]);x.stroke();x.setLineDash([]);});
+  const sorted=TG.nodes.map(n=>({n,p:pm[n.id]})).sort((a,b)=>a.p.z-b.p.z);
+  sorted.forEach(({n,p})=>{const r=(n.type==="risk"?9:n.type==="vendor"?9:7)*p.sc*1.6,hi=TG.hov===n.id||TG.sel===n.id;
+    let col=TG_COLORS[n.type];let faded=(n.type==="control"&&n.status==="unevidenced")||(n.type==="risk"&&(n.strength||0)===0&&n.residual===n.inherent);
+    if(hi){x.beginPath();x.arc(p.x,p.y,r+5,0,7);x.fillStyle="rgba(255,255,255,.1)";x.fill();}
+    x.beginPath();x.arc(p.x,p.y,r,0,7);x.fillStyle=col+(faded?"44":hi?"ff":"cc");x.fill();
+    x.strokeStyle="rgba(255,255,255,.2)";x.lineWidth=.7;x.stroke();
+    if(r>5||hi){x.font=`${Math.min(11,r*.8+6)}px ui-monospace,monospace`;x.fillStyle=hi?"#fff":faded?"rgba(180,190,210,.5)":"rgba(220,230,255,.75)";x.textAlign="center";
+      let lbl=n.label.length>16?n.label.slice(0,15)+"…":n.label;x.fillText(lbl,p.x,p.y+r+11);}});
+}
+function tgHit(mx,my){const cv=TG.cv;if(!cv)return null;const W=cv._w,H=cv._h;let best=null,bd=1e9;
+  TG.nodes.forEach(n=>{const p=tgProj(n,W,H),r=(n.type==="risk"?9:7)*p.sc*1.6+5,d=Math.hypot(mx-p.x,my-p.y);if(d<r&&d<bd){bd=d;best=n;}});return best;}
+function tgInfo(n){const panel=$("#tginfo");if(!panel)return;if(!n){panel.style.display="none";return;}
+  const ins=TG.edges.filter(e=>e.to===n.id).map(e=>(TG.idx[e.from]||{}).label||e.from);
+  const outs=TG.edges.filter(e=>e.from===n.id).map(e=>(TG.idx[e.to]||{}).label||e.to);
+  let detail="";
+  if(n.type==="risk")detail=`<div style="margin-top:5px">Inherent: <b style="color:var(--txt)">${n.inherent}</b> → Residual: <b style="color:${n.residual<n.inherent?'var(--pass)':'var(--fail)'}">${n.residual}</b></div><div style="font-size:11px">evidence strength: ${((n.strength||0)*100).toFixed(0)}%</div>`;
+  if(n.type==="control")detail=`<div style="margin-top:5px">status: <b style="color:${n.status==='evidenced'?'var(--pass)':n.status==='weak'?'var(--warn)':'var(--fail)'}">${n.status}</b></div>`;
+  if(n.type==="connector")detail=`<div style="margin-top:5px">${n.live?'<span style="color:var(--pass)">● live</span>':'<span style="color:var(--mid)">○ not live</span>'}${n.fresh?' · fresh':''}</div>`;
+  panel.style.display="block";
+  panel.innerHTML=`<div style="color:var(--txt);font-weight:600;font-size:12.5px">${esc(n.label)}</div>
+    <div style="color:var(--mid);font-size:10px;text-transform:uppercase;letter-spacing:.5px">${n.type}</div>${detail}
+    ${ins.length?`<div style="margin-top:6px;font-size:11px"><span style="color:var(--mid)">← from: </span>${ins.slice(0,3).map(esc).join(", ")}</div>`:""}
+    ${outs.length?`<div style="margin-top:3px;font-size:11px"><span style="color:var(--mid)">→ to: </span>${outs.slice(0,3).map(esc).join(", ")}</div>`:""}`;
 }
 
 boot();
