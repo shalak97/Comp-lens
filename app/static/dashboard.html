@@ -574,17 +574,17 @@ RENDER.frameworks = async function() {
 /* ============ CONNECTORS MARKETPLACE ============ */
 const CAT_COLORS={cloud:"#5b9cf6",identity:"#a78bfa",devops:"#fb923c",itsm:"#38bdf8",security:"#f43f5e",grc:"#34d399",saas:"#fbbf24",endpoint:"#94a3b8"};
 const DEMO_CONNECTORS=[
- {key:"AWS_SECURITY_HUB",name:"AWS Security Hub",category:"cloud",vendor:"AWS",auth_method:"iam_keys",maturity:"implemented",mode:"demo",evidence_count:4,controls_covered:31,last_sync_at:null,credentials:{missing:["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_REGION"]}},
+ {key:"AWS_SECURITY_HUB",name:"AWS Security Hub",category:"cloud",vendor:"AWS",auth_method:"iam_keys",maturity:"implemented",mode:"not_configured",evidence_count:4,controls_covered:31,last_sync_at:null,credentials:{missing:["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_REGION"]}},
  {key:"OKTA",name:"Okta",category:"identity",vendor:"Okta",auth_method:"api_token",maturity:"implemented",mode:"connected",evidence_count:4,controls_covered:36,last_sync_at:new Date(Date.now()-36e5).toISOString(),credentials:{missing:[]}},
- {key:"ENTRA_ID",name:"Microsoft Entra ID",category:"identity",vendor:"Microsoft",auth_method:"oauth_client_credentials",maturity:"implemented",mode:"demo",evidence_count:4,controls_covered:38,last_sync_at:null,credentials:{missing:["AZURE_TENANT_ID","AZURE_CLIENT_ID","AZURE_CLIENT_SECRET"]}},
+ {key:"ENTRA_ID",name:"Microsoft Entra ID",category:"identity",vendor:"Microsoft",auth_method:"oauth_client_credentials",maturity:"implemented",mode:"not_configured",evidence_count:4,controls_covered:38,last_sync_at:null,credentials:{missing:["AZURE_TENANT_ID","AZURE_CLIENT_ID","AZURE_CLIENT_SECRET"]}},
  {key:"GITHUB",name:"GitHub",category:"devops",vendor:"GitHub",auth_method:"pat_token",maturity:"implemented",mode:"connected",evidence_count:4,controls_covered:29,last_sync_at:new Date(Date.now()-72e5).toISOString(),credentials:{missing:[]}},
  {key:"GITLAB",name:"GitLab",category:"devops",vendor:"GitLab",auth_method:"pat_token",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:20,last_sync_at:null,credentials:{missing:["GITLAB_TOKEN","GITLAB_GROUP"]}},
- {key:"JIRA",name:"Jira",category:"itsm",vendor:"Atlassian",auth_method:"api_token",maturity:"implemented",mode:"demo",evidence_count:2,controls_covered:14,last_sync_at:null,credentials:{missing:["JIRA_URL","JIRA_EMAIL","JIRA_API_TOKEN"]}},
+ {key:"JIRA",name:"Jira",category:"itsm",vendor:"Atlassian",auth_method:"api_token",maturity:"implemented",mode:"not_configured",evidence_count:2,controls_covered:14,last_sync_at:null,credentials:{missing:["JIRA_URL","JIRA_EMAIL","JIRA_API_TOKEN"]}},
  {key:"SERVICENOW",name:"ServiceNow",category:"itsm",vendor:"ServiceNow",auth_method:"basic_auth",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:18,last_sync_at:null,credentials:{missing:["SERVICENOW_INSTANCE","SERVICENOW_USER","SERVICENOW_PASSWORD"]}},
- {key:"CROWDSTRIKE",name:"CrowdStrike Falcon",category:"security",vendor:"CrowdStrike",auth_method:"oauth_client_credentials",maturity:"implemented",mode:"demo",evidence_count:3,controls_covered:21,last_sync_at:null,credentials:{missing:["CROWDSTRIKE_CLIENT_ID","CROWDSTRIKE_CLIENT_SECRET"]}},
+ {key:"CROWDSTRIKE",name:"CrowdStrike Falcon",category:"security",vendor:"CrowdStrike",auth_method:"oauth_client_credentials",maturity:"implemented",mode:"not_configured",evidence_count:3,controls_covered:21,last_sync_at:null,credentials:{missing:["CROWDSTRIKE_CLIENT_ID","CROWDSTRIKE_CLIENT_SECRET"]}},
  {key:"QUALYS",name:"Qualys VMDR",category:"security",vendor:"Qualys",auth_method:"basic_auth",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:9,last_sync_at:null,credentials:{missing:["QUALYS_PLATFORM_URL","QUALYS_USER","QUALYS_PASSWORD"]}},
  {key:"SPLUNK",name:"Splunk",category:"security",vendor:"Splunk",auth_method:"api_token",maturity:"demo",mode:"not_configured",evidence_count:0,controls_covered:15,last_sync_at:null,credentials:{missing:["SPLUNK_URL","SPLUNK_TOKEN"]}},
- {key:"ONETRUST",name:"OneTrust",category:"grc",vendor:"OneTrust",auth_method:"oauth_client_credentials",maturity:"demo",mode:"demo",evidence_count:3,controls_covered:16,last_sync_at:null,credentials:{missing:["ONETRUST_HOSTNAME","ONETRUST_CLIENT_ID","ONETRUST_CLIENT_SECRET"]}},
+ {key:"ONETRUST",name:"OneTrust",category:"grc",vendor:"OneTrust",auth_method:"oauth_client_credentials",maturity:"demo",mode:"not_configured",evidence_count:3,controls_covered:16,last_sync_at:null,credentials:{missing:["ONETRUST_HOSTNAME","ONETRUST_CLIENT_ID","ONETRUST_CLIENT_SECRET"]}},
  {key:"VANTA",name:"Vanta",category:"grc",vendor:"Vanta",auth_method:"oauth_client_credentials",maturity:"demo",mode:"not_configured",evidence_count:0,controls_covered:12,last_sync_at:null,credentials:{missing:["VANTA_CLIENT_ID","VANTA_CLIENT_SECRET"]}},
  {key:"SLACK",name:"Slack",category:"saas",vendor:"Slack",auth_method:"bot_token",maturity:"implemented",mode:"not_configured",evidence_count:0,controls_covered:8,last_sync_at:null,credentials:{missing:["SLACK_BOT_TOKEN"]}},
  {key:"MICROSOFT_365",name:"Microsoft 365",category:"saas",vendor:"Microsoft",auth_method:"oauth_client_credentials",maturity:"demo",mode:"not_configured",evidence_count:0,controls_covered:11,last_sync_at:null,credentials:{missing:["AZURE_TENANT_ID","AZURE_CLIENT_ID","AZURE_CLIENT_SECRET"]}},
@@ -637,11 +637,11 @@ function renderMkt(host){
       ${sf.allowlist&&sf.allowlist.length?`<div style="font-size:11px;color:var(--dim);font-family:var(--mono)">live: ${sf.allowlist.map(esc).join(", ")}</div>`:""}`;
     host.appendChild(banner);
   }
-  const by={connected:0,demo:0,not_configured:0,error:0};
-  rows.forEach(r=>by[r.mode]=(by[r.mode]||0)+1);
+  const by={live:0,demo:0,none:0};
+  rows.forEach(r=>{by[connState(r).id]=(by[connState(r).id]||0)+1;});
   const kp=el("div","kpis");
-  [["Connected",by.connected,"live credentials","var(--pass)"],["Demo",by.demo,"synthetic evidence","var(--warn)"],
-   ["Available",by.not_configured,"ready to configure","var(--mid)"],["Total",rows.length,"in marketplace","var(--hi)"]]
+  [["🟢 Live connected",by.live,"real credentials","var(--pass)"],["🟡 Demo preview",by.demo,"sample data only","var(--warn)"],
+   ["🔴 Not connected",by.none,"add credentials","var(--fail)"],["Total",rows.length,"in marketplace","var(--hi)"]]
    .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
   host.appendChild(kp);
 
@@ -670,37 +670,80 @@ function renderMkt(host){
   const cats=["all","cloud","identity","devops","itsm","security","grc","saas","endpoint"];
   const seg=el("div","segrow");
   cats.forEach(c=>{const b=el("button","seg"+(MKT.cat===c?" on":""));b.textContent=c==="all"?"All":c.toUpperCase();b.onclick=()=>{MKT.cat=c;renderMkt(host);};seg.appendChild(b);});
-  const tg=el("button","seg"+(MKT.demoOnly?" on":""));tg.textContent="⚡ Demo only";tg.onclick=()=>{MKT.demoOnly=!MKT.demoOnly;renderMkt(host);};seg.appendChild(tg);
+  const tg=el("button","seg"+(MKT.demoOnly?" on":""));tg.textContent="🟡 Demo previews only";tg.onclick=()=>{MKT.demoOnly=!MKT.demoOnly;renderMkt(host);};seg.appendChild(tg);
   card.appendChild(seg);
 
   const grid=el("div","mkt-grid");
-  rows.filter(r=>(MKT.cat==="all"||r.category===MKT.cat)&&(!MKT.demoOnly||r.mode==="demo")).forEach(r=>{
-    const pill={connected:["Connected","b-pass"],demo:["Demo","b-warn"],not_configured:["Not connected","b-dim"],error:["Error","b-fail"]}[r.mode]||[r.mode,"b-dim"];
+  rows.filter(r=>(MKT.cat==="all"||r.category===MKT.cat)&&(!MKT.demoOnly||connState(r).id==="demo")).forEach(r=>{
+    const st=connState(r);
     const op=MKT.roi&&MKT.roi.opportunities&&MKT.roi.opportunities.find(o=>o.key===r.key);
-    const sf=MKT.safety;
-    const canLive=r.auth_method==="none"||(sf&&sf.live_enabled&&sf.allowlist&&sf.allowlist.includes(r.key));
-    const lockIcon=r.auth_method==="none"?"":(canLive?'<span title="live calls allowed for this connector" style="font-size:12px">🔓</span>':'<span title="locked to demo — cannot call its real API" style="font-size:12px">🔒</span>');
+    const hasCreds=!(r.credentials&&r.credentials.missing&&r.credentials.missing.length);
+    const isSynthetic=r.auth_method==="none";
     const c=el("div","mkt-card");
-    c.innerHTML=`<div class="mkt-head"><div><div class="mkt-name">${esc(r.name)} ${lockIcon}</div>
+    c.style.borderColor=st.border;
+    c.innerHTML=`<div class="mkt-head"><div><div class="mkt-name">${esc(r.name)}</div>
         <div class="mkt-cat">${esc(r.category)} · ${esc((r.auth_method||"").replace(/_/g," "))}</div></div>
-        <span class="badge ${pill[1]}">${pill[0]}</span></div>
+        <span class="badge ${st.cls}" title="${st.tip}">${st.dot} ${st.label}</span></div>
       <div class="mkt-meta"><span>⛁ ${r.evidence_count||0} evidence</span><span>⛨ ${r.controls_covered||0} controls</span><span>↻ ${ago(r.last_sync_at)}</span></div>
       ${op?`<div class="roi">⬆ ${esc(op.headline)}</div>`:""}
-      ${(r.credentials&&r.credentials.missing&&r.credentials.missing.length)?`<div class="mkt-msg" style="color:var(--mid)">needs: ${r.credentials.missing.slice(0,3).join(", ")}${r.credentials.missing.length>3?"…":""}</div>`:'<div class="mkt-msg"></div>'}`;
+      ${(!hasCreds&&!isSynthetic)?`<div style="font-size:11px;color:var(--mid)">needs: ${r.credentials.missing.slice(0,3).join(", ")}${r.credentials.missing.length>3?"…":""}</div>`:""}
+      <div class="mkt-msg"></div>`;
     const acts=el("div","mkt-actions");
-    const tb=el("button","btn sm");tb.textContent="Test";
-    const sb=el("button","btn sm primary");sb.textContent="Sync";
     const msg=c.querySelector(".mkt-msg");
-    tb.onclick=async()=>{tb.disabled=true;msg.textContent="testing…";
-      if(STATE.mode==="demo"){await sleep(300);msg.textContent="✓ demo mode OK";tb.disabled=false;return;}
-      try{const j=await apiPOST("/connectors/"+r.key+"/test",{});msg.textContent=(j.ok?"✓ ":"✗ ")+j.detail;}catch(e){msg.textContent="✗ "+e.message;}tb.disabled=false;};
-    sb.onclick=async()=>{sb.disabled=true;msg.textContent="syncing…";
-      if(STATE.mode==="demo"){await sleep(400);r.evidence_count=r.evidence_count||3;r.last_sync_at=new Date().toISOString();if(r.mode==="not_configured")r.mode="demo";msg.textContent="✓ demo evidence synced";renderMkt(host);toast("Synced "+r.name+" (demo)");return;}
-      try{const j=await apiPOST("/connectors/"+r.key+"/sync",{tenant_id:CFG.tenant});msg.textContent="✓ "+j.evidence_count+" items ("+j.mode+")";toast("Synced "+r.name);
-        MKT.rows=await apiGET(withTenant("/connectors/status"));renderMkt(host);}catch(e){msg.textContent="✗ "+e.message;sb.disabled=false;}};
-    acts.appendChild(tb);acts.appendChild(sb);c.appendChild(acts);grid.appendChild(c);
+
+    // ── Real sync: only when credentials present (or synthetic). Otherwise blocked. ──
+    const canRealSync=isSynthetic||hasCreds;
+    const sb=el("button","btn sm primary");
+    if(canRealSync){
+      sb.textContent="Sync";sb.title="Connect to the real service and pull live evidence";
+      sb.onclick=async()=>{sb.disabled=true;msg.style.color="var(--dim)";msg.textContent="syncing…";
+        if(STATE.mode==="demo"){await sleep(400);msg.style.color="var(--warn)";msg.textContent="⚠ offline — start the API to sync live";sb.disabled=false;return;}
+        try{const j=await apiPOST("/connectors/"+r.key+"/sync",{tenant_id:CFG.tenant});
+          const live=j.mode==="live"||j.mode==="connected";
+          msg.style.color=live?"var(--pass)":"var(--warn)";
+          msg.textContent=(live?"✓ live: ":"⚠ "+j.mode+": ")+j.evidence_count+" items";
+          toast((live?"Connected & synced ":"Synced ")+r.name);
+          MKT.rows=await apiGET(withTenant("/connectors/status"));renderMkt(host);
+        }catch(e){msg.style.color="var(--fail)";msg.textContent="✗ "+e.message;sb.disabled=false;}};
+    }else{
+      sb.textContent="Connect";sb.title="Add credentials in your environment to enable live sync";
+      sb.onclick=()=>{msg.style.color="var(--warn)";
+        msg.innerHTML=`needs credentials: <span class="mono">${r.credentials.missing.slice(0,4).join(", ")}</span>. Set these in your API environment, then Sync.`;};
+    }
+
+    // ── Test: live healthcheck when creds, else explains ──
+    const tb=el("button","btn sm");tb.textContent="Test";tb.title="Check whether credentials reach the service";
+    tb.onclick=async()=>{tb.disabled=true;msg.style.color="var(--dim)";msg.textContent="testing…";
+      if(isSynthetic){await sleep(200);msg.style.color="var(--pass)";msg.textContent="✓ built-in — always available";tb.disabled=false;return;}
+      if(!hasCreds){msg.style.color="var(--warn)";msg.textContent="no credentials set — nothing to test yet";tb.disabled=false;return;}
+      if(STATE.mode==="demo"){await sleep(300);msg.style.color="var(--warn)";msg.textContent="⚠ offline — can't reach service";tb.disabled=false;return;}
+      try{const j=await apiPOST("/connectors/"+r.key+"/test",{});msg.style.color=j.ok?"var(--pass)":"var(--fail)";msg.textContent=(j.ok?"✓ ":"✗ ")+j.detail;}catch(e){msg.style.color="var(--fail)";msg.textContent="✗ "+e.message;}tb.disabled=false;};
+
+    // ── Preview sample data: clearly separate, clearly fake ──
+    const pb=el("button","btn sm");pb.style.cssText="flex:1;border-style:dashed";
+    pb.innerHTML="👁 Preview";pb.title="Load SAMPLE data to explore the UI — not from the real service";
+    pb.onclick=async()=>{pb.disabled=true;msg.style.color="var(--dim)";msg.textContent="loading sample…";
+      await sleep(350);
+      r._preview=true;r.evidence_count=r.evidence_count||3;r.last_sync_at=new Date().toISOString();
+      msg.style.color="var(--warn)";msg.textContent="👁 showing SAMPLE data (not live)";
+      renderMkt(host);toast("Loaded sample data for "+r.name+" — not real");pb.disabled=false;};
+
+    acts.appendChild(tb);acts.appendChild(sb);
+    const acts2=el("div","mkt-actions");acts2.style.marginTop="6px";acts2.appendChild(pb);
+    c.appendChild(acts);c.appendChild(acts2);grid.appendChild(c);
   });
   card.appendChild(grid);host.appendChild(card);
+}
+
+/* Three honest connector states: not-connected / demo-preview / live-connected */
+function connState(r){
+  const live=r.mode==="connected"||r.mode==="live"||r.last_sync_mode==="live";
+  if(live) return {id:"live",label:"Live connected",cls:"b-pass",dot:"🟢",
+    border:"rgba(52,211,153,.4)",tip:"Connected to the real service with valid credentials"};
+  if(r._preview||r.mode==="demo") return {id:"demo",label:"Demo preview",cls:"b-warn",dot:"🟡",
+    border:"rgba(251,191,36,.35)",tip:"Showing SAMPLE data — not from the real service"};
+  return {id:"none",label:"Not connected",cls:"b-dim",dot:"🔴",
+    border:"var(--line)",tip:"No credentials set — cannot pull live evidence yet"};
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
