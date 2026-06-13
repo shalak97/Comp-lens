@@ -455,3 +455,7 @@ class RoutingDecision(Base):
     skipped: Mapped[list] = mapped_column(JSON, default=list)
     finding_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+# GRC Risk Register + TPRM (imported so Base registers tables)
+from app.grc_tprm_models import Risk, Vendor  # noqa: E402,F401

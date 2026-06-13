@@ -848,3 +848,99 @@ _EVMAP_FILE = _os_evm.path.join(_os_evm.path.dirname(__file__), "static", "evide
 @app.get("/evidence-map", include_in_schema=False)
 def _serve_evidence_map():
     return _FileResponse_evm(_EVMAP_FILE, headers={"Cache-Control":"no-cache,no-store,must-revalidate","Pragma":"no-cache","Expires":"0"})
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# GRC Risk Register + TPRM (Third-Party Risk Management)
+# ════════════════════════════════════════════════════════════════════
+from app.grc_tprm_models import (RiskIn as _RiskIn, RiskPatch as _RiskPatch,
+                                 VendorIn as _VendorIn, VendorPatch as _VendorPatch)
+from app.services.grc_tprm import (RiskService as _RiskService,
+                                   VendorService as _VendorService)
+
+
+@app.get("/grc/risks", tags=["grc"])
+def grc_list_risks(tenant_id: str = "default", db: Session = Depends(get_db),
+                   p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _RiskService(db).list(tenant_id)
+
+
+@app.get("/grc/risks/summary", tags=["grc"])
+def grc_risk_summary(tenant_id: str = "default", db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _RiskService(db).summary(tenant_id)
+
+
+@app.post("/grc/risks", tags=["grc"])
+def grc_create_risk(data: _RiskIn, tenant_id: str = "default",
+                    db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _RiskService(db).create(tenant_id, data)
+
+
+@app.patch("/grc/risks/{risk_id}", tags=["grc"])
+def grc_update_risk(risk_id: str, patch: _RiskPatch, tenant_id: str = "default",
+                    db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _RiskService(db).update(tenant_id, risk_id, patch)
+    if out is None:
+        raise HTTPException(404, f"risk '{risk_id}' not found")
+    return out
+
+
+@app.delete("/grc/risks/{risk_id}", tags=["grc"])
+def grc_delete_risk(risk_id: str, tenant_id: str = "default",
+                    db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _RiskService(db).delete(tenant_id, risk_id):
+        raise HTTPException(404, f"risk '{risk_id}' not found")
+    return {"deleted": risk_id}
+
+
+@app.get("/tprm/vendors", tags=["tprm"])
+def tprm_list_vendors(tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _VendorService(db).list(tenant_id)
+
+
+@app.get("/tprm/vendors/summary", tags=["tprm"])
+def tprm_vendor_summary(tenant_id: str = "default", db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _VendorService(db).summary(tenant_id)
+
+
+@app.post("/tprm/vendors", tags=["tprm"])
+def tprm_create_vendor(data: _VendorIn, tenant_id: str = "default",
+                       db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _VendorService(db).create(tenant_id, data)
+
+
+@app.patch("/tprm/vendors/{vendor_id}", tags=["tprm"])
+def tprm_update_vendor(vendor_id: str, patch: _VendorPatch, tenant_id: str = "default",
+                       db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _VendorService(db).update(tenant_id, vendor_id, patch)
+    if out is None:
+        raise HTTPException(404, f"vendor '{vendor_id}' not found")
+    return out
+
+
+@app.delete("/tprm/vendors/{vendor_id}", tags=["tprm"])
+def tprm_delete_vendor(vendor_id: str, tenant_id: str = "default",
+                       db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _VendorService(db).delete(tenant_id, vendor_id):
+        raise HTTPException(404, f"vendor '{vendor_id}' not found")
+    return {"deleted": vendor_id}
