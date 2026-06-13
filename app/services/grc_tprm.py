@@ -129,6 +129,7 @@ class VendorService:
             "assessment_score": v.assessment_score,
             "computed_risk": _vendor_band(v.assessment_score, v.risk_tier),
             "data_access": v.data_access, "has_dpa": v.has_dpa, "has_soc2": v.has_soc2,
+            "linked_connector_key": v.linked_connector_key,
             "next_review": v.next_review.isoformat() if v.next_review else None,
             "onboarded_at": v.onboarded_at.isoformat() if v.onboarded_at else None,
             "updated_at": v.updated_at.isoformat() if v.updated_at else None,
@@ -145,6 +146,7 @@ class VendorService:
                    risk_tier=data.risk_tier, assessment_state=data.assessment_state.value,
                    data_access=data.data_access, has_dpa=data.has_dpa,
                    has_soc2=data.has_soc2, assessment_score=data.assessment_score,
+                   linked_connector_key=data.linked_connector_key,
                    next_review=data.next_review)
         self.db.add(v); self.db.commit(); self.db.refresh(v)
         return self._ser(v)

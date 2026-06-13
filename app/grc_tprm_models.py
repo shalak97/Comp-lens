@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -103,6 +103,7 @@ class Vendor(Base):
     has_dpa: Mapped[bool] = mapped_column(Boolean, default=False)        # data processing agreement
     has_soc2: Mapped[bool] = mapped_column(Boolean, default=False)
     assessment_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 0-100
+    linked_connector_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # ties vendor to a connector
     next_review: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     onboarded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
@@ -152,6 +153,7 @@ class VendorIn(BaseModel):
     has_dpa: bool = False
     has_soc2: bool = False
     assessment_score: Optional[float] = Field(None, ge=0, le=100)
+    linked_connector_key: Optional[str] = None
     next_review: Optional[datetime] = None
 
 
@@ -166,4 +168,5 @@ class VendorPatch(BaseModel):
     has_dpa: Optional[bool] = None
     has_soc2: Optional[bool] = None
     assessment_score: Optional[float] = Field(None, ge=0, le=100)
+    linked_connector_key: Optional[str] = None
     next_review: Optional[datetime] = None

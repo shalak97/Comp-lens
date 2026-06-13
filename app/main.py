@@ -944,3 +944,17 @@ def tprm_delete_vendor(vendor_id: str, tenant_id: str = "default",
     if not _VendorService(db).delete(tenant_id, vendor_id):
         raise HTTPException(404, f"vendor '{vendor_id}' not found")
     return {"deleted": vendor_id}
+
+
+
+from app.services.trust_graph import TrustGraphService as _TrustGraph
+
+
+@app.get("/trust/graph", tags=["trust"])
+def trust_graph(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id); return _TrustGraph(db).graph(tenant_id)
+
+
+@app.get("/trust/risk-telemetry", tags=["trust"])
+def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id); return _TrustGraph(db).risk_telemetry(tenant_id)
