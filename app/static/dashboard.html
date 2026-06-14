@@ -268,6 +268,40 @@ function openSettings() {
   $("#settings").classList.add("on");
 }
 function closeSettings(){$("#settings").classList.remove("on");}
+
+/* Self-host guide modal — how to run your own instance and connect real services */
+function openSelfHost(){
+  const existing=document.getElementById("selfhost");if(existing)existing.remove();
+  const m=el("div","modal on");m.id="selfhost";
+  m.innerHTML=`<div class="box" style="width:560px;max-height:86vh;overflow-y:auto">
+    <h3>Run your own Comp-Lens & connect real services</h3>
+    <p style="font-size:12.5px;color:var(--dim);line-height:1.6;margin-bottom:14px">
+      This public site is a <b>demo</b> — explore every feature with sample data. To connect <b>your own</b> Okta, GitHub, AWS, etc., you run your own copy and add your tokens to <b>your</b> environment. Your credentials never touch this demo or anyone else's server.</p>
+    <div style="background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;letter-spacing:.4px;color:var(--mid);font-weight:600;margin-bottom:8px">1 · GET THE CODE</div>
+      <div class="mono" style="font-size:11.5px;color:var(--txt);background:var(--bg);padding:8px 10px;border-radius:6px;user-select:all">git clone https://github.com/shalak97/Comp-lens-2.0.git</div>
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;letter-spacing:.4px;color:var(--mid);font-weight:600;margin-bottom:8px">2 · DEPLOY (free tier works)</div>
+      <p style="font-size:12px;color:var(--dim);margin:0 0 6px">Deploy to Render / Railway / Fly, or run locally with a PostgreSQL database. Set these env vars on <b>your</b> instance:</p>
+      <div class="mono" style="font-size:11px;color:var(--txt);background:var(--bg);padding:8px 10px;border-radius:6px;line-height:1.7">DATABASE_URL=postgresql+psycopg://...<br>EVIDENCE_SIGNING_KEY=&lt;random secret&gt;<br>COMP_LENS_API_KEYS=&lt;your-key&gt;:default</div>
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--line);border-radius:var(--r2);padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;letter-spacing:.4px;color:var(--mid);font-weight:600;margin-bottom:8px">3 · ADD A CONNECTOR'S TOKEN (read-only)</div>
+      <p style="font-size:12px;color:var(--dim);margin:0 0 6px">Add the connector's credentials as env vars, plus the safety allowlist so only that one can go live:</p>
+      <div class="mono" style="font-size:11px;color:var(--txt);background:var(--bg);padding:8px 10px;border-radius:6px;line-height:1.7">LIVE_CONNECTORS_ENABLED=true<br>LIVE_CONNECTORS_ALLOWLIST=OKTA<br>OKTA_ORG_URL=https://your-org.okta.com<br>OKTA_API_TOKEN=&lt;read-only SSWS token&gt;</div>
+      <p style="font-size:11px;color:var(--mid);margin:8px 0 0">Use a <b>read-only</b> token. Everything else stays locked to demo. Free-tier setup steps for Okta, GitHub, AWS & Jira are in the repo's docs.</p>
+    </div>
+    <div style="display:flex;gap:9px;margin-top:6px">
+      <a class="btn primary" href="https://github.com/shalak97/Comp-lens-2.0" target="_blank" rel="noopener" style="flex:1;text-decoration:none;text-align:center">Open the repo ↗</a>
+      <button class="btn" onclick="document.getElementById('selfhost').remove()">Close</button>
+    </div>
+    <p style="font-size:11px;color:var(--mid);margin-top:12px;line-height:1.5">
+      Why not paste tokens here? Because they'd be your real secrets on a shared demo server. Keeping live connections to your own deployment means you stay in full control of your credentials.</p>
+  </div>`;
+  document.body.appendChild(m);
+  m.addEventListener("click",e=>{if(e.target===m)m.remove();});
+}
 async function saveSettings() {
   CFG.base = $("#cfgBase").value.trim() || DEFAULT_BASE;
   CFG.key = $("#cfgKey").value.trim();
@@ -627,6 +661,18 @@ RENDER.connectors = async function() {
 
 function renderMkt(host){
   const rows=MKT.rows||[];host.innerHTML="";
+  // ── public demo notice ──
+  if(STATE.mode!=="live"||CFG.base===DEFAULT_BASE){
+    const dn=el("div");
+    dn.style.cssText="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:var(--r);margin-bottom:16px;background:rgba(91,156,246,.08);border:1px solid rgba(91,156,246,.25)";
+    dn.innerHTML=`<span style="font-size:18px">🧪</span>
+      <div style="flex:1">
+        <div style="font-weight:650;font-size:13px;color:#bcd4f6">You're exploring the demo</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:2px">Every feature works here with sample data. To connect your <b>real</b> Okta, GitHub, AWS, etc., run your own copy — your tokens stay on your deployment, never here.</div>
+      </div>
+      <button class="btn sm primary" onclick="openSelfHost()" style="flex-shrink:0">Run your own ↗</button>`;
+    host.appendChild(dn);
+  }
   // ── safety banner ──
   if(MKT.safety){
     const sf=MKT.safety,safe=sf.mode==="SAFE";
@@ -711,9 +757,9 @@ function renderMkt(host){
           MKT.rows=await apiGET(withTenant("/connectors/status"));renderMkt(host);
         }catch(e){msg.style.color="var(--fail)";msg.textContent="✗ "+e.message;sb.disabled=false;}};
     }else{
-      sb.textContent="Connect";sb.title="Add credentials in your environment to enable live sync";
+      sb.textContent="Connect";sb.title="Connecting a real service requires running your own copy of Comp-Lens";
       sb.onclick=()=>{msg.style.color="var(--warn)";
-        msg.innerHTML=`needs credentials: <span class="mono">${r.credentials.missing.slice(0,4).join(", ")}</span>. Set these in your API environment, then Sync.`;};
+        msg.innerHTML=`Live connection needs <span class="mono">${r.credentials.missing.slice(0,3).join(", ")}</span> set on <b>your own deployment</b>. <a class="lnk" onclick="openSelfHost();return false" style="cursor:pointer">How to run your own →</a> &nbsp;Meanwhile, try <b>👁 Preview</b> below for sample data.`;};
     }
 
     // ── Test: live healthcheck when creds, else explains ──
