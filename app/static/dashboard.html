@@ -321,9 +321,8 @@ const GROUPS = [
                ["findings","Findings","M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"],
                ["frameworks","Frameworks","M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"]]],
   ["Evidence", [["connectors","Connectors","M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4M19 5l-4 4m-6 6l-4 4"],
-                ["graph","3D Graph","M12 2a10 10 0 100 20 10 10 0 000-20zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"],
-                ["evidence","Evidence Docs","M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6"],
-                ["evmap","Evidence Map","M9 20l-5.4 1.8a1 1 0 01-1.3-1V5.6a1 1 0 01.7-1L9 3m0 17l6-2m-6 2V3m6 15l5.4 1.8a1 1 0 001.3-1V5.6a1 1 0 00-.7-1L15 3m0 15V3m0 0L9 5"]]],
+                ["graph","Knowledge Graph","M12 2a10 10 0 100 20 10 10 0 000-20zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"],
+                ["evidence","Evidence Docs","M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6"]]],
   ["Intelligence", [["simulator","Blast Radius","M13 2L3 14h7l-1 8 10-12h-7l1-8z"],
                     ["remediation","Remediation","M9 11l3 3L22 4M12 2a10 10 0 100 20 10 10 0 000-20"],
                     ["trends","Trends","M3 3v18h18M7 14l4-4 3 3 5-5"],
@@ -821,25 +820,8 @@ RENDER.evidence = async function() {
 };
 
 /* ============ EVIDENCE MAP (link out) ============ */
-RENDER.evmap = async function() {
-  const m=main(), v=view("Evidence Map","Interactive mindmap of documents → concepts → controls");
-  m.appendChild(v);
-  const card=el("div","card");
-  const url=CFG.base.replace(/\/$/,"")+"/evidence-map";
-  card.innerHTML=`<h3>Evidence relationship map</h3>
-    <div class="sub">The full interactive mindmap is served by the API.</div>
-    <p style="font-size:13px;color:var(--dim);margin-bottom:14px">Documents are linked to the compliance concepts they mention and the controls those concepts satisfy, with confidence-scored edges.</p>
-    <a class="btn primary" href="${url}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none">Open Evidence Map ↗</a>`;
-  v.appendChild(card);m.appendChild(v);
-  const {data}=await load(withTenant("/evidence/graph"),{stats:{documents:3,concepts:18,controls:24,edges:41,confirmed_edges:33}});
-  const s=data.stats||{};
-  const kp=el("div","kpis");
-  [["Documents",s.documents||0,"var(--hi)"],["Concepts",s.concepts||0,"var(--purple)"],["Controls linked",s.controls||0,"var(--info)"],["Confirmed edges",s.confirmed_edges||0,"var(--pass)"]]
-   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
-  v.insertBefore(kp, card);
-};
-/* ============ 3D KNOWLEDGE GRAPH ============ */
-const GC={connector:"#5b9cf6",evidence:"#34d399",pass:"#38bdf8",fail:"#f87171",risk:"#fbbf24"};
+/* ============ 3D KNOWLEDGE GRAPH (incl. evidence documents layer) ============ */
+const GC={connector:"#5b9cf6",evidence:"#34d399",pass:"#38bdf8",fail:"#f87171",risk:"#fbbf24",document:"#a78bfa"};
 const G={nodes:[],edges:[],idx:{},rotX:.35,rotY:-.55,zoom:1,drag:false,lx:0,ly:0,hov:null,sel:null,filter:"all",anim:null,cv:null,ctx:null};
 
 function buildGraph(){
@@ -851,6 +833,9 @@ function buildGraph(){
   const ctrls=[["IA-2","pass"],["SC-28","fail"],["AU-9","risk"],["AU-2","pass"],["AC-2","pass"],["AC-3","risk"],
     ["RA-5","fail"],["SI-2","pass"],["IR-4","pass"],["SC-12","pass"],["CP-9","pass"],["SI-4","pass"]]
     .map(([c,st])=>({id:"ct_"+c,label:c,type:"control",status:st,color:GC[st],r:8}));
+  // evidence documents (merged from former Evidence Map) — docs prove controls
+  const docs=[["d_isp","InfoSec Policy"],["d_acp","Access Control Proc"],["d_irp","Incident Response Plan"]]
+    .map(([id,label])=>({id,label,type:"document",color:GC.document,r:9}));
   const E=(s,t,kind)=>({s,t,kind});
   const edges=[
     E("c_aws","e_vuln_findings","conn"),E("c_aws","e_logging","conn"),E("c_aws","e_encryption","conn"),
@@ -864,12 +849,14 @@ function buildGraph(){
     E("e_vuln_findings","ct_RA-5","ev"),E("e_vuln_findings","ct_SI-2","ev"),E("e_incidents","ct_IR-4","ev"),
     E("e_endpoint_prot","ct_SI-4","ev"),E("e_priv_users","ct_AC-2","ev"),E("e_priv_users","ct_AC-3","ev"),E("e_patch_status","ct_SI-2","ev"),
     E("ct_SC-12","ct_SC-28","hard"),E("ct_SC-28","ct_AU-9","hard"),E("ct_AC-2","ct_AC-3","hard"),E("ct_AU-2","ct_AU-9","hard"),E("ct_RA-5","ct_SI-2","hard"),
+    // documents → controls (formal evidence, the former Evidence Map links)
+    E("d_isp","ct_AC-2","doc"),E("d_isp","ct_SC-28","doc"),E("d_acp","ct_AC-2","doc"),E("d_acp","ct_AC-3","doc"),E("d_irp","ct_IR-4","doc"),E("d_irp","ct_AU-9","doc"),
   ];
-  return {nodes:[...conns,...evs,...ctrls],edges};
+  return {nodes:[...conns,...evs,...ctrls,...docs],edges};
 }
 function layoutGraph(nodes){
-  const by={connector:[],evidence:[],control:[]};nodes.forEach(n=>by[n.type].push(n));
-  const R={connector:230,evidence:140,control:62};
+  const by={document:[],connector:[],evidence:[],control:[]};nodes.forEach(n=>by[n.type]&&by[n.type].push(n));
+  const R={document:300,connector:230,evidence:140,control:62};
   Object.entries(by).forEach(([t,ns])=>{const rad=R[t];ns.forEach((n,i)=>{
     const phi=Math.acos(1-2*(i+.5)/Math.max(ns.length,1)),th=Math.PI*(1+Math.sqrt(5))*i;
     n.x=rad*Math.sin(phi)*Math.cos(th);n.y=rad*Math.sin(phi)*Math.sin(th);n.z=rad*Math.cos(phi);n.vx=n.vy=n.vz=0;});});
@@ -907,7 +894,7 @@ function gDraw(){const cv=G.cv,x=G.ctx;if(!cv||!x)return;const W=cv._w,H=cv._h;
     const base=G.sel?(hiS?.85:.05):G.filter==="all"?.10+dep*.16:.06+dep*.12;
     const al=hiS?.85:hiH?.55:base;
     const grad=x.createLinearGradient(ps.x,ps.y,pt.x,pt.y);
-    const col=kind==="hard"?"248,113,113":kind==="ev"?"52,211,153":"91,156,246";
+    const col=kind==="hard"?"248,113,113":kind==="ev"?"52,211,153":kind==="doc"?"167,139,250":"91,156,246";
     grad.addColorStop(0,`rgba(${col},${al})`);grad.addColorStop(1,`rgba(${col},${al*.7})`);
     x.beginPath();x.moveTo(ps.x,ps.y);x.lineTo(pt.x,pt.y);x.strokeStyle=grad;
     x.lineWidth=(kind==="hard"?1.8:.9)*(0.6+dep*0.7);x.stroke();});
@@ -942,10 +929,10 @@ function gInfo(n){const panel=$("#ginfo");if(!panel)return;if(!n){panel.style.di
 function gFilter(f){G.filter=f;["gfa","gfc","gfx"].forEach((id,i)=>{const b=$("#"+id);if(b)b.className="seg"+(["all","connector","control"][i]===f?" on":"");});}
 
 RENDER.graph = function() {
-  const m=main(), v=view("3D Knowledge Graph","Connectors → evidence → controls in one view, with control dependency cascade. Drag to rotate, scroll to zoom, click a node.");
+  const m=main(), v=view("Knowledge Graph","Documents & connectors → evidence → controls in one view, with control dependency cascade. Drag to rotate, scroll to zoom, click a node.");
   m.appendChild(v);
   const ex=el("div","callout");
-  ex.innerHTML=`<b>Three layers in one graph.</b> Outer: <span style="color:#5b9cf6">connectors</span> collecting evidence. Middle: <span style="color:#34d399">evidence concepts</span>. Inner: <span style="color:#38bdf8">controls</span> they satisfy — with <span style="color:#f87171">hard dependency edges</span> showing the blast-radius cascade. Colors show compliance status.`;
+  ex.innerHTML=`<b>Everything that proves your controls, in one map.</b> <span style="color:#a78bfa">Documents</span> and <span style="color:#5b9cf6">connectors</span> both supply evidence → <span style="color:#34d399">evidence concepts</span> → <span style="color:#38bdf8">controls</span> they satisfy, with <span style="color:#f87171">hard dependency edges</span> showing the blast-radius cascade. This merges the connector knowledge graph and the evidence-document map into a single view.`;
   v.appendChild(ex);
   const g=buildGraph();G.nodes=g.nodes;G.edges=g.edges;G.idx={};G.nodes.forEach(n=>G.idx[n.id]=n);
   layoutGraph(G.nodes);simGraph(G.nodes,G.edges,G.idx,120);
@@ -959,7 +946,7 @@ RENDER.graph = function() {
   wrap.innerHTML=`<canvas id="gcanvas"></canvas>
     <div class="ghud"><div class="col">
       <div style="font-size:11px;font-weight:600;color:var(--txt);margin-bottom:4px;letter-spacing:.4px">KNOWLEDGE GRAPH</div>
-      ${[["Connectors",GC.connector,"d"],["Evidence",GC.evidence,"d"],["Controls (pass)",GC.pass,"d"],["Controls (fail)",GC.fail,"d"],["Controls (risk)",GC.risk,"d"],["Dependency edge","rgba(248,113,113,.7)","l"]]
+      ${[["Documents",GC.document,"d"],["Connectors",GC.connector,"d"],["Evidence",GC.evidence,"d"],["Controls (pass)",GC.pass,"d"],["Controls (fail)",GC.fail,"d"],["Dependency edge","rgba(248,113,113,.7)","l"]]
         .map(([l,c,t])=>`<div class="gleg"><div class="${t}" style="background:${c}"></div><span>${l}</span></div>`).join("")}
     </div><div class="col r">
       <div id="ginfo"></div>
@@ -990,22 +977,56 @@ RENDER.graph = function() {
   });
 };
 /* ============ BLAST RADIUS SIMULATOR ============ */
+/* ============ SHARED INTELLIGENCE DATA (connects the Intelligence tabs to live posture) ============ */
+const INTEL={findings:null,summary:null,risks:null};
+async function loadIntel(force){
+  if(INTEL.findings&&!force)return INTEL;
+  const [f,s,r]=await Promise.all([
+    load(withTenant("/findings?limit=500"),DEMO.findings),
+    load(withTenant("/summary"),DEMO.summary),
+    load(withTenant("/grc/risks"),DEMO_RISKS),
+  ]);
+  INTEL.findings=Array.isArray(f.data)?f.data:[];
+  INTEL.summary=s.data||{};
+  INTEL.risks=Array.isArray(r.data)?r.data:[];
+  return INTEL;
+}
+function failingControls(){
+  // real failing/error controls from current findings
+  const bad={};
+  (INTEL.findings||[]).forEach(x=>{if(x.status==="fail"||x.status==="error"){
+    bad[x.control_id]=bad[x.control_id]||{control_id:x.control_id,count:0,severity:x.severity,title:x.title,source:x.source_system};
+    bad[x.control_id].count++;}});
+  return Object.values(bad);
+}
+
 RENDER.simulator = async function() {
-  const m=main(), v=view("Blast Radius Simulator","Pick controls to fail, see the cascade through dependent controls");
-  m.appendChild(v);
+  const m=main(), v=view("Blast Radius Simulator","Simulate failures from your real findings and trace the cascade through dependent controls");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading current posture…</div>`;
+  await loadIntel();
+  host.innerHTML="";
+  const fails=failingControls();
   const ex=el("div","callout");
-  ex.innerHTML=`<b>What-if analysis.</b> Select one or more controls to mark as failed; the simulator traverses the dependency graph and shows every downstream control that would be impacted, weighted by edge strength (hard vs soft dependencies).`;
-  v.appendChild(ex);
+  ex.innerHTML=`<b>Connected to your live posture.</b> The controls below are <b>actually failing</b> in your current findings${fails.length?` (${fails.length} found)`:""}. Select any to simulate the downstream blast radius, then file a waiver or push to remediation — flowing into your risk register.`;
+  host.appendChild(ex);
+
   const picker=el("div","card");
-  picker.innerHTML=`<h3>Select failed control(s)</h3><div class="sub">Click controls to toggle failure state, then run the simulation</div>`;
+  picker.innerHTML=`<h3>Failing controls (from live findings)</h3><div class="sub">Pre-loaded from your real failures — click to include in the simulation</div>`;
   const pickRow=el("div","segrow");
-  const seeds=["SC-12","SC-28","AC-2","IA-2","AU-2","RA-5","CP-9","SI-4"];
   const picked=new Set();
-  seeds.forEach(c=>{const b=el("button","seg");b.textContent=c;b.onclick=()=>{if(picked.has(c)){picked.delete(c);b.className="seg";}else{picked.add(c);b.className="seg on";}};pickRow.appendChild(b);});
+  const seeds=fails.length?fails.map(f=>f.control_id):["SC-28","AC-2","RA-5","AU-9"];
+  if(INTEL._simSeed&&!seeds.includes(INTEL._simSeed))seeds.unshift(INTEL._simSeed);
+  seeds.forEach(c=>{const f=fails.find(x=>x.control_id===c);
+    const b=el("button","seg on");picked.add(c);  // pre-select real failures
+    b.innerHTML=c+(f?` <span style="opacity:.6">·${f.count}</span>`:"");
+    b.onclick=()=>{if(picked.has(c)){picked.delete(c);b.className="seg";}else{picked.add(c);b.className="seg on";}};pickRow.appendChild(b);});
+  if(!fails.length&&!INTEL._simSeed){picked.clear();pickRow.querySelectorAll(".seg").forEach(b=>b.className="seg");}
+  INTEL._simSeed=null;
   picker.appendChild(pickRow);
-  const runBtn=el("button","btn primary");runBtn.textContent="Run simulation";picker.appendChild(runBtn);
-  v.appendChild(picker);
-  const out=el("div");v.appendChild(out);
+  const runBtn=el("button","btn primary");runBtn.textContent="Simulate blast radius";picker.appendChild(runBtn);
+  host.appendChild(picker);
+  const out=el("div");host.appendChild(out);
   runBtn.onclick=async()=>{
     if(!picked.size){toast("Pick at least one control");return;}
     out.innerHTML=`<div class="card"><div class="empty"><span class="spin"></span> Simulating cascade…</div></div>`;
@@ -1014,12 +1035,14 @@ RENDER.simulator = async function() {
       try{res=await apiPOST("/simulate",{tenant_id:CFG.tenant,changes:[...picked].map(c=>({control_id:c,status:"fail"}))});}catch(e){}
     }
     if(!res){
-      const base=[...picked];const cascade={"SC-12":["SC-28","AU-9"],"SC-28":["AU-9"],"AC-2":["AC-3"],"AU-2":["AU-9"],"RA-5":["SI-2"]};
+      const base=[...picked];const cascade={"SC-12":["SC-28","AU-9"],"SC-28":["AU-9"],"AC-2":["AC-3"],"AU-2":["AU-9"],"RA-5":["SI-2"],"IA-2":["AC-2"]};
       const impacted=new Set();base.forEach(c=>(cascade[c]||[]).forEach(x=>impacted.add(x)));
-      res={seed:base,impacted:[...impacted].map(c=>({control_id:c,weight:.25,depth:1})),score_before:82.1,score_after:82.1-base.length*3-impacted.size*2};
+      const sb=INTEL.summary.compliance_score??82.1;
+      res={seed:base,impacted:[...impacted].map(c=>({control_id:c,weight:.25,depth:1})),score_before:sb,score_after:Math.max(0,sb-base.length*3-impacted.size*2)};
     }
     renderSim(out,res,[...picked]);
   };
+  if(picked.size)runBtn.onclick();
 };
 function renderSim(out,res,seed){
   out.innerHTML="";
@@ -1038,38 +1061,69 @@ function renderSim(out,res,seed){
     card.appendChild(wrap);
   }else card.innerHTML+=`<div class="empty">No downstream dependencies — these controls are leaf nodes.</div>`;
   out.appendChild(card);
+  // ── connected actions: turn this simulation into a risk or a waiver ──
+  const act=el("div","card");
+  act.innerHTML=`<h3>Act on this</h3><div class="sub">Turn this blast-radius finding into tracked governance</div>`;
+  const row=el("div");row.style.cssText="display:flex;gap:9px;flex-wrap:wrap";
+  const allControls=[...new Set([...seed,...imp.map(i=>i.control_id||i.target||i.id)])];
+  const toRisk=el("button","btn primary sm");toRisk.textContent="→ Log as risk in register";
+  toRisk.onclick=async()=>{
+    const body={title:`Blast radius: ${seed.join(", ")} failure cascades to ${imp.length} controls`,
+      category:"technical",likelihood:4,impact:Math.min(5,3+Math.ceil(imp.length/3)),treatment:"mitigate",status:"identified",linked_control:seed[0]};
+    if(STATE.mode==="demo"){const sc=body.likelihood*body.impact;(typeof RISK!=="undefined"&&RISK.rows)&&RISK.rows.unshift({id:"r"+Date.now(),...body,inherent_score:sc,inherent_band:sc>=20?"critical":sc>=12?"high":"medium",residual_score:sc,residual_band:sc>=20?"critical":"high"});toast("Logged as risk (demo)");return;}
+    try{await apiPOST(withTenant("/grc/risks"),body);toast("Logged in risk register");}catch(e){toast("Error: "+e.message);}};
+  const toWaiver=el("button","btn sm");toWaiver.textContent="→ File waiver for "+seed[0];
+  toWaiver.onclick=()=>{STATE.active="waivers";INTEL._prefillWaiver=seed[0];buildNav();render();};
+  const toRemed=el("button","btn sm");toRemed.textContent="→ See remediation plan";
+  toRemed.onclick=()=>{STATE.active="remediation";buildNav();render();};
+  row.appendChild(toRisk);row.appendChild(toWaiver);row.appendChild(toRemed);act.appendChild(row);
+  out.appendChild(act);
 }
 
 /* ============ REMEDIATION ============ */
 RENDER.remediation = async function() {
-  const m=main(), v=view("Remediation Optimizer","Prioritized fix queue ranked by risk reduction per unit effort");
+  const m=main(), v=view("Remediation Optimizer","Your real open findings, ranked by risk reduction per unit of effort");
   m.appendChild(v);const host=el("div");v.appendChild(host);
-  host.innerHTML=`<div class="empty"><span class="spin"></span> Computing remediation plan…</div>`;
-  const demo={open_findings:24,current_risk_weighted_score:82.1,projected_after_fixing_top:91.3,top_n:10,queue:[
-    {control_id:"SC-28",title:"Enable S3 default encryption",severity:"high",effort:"low",risk_reduction:6.2,leverage:8.9,connector:"AWS"},
-    {control_id:"AC-2",title:"Disable 6 dormant accounts",severity:"high",effort:"low",risk_reduction:4.8,leverage:7.1,connector:"Okta"},
-    {control_id:"RA-5",title:"Patch critical CVE-2026-1234",severity:"high",effort:"medium",risk_reduction:5.5,leverage:4.2,connector:"GitHub"},
-    {control_id:"AU-9",title:"Fix audit log retention config",severity:"medium",effort:"low",risk_reduction:2.1,leverage:3.8,connector:"Splunk"},
-  ]};
-  const {data}=await load(withTenant("/remediation?top=10"),demo);
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Computing remediation plan from live findings…</div>`;
+  await loadIntel();
+  let data=null;
+  if(STATE.mode==="live"){try{data=await apiGET(withTenant("/remediation?top=15"));}catch(e){}}
+  if(!data||!data.queue){
+    // build the queue from REAL failing findings (connected, not hardcoded)
+    const fails=failingControls();
+    const effortFor=sev=>sev==="high"||sev==="critical"?"medium":"low";
+    const queue=fails.map(f=>{const sevW=f.severity==="high"||f.severity==="critical"?6:f.severity==="medium"?3:1.5;
+      const eff=effortFor(f.severity);const effN=eff==="low"?1:eff==="medium"?2:3;
+      return {control_id:f.control_id,title:f.title||("Remediate "+f.control_id),severity:f.severity||"medium",
+        effort:eff,risk_reduction:+(sevW*f.count).toFixed(1),leverage:+(sevW*f.count/effN).toFixed(1),connector:f.source||"—"};})
+      .sort((a,b)=>b.leverage-a.leverage);
+    const cur=INTEL.summary.compliance_score??82.1;
+    const proj=Math.min(100,cur+queue.slice(0,5).reduce((s,q)=>s+q.risk_reduction*.4,0));
+    data={open_findings:fails.reduce((s,f)=>s+f.count,0),current_risk_weighted_score:cur,projected_after_fixing_top:proj,queue};
+  }
   host.innerHTML="";
+  const ex=el("div","callout");
+  ex.innerHTML=`<b>Built from your live findings.</b> Every row below is a control that's <b>actually failing</b> right now. Ranked by leverage (risk reduced ÷ effort) so you fix the highest-impact items first. Fixing the top items would lift your score from <b>${fmtPct(data.current_risk_weighted_score)}</b> toward <b>${fmtPct(data.projected_after_fixing_top)}</b>.`;
+  host.appendChild(ex);
   const kp=el("div","kpis");
-  [["Open findings",data.open_findings??0,"var(--fail)"],["Current score",fmtPct(data.current_risk_weighted_score),"var(--warn)"],
-   ["After top fixes",fmtPct(data.projected_after_fixing_top),"var(--pass)"],["Quick wins",((data.queue||[]).filter(q=>q.effort==="low").length),"var(--hi)"]]
-   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  [["Open findings",data.open_findings??0,"failing now","var(--fail)"],["Current score",fmtPct(data.current_risk_weighted_score),"weighted","var(--warn)"],
+   ["After top fixes",fmtPct(data.projected_after_fixing_top),"projected","var(--pass)"],["Quick wins",((data.queue||[]).filter(q=>q.effort==="low").length),"low-effort","var(--hi)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
   host.appendChild(kp);
   const q=data.queue||[];
-  const card=el("div","card");card.innerHTML=`<h3>Fix queue</h3><div class="sub">Ranked by leverage = risk reduction ÷ effort</div>`;
-  if(!q.length){card.innerHTML+=`<div class="empty">No open findings to remediate — posture is clean.</div>`;}
+  const card=el("div","card");card.innerHTML=`<h3>Fix queue</h3><div class="sub">Ranked by leverage = risk reduction ÷ effort. Click a row to simulate its blast radius or log it.</div>`;
+  if(!q.length){card.innerHTML+=`<div class="empty">No open findings to remediate — posture is clean. ✓</div>`;}
   else{const wrap=el("div","scroll");
-    wrap.innerHTML=`<table><thead><tr><th>#</th><th>Control</th><th>Action</th><th>Severity</th><th>Effort</th><th>Risk ↓</th><th>Leverage</th><th>Source</th></tr></thead><tbody>${
+    wrap.innerHTML=`<table><thead><tr><th>#</th><th>Control</th><th>Action</th><th>Severity</th><th>Effort</th><th>Risk ↓</th><th>Leverage</th><th>Source</th><th></th></tr></thead><tbody>${
       q.map((x,i)=>`<tr><td class="mono">${i+1}</td><td class="mono">${esc(x.control_id)}</td><td>${esc(x.title||x.action||"")}</td>
         <td><span class="badge ${SEV_BADGE[x.severity]||"b-dim"}">${esc(x.severity||"—")}</span></td>
         <td><span class="badge ${x.effort==="low"?"b-pass":x.effort==="medium"?"b-warn":"b-fail"}">${esc(x.effort||"—")}</span></td>
-        <td class="mono" style="color:var(--pass)">−${(x.risk_reduction??0).toFixed?.(1)??x.risk_reduction}</td>
-        <td class="mono">${(x.leverage??0).toFixed?.(1)??x.leverage}</td>
-        <td>${esc(x.connector||x.source||"—")}</td></tr>`).join("")}</tbody></table>`;
-    card.appendChild(wrap);}
+        <td class="mono" style="color:var(--pass)">−${(x.risk_reduction??0)}</td>
+        <td class="mono">${(x.leverage??0)}</td>
+        <td>${esc(x.connector||x.source||"—")}</td>
+        <td><button class="btn sm" data-ctrl="${esc(x.control_id)}" style="padding:3px 8px">Simulate</button></td></tr>`).join("")}</tbody></table>`;
+    card.appendChild(wrap);
+    wrap.querySelectorAll("[data-ctrl]").forEach(b=>b.onclick=()=>{INTEL._simSeed=b.dataset.ctrl;STATE.active="simulator";buildNav();render();});}
   host.appendChild(card);
 };
 
@@ -1115,21 +1169,85 @@ RENDER.inventory = async function() {
 
 /* ============ WAIVERS ============ */
 RENDER.waivers = async function() {
-  const m=main(), v=view("Waivers & Exceptions","Accepted risk exceptions with expiry tracking");
+  const m=main(), v=view("Waivers & Exceptions","Accepted risk exceptions — each one suppresses a real failing control, tracked with expiry");
   m.appendChild(v);const host=el("div");v.appendChild(host);
   host.innerHTML=`<div class="empty"><span class="spin"></span> Loading waivers…</div>`;
+  await loadIntel();
   const {data}=await load(withTenant("/waivers"),DEMO.waivers);
-  const w=Array.isArray(data)?data:[];host.innerHTML="";
-  if(!w.length){host.innerHTML=`<div class="card"><div class="empty">No active waivers. Exceptions can be filed via POST /waivers.</div></div>`;return;}
-  const card=el("div","card");card.innerHTML=`<h3>Active waivers</h3><div class="sub">${w.length} accepted exceptions</div>`;
+  const w=Array.isArray(data)?data:(INTEL._waivers||[]);
+  if(INTEL._waivers)w.push(...INTEL._waivers.filter(x=>!w.find(y=>y.control_id===x.control_id)));
+  host.innerHTML="";
+  // connected context: which failing controls are/aren't covered by a waiver
+  const fails=failingControls();
+  const waivedSet=new Set(w.map(x=>x.control_id));
+  const uncovered=fails.filter(f=>!waivedSet.has(f.control_id));
+  const ex=el("div","callout");
+  ex.innerHTML=`<b>Waivers connect to your live failures.</b> You have <b>${fails.length}</b> failing controls; <b>${fails.filter(f=>waivedSet.has(f.control_id)).length}</b> are covered by an accepted waiver, <b>${uncovered.length}</b> are not. An unwaived failure counts fully against your posture; a waived one is a documented, time-boxed risk acceptance.`;
+  host.appendChild(ex);
+  const kp=el("div","kpis");
+  const soon=w.filter(x=>x.expires_at&&(new Date(x.expires_at)-Date.now())<14*864e5).length;
+  [["Active waivers",w.length,"exceptions","var(--purple)"],["Unwaived failures",uncovered.length,"counting against you",uncovered.length?"var(--fail)":"var(--pass)"],
+   ["Expiring soon",soon,"within 14 days",soon?"var(--warn)":"var(--pass)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  // active waivers table
+  const card=el("div","card");
+  const head=el("div");head.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px";
+  head.innerHTML=`<div><h3 style="margin:0">Active waivers</h3><div class="sub" style="margin:0">${w.length} accepted exceptions</div></div>`;
+  const addBtn=el("button","btn primary sm");addBtn.textContent="+ File waiver";addBtn.onclick=()=>openWaiverModal(host,INTEL._prefillWaiver);
+  head.appendChild(addBtn);card.appendChild(head);
   const wrap=el("div","scroll");
-  wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Justification</th><th>Status</th><th>Expires</th></tr></thead><tbody>${
-    w.map(x=>{const exp=x.expires_at?new Date(x.expires_at):null;const soon=exp&&(exp-Date.now())<14*864e5;
+  if(!w.length){wrap.innerHTML=`<div class="empty">No active waivers yet. File one to formally accept a failing control's risk.</div>`;}
+  else wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Justification</th><th>Status</th><th>Expires</th></tr></thead><tbody>${
+    w.map(x=>{const exp=x.expires_at?new Date(x.expires_at):null;const sn=exp&&(exp-Date.now())<14*864e5;
       return `<tr><td class="mono">${esc(x.control_id||"")}</td><td>${esc(x.reason||x.justification||"")}</td>
-      <td><span class="badge ${x.status==="active"?"b-pass":"b-dim"}">${esc(x.status||"—")}</span></td>
-      <td class="mono" style="color:${soon?"var(--warn)":"var(--mid)"}">${exp?exp.toLocaleDateString():"—"}${soon?" ⚠":""}</td></tr>`;}).join("")}</tbody></table>`;
+      <td><span class="badge ${x.status==="active"?"b-pass":"b-dim"}">${esc(x.status||"active")}</span></td>
+      <td class="mono" style="color:${sn?"var(--warn)":"var(--mid)"}">${exp?exp.toLocaleDateString():"—"}${sn?" ⚠":""}</td></tr>`;}).join("")}</tbody></table>`;
   card.appendChild(wrap);host.appendChild(card);
+
+  // uncovered failures — the connected "what should I waive?" list
+  if(uncovered.length){
+    const uc=el("div","card");
+    uc.innerHTML=`<h3>Unwaived failing controls</h3><div class="sub">These failures have no waiver — either fix them (Remediation) or accept the risk with a waiver</div>`;
+    const uw=el("div","scroll");
+    uw.innerHTML=`<table><thead><tr><th>Control</th><th>Finding</th><th>Severity</th><th>Source</th><th></th></tr></thead><tbody>${
+      uncovered.map(f=>`<tr><td class="mono">${esc(f.control_id)}</td><td>${esc(f.title||"")}</td>
+        <td><span class="badge ${SEV_BADGE[f.severity]||"b-dim"}">${esc(f.severity||"—")}</span></td>
+        <td>${esc(f.source||"—")}</td>
+        <td><button class="btn sm" data-wv="${esc(f.control_id)}" style="padding:3px 8px">File waiver</button></td></tr>`).join("")}</tbody></table>`;
+    uc.appendChild(uw);host.appendChild(uc);
+    uw.querySelectorAll("[data-wv]").forEach(b=>b.onclick=()=>openWaiverModal(host,b.dataset.wv));
+  }
+  // auto-open if arriving from simulator with a prefill
+  if(INTEL._prefillWaiver){const pf=INTEL._prefillWaiver;INTEL._prefillWaiver=null;openWaiverModal(host,pf);}
 };
+
+function openWaiverModal(host,prefillControl){
+  const modal=el("div","modal on");
+  modal.innerHTML=`<div class="box" style="width:460px">
+    <h3>File a waiver</h3>
+    <div class="fld"><label>Control being waived</label><input id="wv_ctrl" value="${esc(prefillControl||"")}" placeholder="e.g. CP-9"/></div>
+    <div class="fld"><label>Justification / compensating control</label><input id="wv_reason" placeholder="Why is this risk acceptable?"/></div>
+    <div class="fld"><label>Expires in (days)</label><input id="wv_days" type="number" value="90" min="1" max="365"/></div>
+    <div style="display:flex;gap:9px;margin-top:14px">
+      <button class="btn primary" id="wv_save" style="flex:1">File waiver</button>
+      <button class="btn" id="wv_cancel">Cancel</button>
+    </div>
+    <p style="font-size:11px;color:var(--mid);margin-top:12px;line-height:1.5">A waiver is a documented, time-boxed acceptance of risk. It suppresses the control's failure in your posture until it expires.</p></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();
+  modal.addEventListener("click",e=>{if(e.target===modal)close();});
+  modal.querySelector("#wv_cancel").onclick=close;
+  modal.querySelector("#wv_save").onclick=async()=>{
+    const ctrl=modal.querySelector("#wv_ctrl").value.trim();
+    const reason=modal.querySelector("#wv_reason").value.trim();
+    const days=+modal.querySelector("#wv_days").value||90;
+    if(!ctrl){toast("Control required");return;}
+    const body={control_id:ctrl,reason:reason||"Risk accepted",status:"active",expires_at:new Date(Date.now()+days*864e5).toISOString()};
+    if(STATE.mode==="demo"){INTEL._waivers=INTEL._waivers||[];INTEL._waivers.push(body);close();toast("Waiver filed (demo)");render();return;}
+    try{await apiPOST(withTenant("/waivers"),body);close();toast("Waiver filed for "+ctrl);render();}catch(e){toast("Error: "+e.message);}};
+}
 
 /* ============ GRC RISK REGISTER (Vanta/Drata style) ============ */
 const RISK_BAND={critical:["b-fail","var(--fail)"],high:["b-warn","var(--warn)"],medium:["b-info","var(--info)"],low:["b-pass","var(--pass)"]};
