@@ -157,8 +157,6 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-Dashboard: http://localhost:8000/dashboard  
-API docs: http://localhost:8000/docs
 
 ### Deploy to Render
 
