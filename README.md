@@ -326,8 +326,6 @@ NIST SP 800-53 Rev 5 (1,196 controls), ISO/IEC 27001:2022 (93 controls), SOC 2, 
 
 ## License
 
-MIT — fork it, extend it, use it. If you build something interesting on top of this, I'd genuinely like to hear about it.
-
----
+MIT 
 
 *Built solo. Feedback welcome — especially from practitioners in GRC, security engineering, or risk management.*
