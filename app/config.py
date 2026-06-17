@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     request_timeout_seconds: int = Field(default=15)
     cors_origins: List[str] = Field(default_factory=lambda: ["*"])
 
+    # Production hardening
+    rate_limit_per_minute: int = Field(default=120)
+    enable_hsts: bool = Field(default=True)
+
     # Gate the synthetic DEMO connector. Defaults OFF in production so nobody
     # can fabricate "pass" evidence against a real compliance database.
     enable_demo_connector: Optional[bool] = Field(default=None)

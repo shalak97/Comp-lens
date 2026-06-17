@@ -50,6 +50,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="1.2.0", lifespan=lifespan)
 
+# ── production hardening stack (outermost first) ──
+from app.hardening import (RateLimitMiddleware, RequestContextMiddleware,
+                           SecurityHeadersMiddleware, install_exception_handlers)
+app.add_middleware(SecurityHeadersMiddleware, hsts=getattr(settings, "enable_hsts", True))
+app.add_middleware(RateLimitMiddleware,
+                   max_requests=(1_000_000 if getattr(settings, "app_env", "production") == "test"
+                                 else getattr(settings, "rate_limit_per_minute", 120)),
+                   window_seconds=60)
+app.add_middleware(RequestContextMiddleware)
+install_exception_handlers(app)
+
 _wildcard = "*" in settings.cors_origins
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins,
                    allow_credentials=not _wildcard, allow_methods=["GET", "POST", "PATCH", "DELETE"],
@@ -79,7 +90,20 @@ def live() -> dict: return {"status": "alive"}
 
 
 @app.get("/health/ready")
-def ready() -> dict: return {"ready": True, "env": settings.app_env}
+def ready() -> dict:
+    checks = {}
+    db_ok = True
+    try:
+        from sqlalchemy import text
+        from app.database import SessionLocal
+        with SessionLocal() as s:
+            s.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:  # noqa: BLE001
+        db_ok = False
+        checks["database"] = f"unavailable: {type(exc).__name__}"
+    return {"ready": db_ok, "status": "ready" if db_ok else "not_ready",
+            "env": settings.app_env, "checks": checks}
 
 
 @app.get("/controls")
