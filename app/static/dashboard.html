@@ -147,6 +147,29 @@ a.lnk:hover{text-decoration:underline}
 }
 .menubtn{display:none;position:fixed;top:14px;left:14px;z-index:30;width:38px;height:38px;
   border-radius:9px;background:var(--card2);border:1px solid var(--line2);align-items:center;justify-content:center;cursor:pointer}
+/* command palette */
+#cmdk{position:fixed;inset:0;background:rgba(5,7,12,.6);z-index:200;display:none;align-items:flex-start;justify-content:center;backdrop-filter:blur(4px);padding-top:12vh}
+#cmdk.on{display:flex}
+#cmdk .box{width:560px;max-width:92vw;background:var(--card);border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.6)}
+#cmdk input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--line);padding:16px 18px;color:var(--txt);font-size:15px;outline:none}
+#cmdk input::placeholder{color:var(--mid)}
+.cmd-list{max-height:50vh;overflow-y:auto;padding:6px}
+.cmd-item{display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:8px;cursor:pointer;font-size:13.5px}
+.cmd-item.sel{background:rgba(91,156,246,.14)}
+.cmd-item .ico{width:18px;height:18px;opacity:.7;flex-shrink:0}
+.cmd-item .lbl{flex:1}
+.cmd-item .grp{font-size:11px;color:var(--mid)}
+.cmd-empty{padding:24px;text-align:center;color:var(--mid);font-size:13px}
+.cmd-hint{display:flex;gap:14px;padding:9px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--mid)}
+.cmd-hint kbd{background:var(--card2);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;font-family:var(--mono);font-size:10px}
+.kbd-badge{font-family:var(--mono);font-size:10px;color:var(--mid);background:var(--card2);border:1px solid var(--line);border-radius:4px;padding:2px 6px;margin-left:6px}
+/* export menu */
+.exp-btn{position:relative}
+.exp-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--card);border:1px solid var(--line2);border-radius:10px;padding:6px;min-width:200px;z-index:50;box-shadow:0 12px 36px rgba(0,0,0,.5);display:none}
+.exp-menu.on{display:block}
+.exp-menu .opt{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:7px;cursor:pointer;font-size:13px}
+.exp-menu .opt:hover{background:rgba(91,156,246,.12)}
+.exp-menu .opt .d{font-size:11px;color:var(--mid)}
 </style>
 </head>
 <body><div class="menubtn" onclick="document.getElementById('nav').classList.toggle('open')">
@@ -160,15 +183,28 @@ a.lnk:hover{text-decoration:underline}
     </div>
     <div id="navtabs"></div>
     <div class="navfoot">
-      <div class="connpill" id="connpill" onclick="openSettings()">
+      <div class="connpill" id="connpill" onclick="openSettings()" style="margin-bottom:8px">
         <span class="dot off" id="conndot"></span>
         <span id="connlabel">Connecting…</span>
+      </div>
+      <div style="display:flex;gap:7px">
+        <button class="btn sm" style="flex:1;font-size:11px" onclick="openCmdK()">⌘K Search</button>
+        <div class="exp-btn" style="flex:1">
+          <button class="btn sm" style="width:100%;font-size:11px" onclick="event.stopPropagation();exportMenu(this.parentElement)">↓ Export</button>
+        </div>
       </div>
     </div>
   </aside>
   <main id="main"><div class="empty"><span class="spin"></span> Loading…</div></main>
 </div>
 <div id="toast"></div>
+<div id="cmdk">
+  <div class="box">
+    <input id="cmdkInput" placeholder="Jump to a tab, export a report, change settings…" autocomplete="off"/>
+    <div class="cmd-list" id="cmdkList"></div>
+    <div class="cmd-hint"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> select</span><span><kbd>esc</kbd> close</span></div>
+  </div>
+</div>
 <div class="modal" id="settings">
   <div class="box">
     <h3>Connection settings</h3>
@@ -319,7 +355,8 @@ const GROUPS = [
   ["Posture", [["overview","Overview","M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"],
                ["controls","Controls","M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"],
                ["findings","Findings","M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"],
-               ["frameworks","Frameworks","M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"]]],
+               ["frameworks","Frameworks","M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"],
+               ["audits","Audits","M9 11l3 3 8-8M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11M16 3v4M12 3v2"]]],
   ["Evidence", [["connectors","Connectors","M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4M19 5l-4 4m-6 6l-4 4"],
                 ["graph","Knowledge Graph","M12 2a10 10 0 100 20 10 10 0 000-20zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"],
                 ["evidence","Evidence Docs","M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6"]]],
@@ -359,6 +396,8 @@ function render() {
 
 /* ============ BOOT ============ */
 async function boot() {
+  const ci=$("#cmdkInput");if(ci)ci.oninput=()=>{CMDK.q=ci.value;CMDK.sel=0;renderCmdK();};
+  $("#cmdk").addEventListener("click",e=>{if(e.target.id==="cmdk")closeCmdK();});
   buildNav();
   await detectMode();
   render();
@@ -406,43 +445,96 @@ const STATUS_BADGE={pass:"b-pass",fail:"b-fail",error:"b-warn",not_applicable:"b
 
 /* ============ OVERVIEW ============ */
 RENDER.overview = async function() {
-  const m = main(), v = view("Compliance Overview", "Live posture across all frameworks and connected evidence sources");
+  const m = main(), v = view("Compliance Overview", "Live posture, evidence health, and what needs your attention right now");
   m.appendChild(v);
   const host = el("div"); v.appendChild(host);
   host.innerHTML = `<div class="empty"><span class="spin"></span> Loading posture…</div>`;
-  const { data: s, live } = await load(withTenant("/summary"), DEMO.summary);
-  const bs = s.by_status || {};
+  // pull everything the overview synthesizes
+  const [sumR, telR, vendR] = await Promise.all([
+    load(withTenant("/summary"), DEMO.summary),
+    load(withTenant("/trust/risk-telemetry"), null).catch(()=>({data:null})),
+    load(withTenant("/tprm/vendors/summary"), null).catch(()=>({data:null})),
+  ]);
+  await loadIntel();
+  const s = sumR.data, bs = s.by_status || {};
   host.innerHTML = "";
-  const kp = el("div", "kpis");
   const score = s.compliance_score ?? 0;
-  [["Compliance Score", fmtPct(score), "weighted across controls", score>=80?"var(--pass)":score>=60?"var(--warn)":"var(--fail)"],
-   ["Controls Assessed", s.total ?? 0, `${bs.pass||0} passing`, "var(--hi)"],
+
+  // ── HERO: the telemetry story (your differentiator, front and center) ──
+  const tel = Array.isArray(telR.data) ? telR.data : null;
+  const fails = failingControls();
+  const hero = el("div","card");
+  hero.style.cssText="background:linear-gradient(135deg,rgba(91,156,246,.10),rgba(167,139,250,.06));border-color:rgba(91,156,246,.28)";
+  let liveLine;
+  if(tel && tel.length){
+    const mitigated = tel.filter(t=>t.computed_residual < t.inherent_score).length;
+    const exposed = tel.filter(t=>t.evidence_strength===0 && t.linked_control).length;
+    liveLine = `<b>${mitigated}</b> of ${tel.length} risks are actively mitigated by live evidence right now. <b style="color:${exposed?'var(--fail)':'var(--pass)'}">${exposed}</b> linked controls have no live proof — their risk sits at full inherent exposure until evidence flows.`;
+  } else {
+    liveLine = `Sync a connector and watch residual risk drop in real time. Right now your scores reflect ${STATE.mode==="demo"?"demo":"current"} evidence — connect Okta, GitHub or AWS to make them live.`;
+  }
+  hero.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div style="font-size:11px;letter-spacing:.5px;color:var(--hi);font-weight:600;margin-bottom:6px">LIVE TELEMETRY</div>
+        <div style="font-size:14.5px;line-height:1.6;color:var(--txt)">${liveLine}</div>
+        <a class="lnk" style="font-size:12.5px;display:inline-block;margin-top:10px;cursor:pointer" onclick="STATE.active='trustgraph';buildNav();render()">See the full trust graph →</a>
+      </div>
+      <div style="text-align:center;min-width:120px">
+        <div style="font-size:46px;font-weight:800;line-height:1;color:${score>=80?'var(--pass)':score>=60?'var(--warn)':'var(--fail)'};font-variant-numeric:tabular-nums">${fmtPct(score).replace('%','')}<span style="font-size:20px">%</span></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">compliance score</div>
+      </div>
+    </div>`;
+  host.appendChild(hero);
+
+  // ── KPIs ──
+  const kp = el("div", "kpis");
+  [["Controls Assessed", s.total ?? 0, `${bs.pass||0} passing`, "var(--hi)"],
    ["Failing", bs.fail||0, "need remediation", "var(--fail)"],
    ["Risk Exposure", fmtPct(s.risk_exposure), "residual weighted risk", "var(--warn)"],
-   ["Waived", s.waived||0, "accepted exceptions", "var(--purple)"]
+   ["Vendors tracked", (vendR.data&&vendR.data.total)??(INTEL._vendorCount||"—"), "third parties", "var(--purple)"],
+   ["Waived", s.waived||0, "accepted exceptions", "var(--info)"]
   ].forEach(([k,vv,sub,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);
     e.innerHTML=`<div class="k">${k}</div><div class="v">${vv}</div><div class="s">${sub}</div>`;kp.appendChild(e);});
   host.appendChild(kp);
 
+  // ── NEEDS ATTENTION: actionable, links into the connected workflow ──
+  const attn = el("div","card");
+  attn.innerHTML=`<h3>Needs your attention</h3><div class="sub">Top issues, ranked — click to act</div>`;
+  const items=[];
+  fails.slice(0,4).forEach(f=>items.push({sev:f.severity,txt:`${f.control_id} failing${f.count>1?` (${f.count} findings)`:""} — ${f.title||"control failure"}`,
+    act:()=>{INTEL._simSeed=f.control_id;STATE.active="simulator";buildNav();render();},cta:"Simulate"}));
+  if(vendR.data&&vendR.data.missing_dpa)items.push({sev:"high",txt:`${vendR.data.missing_dpa} vendor(s) handle sensitive data without a DPA`,act:()=>{STATE.active="vendors";buildNav();render();},cta:"Review"});
+  if(s.waived)items.push({sev:"medium",txt:`${s.waived} active waiver(s) — verify none have expired`,act:()=>{STATE.active="waivers";buildNav();render();},cta:"Check"});
+  if(!items.length)items.push({sev:"low",txt:"No critical issues — posture is clean ✓",act:null,cta:""});
+  const list=el("div");
+  items.slice(0,6).forEach(it=>{const row=el("div");
+    row.style.cssText="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line)";
+    const dot=it.sev==="high"||it.sev==="critical"?"var(--fail)":it.sev==="medium"?"var(--warn)":"var(--pass)";
+    row.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${dot};flex-shrink:0"></span><span style="flex:1;font-size:13px">${esc(it.txt)}</span>`;
+    if(it.act){const b=el("button","btn sm");b.textContent=it.cta;b.onclick=it.act;row.appendChild(b);}
+    list.appendChild(row);});
+  attn.appendChild(list);host.appendChild(attn);
+
+  // ── status breakdown + trend, side by side ──
+  const rowEl=el("div","row");
   const card = el("div","card");
-  card.innerHTML = `<h3>Status breakdown</h3><div class="sub">Distribution of control assessment outcomes</div>`;
+  card.innerHTML = `<h3>Status breakdown</h3><div class="sub">Control assessment outcomes</div>`;
   const total = Math.max(s.total||1,1);
   const order=[["pass","Passing","var(--pass)"],["fail","Failing","var(--fail)"],["error","Error","var(--warn)"],["not_applicable","N/A","var(--mid)"],["pending","Pending","var(--info)"]];
   order.forEach(([k,lbl,c])=>{const n=bs[k]||0;const pct=100*n/total;
     const row=el("div");row.style.cssText="margin-bottom:11px";
     row.innerHTML=`<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span>${lbl}</span><span class="mono">${n} · ${pct.toFixed(0)}%</span></div>
       <div class="pbar"><i style="width:${pct}%;background:${c}"></i></div>`;card.appendChild(row);});
-  host.appendChild(card);
+  rowEl.appendChild(card);
 
-  // mini trend
   const { data: tr } = await load(withTenant("/trends"), DEMO.trends);
   if (Array.isArray(tr) && tr.length) {
     const tc = el("div","card");
     tc.innerHTML=`<h3>Compliance trend</h3><div class="sub">Score over recent snapshots</div>`;
-    const cvs=el("canvas");cvs.style.cssText="width:100%;height:160px";tc.appendChild(cvs);host.appendChild(tc);
-    drawSpark(cvs, tr.map(x=>x.compliance_score||0));
+    const cvs=el("canvas");cvs.style.cssText="width:100%;height:160px";tc.appendChild(cvs);rowEl.appendChild(tc);
+    setTimeout(()=>drawSpark(cvs, tr.map(x=>x.compliance_score||0)),20);
   }
-  if(!live && STATE.mode==="live"){const w=el("div","callout");w.textContent="Showing demo data for this view (endpoint returned no data yet).";host.appendChild(w);}
+  host.appendChild(rowEl);
 };
 
 function drawSpark(cvs, vals){
@@ -1643,6 +1735,262 @@ function tgInfo(n){const panel=$("#tginfo");if(!panel)return;if(!n){panel.style.
     <div style="color:var(--mid);font-size:10px;text-transform:uppercase;letter-spacing:.5px">${n.type}</div>${detail}
     ${ins.length?`<div style="margin-top:6px;font-size:11px"><span style="color:var(--mid)">← from: </span>${ins.slice(0,3).map(esc).join(", ")}</div>`:""}
     ${outs.length?`<div style="margin-top:3px;font-size:11px"><span style="color:var(--mid)">→ to: </span>${outs.slice(0,3).map(esc).join(", ")}</div>`:""}`;
+}
+
+/* ============ COMMAND PALETTE (Cmd/Ctrl+K) ============ */
+const CMD_ACTIONS=()=>{
+  const navItems=[];
+  GROUPS.forEach(([grp,tabs])=>tabs.forEach(([id,name])=>navItems.push({type:"nav",id,label:name,group:grp,kw:(name+" "+grp).toLowerCase()})));
+  const actions=[
+    {type:"act",label:"Export compliance report (PDF)",group:"Export",kw:"export pdf report download auditor",run:()=>downloadReport("pdf")},
+    {type:"act",label:"Export findings (CSV)",group:"Export",kw:"export csv findings spreadsheet download",run:()=>downloadReport("csv")},
+    {type:"act",label:"Export OSCAL (JSON)",group:"Export",kw:"export oscal json nist machine",run:()=>downloadReport("oscal")},
+    {type:"act",label:"Connection settings",group:"Settings",kw:"settings connect api key tenant",run:()=>openSettings()},
+    {type:"act",label:"Run your own instance",group:"Help",kw:"self host deploy clone run own instance",run:()=>openSelfHost()},
+    {type:"act",label:"Toggle live / demo mode",group:"Settings",kw:"demo live toggle mode data",run:()=>{STATE.mode==="demo"?detectMode().then(render):useDemoMode();}},
+  ];
+  return [...navItems,...actions];
+};
+const CMDK={open:false,q:"",sel:0,items:[]};
+function openCmdK(){CMDK.open=true;CMDK.q="";CMDK.sel=0;CMDK.items=CMD_ACTIONS();
+  $("#cmdk").classList.add("on");const inp=$("#cmdkInput");inp.value="";inp.focus();renderCmdK();}
+function closeCmdK(){CMDK.open=false;$("#cmdk").classList.remove("on");}
+function cmdkFiltered(){const q=CMDK.q.trim().toLowerCase();
+  if(!q)return CMDK.items;
+  return CMDK.items.filter(i=>i.kw.includes(q)||i.label.toLowerCase().includes(q));}
+function renderCmdK(){
+  const list=$("#cmdkList"),items=cmdkFiltered();
+  if(CMDK.sel>=items.length)CMDK.sel=Math.max(0,items.length-1);
+  if(!items.length){list.innerHTML=`<div class="cmd-empty">No matches for "${esc(CMDK.q)}"</div>`;return;}
+  list.innerHTML=items.map((it,i)=>`<div class="cmd-item${i===CMDK.sel?" sel":""}" data-i="${i}">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${it.type==="nav"?"M9 5l7 7-7 7":"M13 2L3 14h7l-1 8 10-12h-7l1-8z"}"/></svg>
+    <span class="lbl">${esc(it.label)}</span><span class="grp">${esc(it.group)}</span></div>`).join("");
+  list.querySelectorAll(".cmd-item").forEach(el=>{
+    el.onmouseenter=()=>{CMDK.sel=+el.dataset.i;renderCmdK();};
+    el.onclick=()=>runCmdK(items[+el.dataset.i]);});
+}
+function runCmdK(it){closeCmdK();if(!it)return;
+  if(it.type==="nav"){STATE.active=it.id;buildNav();render();window.scrollTo(0,0);}
+  else if(it.run)it.run();}
+function cmdkKey(e){
+  if(!CMDK.open)return;
+  const items=cmdkFiltered();
+  if(e.key==="ArrowDown"){e.preventDefault();CMDK.sel=Math.min(CMDK.sel+1,items.length-1);renderCmdK();}
+  else if(e.key==="ArrowUp"){e.preventDefault();CMDK.sel=Math.max(CMDK.sel-1,0);renderCmdK();}
+  else if(e.key==="Enter"){e.preventDefault();runCmdK(items[CMDK.sel]);}
+  else if(e.key==="Escape"){closeCmdK();}
+}
+document.addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==="k"){e.preventDefault();CMDK.open?closeCmdK():openCmdK();}
+  else cmdkKey(e);
+});
+
+/* ============ AUDITOR EXPORTS ============ */
+async function downloadReport(kind){
+  if(STATE.mode==="demo"){
+    toast("Connect to live API to export real reports (demo has no data to export)");
+    return;
+  }
+  toast("Generating "+kind.toUpperCase()+" report…");
+  try{
+    const url=CFG.base.replace(/\/$/,"")+"/reports/"+kind+"?tenant_id="+encodeURIComponent(CFG.tenant);
+    const headers={};if(CFG.key)headers["X-API-Key"]=CFG.key;
+    const r=await fetch(url,{headers});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    if(kind==="oscal"){const j=await r.json();dlBlob(JSON.stringify(j,null,2),"application/json","compliance_oscal.json");}
+    else{const b=await r.blob();dlBlob(b,kind==="pdf"?"application/pdf":"text/csv","compliance_"+CFG.tenant+"."+kind);}
+    toast(kind.toUpperCase()+" report downloaded");
+  }catch(e){toast("Export failed: "+e.message);}
+}
+function dlBlob(content,mime,filename){
+  const blob=content instanceof Blob?content:new Blob([content],{type:mime});
+  const url=URL.createObjectURL(blob);const a=document.createElement("a");
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
+}
+function exportMenu(anchor){
+  document.querySelectorAll(".exp-menu.on").forEach(m=>m.classList.remove("on"));
+  let menu=anchor.querySelector(".exp-menu");
+  if(menu){menu.classList.toggle("on");return;}
+  menu=el("div","exp-menu on");
+  menu.innerHTML=`
+    <div class="opt" data-k="pdf"><span>📄</span><div><div>PDF report</div><div class="d">auditor-ready summary</div></div></div>
+    <div class="opt" data-k="csv"><span>📊</span><div><div>CSV findings</div><div class="d">all findings, spreadsheet</div></div></div>
+    <div class="opt" data-k="oscal"><span>🔖</span><div><div>OSCAL JSON</div><div class="d">NIST machine-readable</div></div></div>`;
+  anchor.appendChild(menu);
+  menu.querySelectorAll(".opt").forEach(o=>o.onclick=ev=>{ev.stopPropagation();menu.classList.remove("on");downloadReport(o.dataset.k);});
+}
+document.addEventListener("click",e=>{if(!e.target.closest(".exp-btn"))document.querySelectorAll(".exp-menu.on").forEach(m=>m.classList.remove("on"));});
+
+/* ============ AUDIT MANAGEMENT ============ */
+const AUDIT={list:null,current:null};
+const REVIEW_BADGE={approved:["b-pass","Approved"],rejected:["b-fail","Rejected"],in_review:["b-warn","In review"],exception:["b-info","Exception"],not_started:["b-dim","Not started"]};
+const AUDIT_STATUS={planning:["b-dim","Planning"],fieldwork:["b-warn","Fieldwork"],review:["b-info","Review"],complete:["b-pass","Complete"],archived:["b-dim","Archived"]};
+const DEMO_AUDITS=[
+  {id:"a1",name:"SOC 2 Type II 2026",framework:"SOC2",auditor:"Deloitte",status:"fieldwork",controls_total:24,controls_approved:14,controls_rejected:2,readiness_pct:67,approval_pct:58,evidence_requests_total:8,evidence_requests_open:3,period_start:null,period_end:null},
+  {id:"a2",name:"ISO 27001 Surveillance",framework:"ISO27001",auditor:"BSI",status:"planning",controls_total:18,controls_approved:0,controls_rejected:0,readiness_pct:0,approval_pct:0,evidence_requests_total:0,evidence_requests_open:0},
+];
+
+RENDER.audits = async function(){
+  const m=main(),v=view("Audit Management","Run a compliance audit end to end — checklist review, evidence requests, and an auditor-ready export");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  if(AUDIT.current){return renderAuditDetail(host,AUDIT.current);}
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading audits…</div>`;
+  const {data}=await load(withTenant("/audits"),DEMO_AUDITS);
+  AUDIT.list=Array.isArray(data)?data:[];
+  renderAuditList(host);
+};
+
+function renderAuditList(host){
+  const rows=AUDIT.list||[];host.innerHTML="";
+  const kp=el("div","kpis");
+  const active=rows.filter(a=>["fieldwork","review"].includes(a.status)).length;
+  const openReqs=rows.reduce((s,a)=>s+(a.evidence_requests_open||0),0);
+  const avgReady=rows.length?Math.round(rows.reduce((s,a)=>s+(a.readiness_pct||0),0)/rows.length):0;
+  [["Audits",rows.length,"engagements","var(--hi)"],["Active",active,"in fieldwork/review","var(--warn)"],
+   ["Avg readiness",avgReady+"%","across audits","var(--pass)"],["Open requests",openReqs,"evidence pending",openReqs?"var(--fail)":"var(--pass)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  const card=el("div","card");
+  const head=el("div");head.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px";
+  head.innerHTML=`<div><h3 style="margin:0">Audit engagements</h3><div class="sub" style="margin:0">${rows.length} audit(s)</div></div>`;
+  const addBtn=el("button","btn primary sm");addBtn.textContent="+ New audit";addBtn.onclick=()=>openAuditModal(host);
+  head.appendChild(addBtn);card.appendChild(head);
+  const wrap=el("div","scroll");
+  if(!rows.length){wrap.innerHTML=`<div class="empty">No audits yet. Click "+ New audit" to start an engagement — it auto-builds the control checklist for your framework.</div>`;}
+  else wrap.innerHTML=`<table><thead><tr><th>Audit</th><th>Framework</th><th>Auditor</th><th>Status</th><th>Readiness</th><th>Open requests</th><th></th></tr></thead><tbody>${
+    rows.map(a=>{const st=AUDIT_STATUS[a.status]||["b-dim",a.status];
+      return `<tr style="cursor:pointer" data-aud="${a.id}"><td><b>${esc(a.name)}</b></td><td>${esc(a.framework)}</td><td>${esc(a.auditor||"—")}</td>
+        <td><span class="badge ${st[0]}">${st[1]}</span></td>
+        <td><div style="display:flex;align-items:center;gap:8px"><div class="pbar" style="width:80px"><i style="width:${a.readiness_pct}%;background:${a.readiness_pct>=70?'var(--pass)':a.readiness_pct>=30?'var(--warn)':'var(--fail)'}"></i></div><span class="mono" style="font-size:11px">${a.readiness_pct}%</span></div></td>
+        <td class="mono">${a.evidence_requests_open||0}/${a.evidence_requests_total||0}</td>
+        <td><button class="btn sm" data-open="${a.id}" style="padding:3px 10px">Open →</button></td></tr>`;}).join("")}</tbody></table>`;
+  card.appendChild(wrap);host.appendChild(card);
+  wrap.querySelectorAll("[data-open],[data-aud]").forEach(b=>b.onclick=(e)=>{e.stopPropagation();const id=b.dataset.open||b.dataset.aud;openAudit(id,host);});
+}
+
+async function openAudit(id,host){
+  const demo=(AUDIT.list||[]).find(a=>a.id===id);
+  if(STATE.mode==="demo"){AUDIT.current={...demo,_controls:demoControls(demo),_requests:demoRequests(demo)};renderAuditDetail(host,AUDIT.current);return;}
+  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading audit…</div>`;
+  try{
+    const [a,ctrls,reqs]=await Promise.all([apiGET(withTenant("/audits/"+id)),apiGET(withTenant("/audits/"+id+"/controls")),apiGET(withTenant("/audits/"+id+"/requests"))]);
+    AUDIT.current={...a,_controls:ctrls,_requests:reqs};renderAuditDetail(host,AUDIT.current);
+  }catch(e){toast("Error: "+e.message);AUDIT.current=null;renderAuditList(host);}
+}
+function demoControls(a){const ids=["AC-2","AC-3","AU-2","AU-9","IA-2","RA-5","SC-7","SC-28","SI-2","SI-4","CP-9","CM-3"];
+  return ids.map((cid,i)=>({id:"c"+i,control_id:cid,title:cid+" control",review_state:i<Math.floor((a.readiness_pct/100)*ids.length)?"approved":"not_started",auto_status:["SC-28","RA-5"].includes(cid)?"fail":"pass",owner:i<3?"Security":null,frameworks:{}}));}
+function demoRequests(a){return a.evidence_requests_total?[{id:"q1",title:"Provide Q1 access review logs",control_id:"AC-2",assignee:"IT Ops",state:"open"},{id:"q2",title:"Encryption config screenshots",control_id:"SC-28",assignee:"Infra",state:"fulfilled"}]:[];}
+
+function renderAuditDetail(host,a){
+  host.innerHTML="";
+  const back=el("button","btn sm");back.textContent="← All audits";back.style.marginBottom="14px";
+  back.onclick=()=>{AUDIT.current=null;RENDER.audits();};host.appendChild(back);
+
+  const hd=el("div","card");
+  const st=AUDIT_STATUS[a.status]||["b-dim",a.status];
+  hd.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+    <div><h2 style="margin:0 0 4px">${esc(a.name)}</h2>
+      <div style="font-size:13px;color:var(--dim)">${esc(a.framework)} · Auditor: ${esc(a.auditor||"—")} · <span class="badge ${st[0]}">${st[1]}</span></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="aud_status" style="background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:7px 10px;color:var(--txt);font-size:12px">
+        ${["planning","fieldwork","review","complete","archived"].map(s=>`<option ${a.status===s?"selected":""}>${s}</option>`).join("")}</select>
+      <button class="btn sm" id="aud_export">↓ Export package</button>
+    </div></div>
+    <div style="display:flex;gap:24px;margin-top:14px;flex-wrap:wrap">
+      <div><div style="font-size:24px;font-weight:700">${a.readiness_pct}%</div><div style="font-size:11px;color:var(--mid)">readiness</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--pass)">${a.controls_approved}</div><div style="font-size:11px;color:var(--mid)">approved</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--fail)">${a.controls_rejected||0}</div><div style="font-size:11px;color:var(--mid)">rejected</div></div>
+      <div><div style="font-size:24px;font-weight:700">${a.controls_total}</div><div style="font-size:11px;color:var(--mid)">in scope</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--warn)">${a.evidence_requests_open||0}</div><div style="font-size:11px;color:var(--mid)">open requests</div></div>
+    </div>`;
+  host.appendChild(hd);
+  hd.querySelector("#aud_status").onchange=async(e)=>{
+    if(STATE.mode==="demo"){a.status=e.target.value;toast("Status updated (demo)");return;}
+    try{await apiPATCH("/audits/"+a.id,{status:e.target.value});toast("Status updated");}catch(x){toast("Error: "+x.message);}};
+  hd.querySelector("#aud_export").onclick=()=>exportAuditPackage(a);
+
+  // CHECKLIST
+  const cc=el("div","card");
+  cc.innerHTML=`<h3>Control checklist</h3><div class="sub">Review each control — auto-status shows live posture, you record the audit decision</div>`;
+  const cw=el("div","scroll");
+  cw.innerHTML=`<table><thead><tr><th>Control</th><th>Live posture</th><th>Review decision</th><th>Owner</th><th>Note</th></tr></thead><tbody>${
+    (a._controls||[]).map(c=>{const rb=REVIEW_BADGE[c.review_state]||["b-dim",c.review_state];
+      const auto=c.auto_status==="pass"?'<span class="badge b-pass">pass</span>':c.auto_status==="fail"?'<span class="badge b-fail">fail</span>':'<span class="badge b-dim">—</span>';
+      return `<tr><td class="mono">${esc(c.control_id)}</td><td>${auto}</td>
+        <td><select data-rev="${c.id}" style="background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:4px 8px;color:var(--txt);font-size:11px">
+          ${["not_started","in_review","approved","rejected","exception"].map(s=>`<option value="${s}" ${c.review_state===s?"selected":""}>${s}</option>`).join("")}</select></td>
+        <td class="mono" style="font-size:11px">${esc(c.owner||"—")}</td>
+        <td style="font-size:11px;color:var(--mid)">${esc(c.reviewer_note||"")}</td></tr>`;}).join("")}</tbody></table>`;
+  cc.appendChild(cw);host.appendChild(cc);
+  cw.querySelectorAll("[data-rev]").forEach(sel=>sel.onchange=async()=>{
+    const cid=sel.dataset.rev,val=sel.value;
+    if(STATE.mode==="demo"){const c=(a._controls||[]).find(x=>x.id===cid);if(c)c.review_state=val;toast("Review saved (demo)");return;}
+    try{await apiPATCH("/audits/controls/"+cid,{review_state:val});toast("Review saved");}catch(e){toast("Error: "+e.message);}});
+
+  // EVIDENCE REQUESTS (PBC)
+  const rc=el("div","card");
+  const rhead=el("div");rhead.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px";
+  rhead.innerHTML=`<div><h3 style="margin:0">Evidence requests (PBC list)</h3><div class="sub" style="margin:0">What the auditor needs you to provide</div></div>`;
+  const addReq=el("button","btn primary sm");addReq.textContent="+ Request";addReq.onclick=()=>openRequestModal(host,a);
+  rhead.appendChild(addReq);rc.appendChild(rhead);
+  const rw=el("div","scroll");
+  const reqs=a._requests||[];
+  if(!reqs.length){rw.innerHTML=`<div class="empty">No evidence requests yet. The auditor adds items here; owners fulfill them.</div>`;}
+  else rw.innerHTML=`<table><thead><tr><th>Request</th><th>Control</th><th>Assignee</th><th>State</th></tr></thead><tbody>${
+    reqs.map(r=>{const sb={open:["b-warn","Open"],fulfilled:["b-info","Fulfilled"],accepted:["b-pass","Accepted"],rejected:["b-fail","Rejected"]}[r.state]||["b-dim",r.state];
+      return `<tr><td>${esc(r.title)}</td><td class="mono">${esc(r.control_id||"—")}</td><td>${esc(r.assignee||"—")}</td>
+        <td><select data-req="${r.id}" style="background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:4px 8px;color:var(--txt);font-size:11px">
+          ${["open","fulfilled","accepted","rejected"].map(s=>`<option value="${s}" ${r.state===s?"selected":""}>${s}</option>`).join("")}</select></td></tr>`;}).join("")}</tbody></table>`;
+  rc.appendChild(rw);host.appendChild(rc);
+  rw.querySelectorAll("[data-req]").forEach(sel=>sel.onchange=async()=>{
+    const rid=sel.dataset.req,val=sel.value;
+    if(STATE.mode==="demo"){const r=reqs.find(x=>x.id===rid);if(r)r.state=val;toast("Request updated (demo)");return;}
+    try{await apiPATCH("/audits/requests/"+rid,{state:val});toast("Request updated");}catch(e){toast("Error: "+e.message);}});
+}
+
+function openAuditModal(host){
+  const modal=el("div","modal on");
+  modal.innerHTML=`<div class="box" style="width:440px"><h3>New audit</h3>
+    <div class="fld"><label>Audit name</label><input id="au_name" placeholder="e.g. SOC 2 Type II 2026"/></div>
+    <div class="fld"><label>Framework</label><select id="au_fw" style="width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px;color:var(--txt)">
+      <option>NIST</option><option>ISO27001</option><option>SOC2</option><option>CIS</option></select></div>
+    <div class="fld"><label>Auditor (optional)</label><input id="au_auditor" placeholder="e.g. Deloitte"/></div>
+    <div style="display:flex;gap:9px;margin-top:14px"><button class="btn primary" id="au_save" style="flex:1">Create audit</button><button class="btn" id="au_cancel">Cancel</button></div>
+    <p style="font-size:11px;color:var(--mid);margin-top:12px">Creating an audit auto-builds the control checklist for the framework and pulls in current live posture.</p></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();modal.addEventListener("click",e=>{if(e.target===modal)close();});
+  modal.querySelector("#au_cancel").onclick=close;
+  modal.querySelector("#au_save").onclick=async()=>{
+    const name=modal.querySelector("#au_name").value.trim();if(!name){toast("Name required");return;}
+    const body={name,framework:modal.querySelector("#au_fw").value,auditor:modal.querySelector("#au_auditor").value.trim()||null};
+    if(STATE.mode==="demo"){AUDIT.list=AUDIT.list||[];AUDIT.list.unshift({id:"a"+Date.now(),...body,status:"planning",controls_total:12,controls_approved:0,controls_rejected:0,readiness_pct:0,evidence_requests_total:0,evidence_requests_open:0});close();renderAuditList(host);toast("Audit created (demo)");return;}
+    try{await apiPOST(withTenant("/audits"),body);AUDIT.list=await apiGET(withTenant("/audits"));close();renderAuditList(host);toast("Audit created");}catch(e){toast("Error: "+e.message);}};
+}
+
+function openRequestModal(host,a){
+  const modal=el("div","modal on");
+  modal.innerHTML=`<div class="box" style="width:440px"><h3>New evidence request</h3>
+    <div class="fld"><label>What's needed</label><input id="rq_title" placeholder="e.g. Q1 access review logs"/></div>
+    <div class="fld"><label>Control (optional)</label><input id="rq_ctrl" placeholder="e.g. AC-2"/></div>
+    <div class="fld"><label>Assignee (optional)</label><input id="rq_assignee" placeholder="e.g. IT Ops"/></div>
+    <div style="display:flex;gap:9px;margin-top:14px"><button class="btn primary" id="rq_save" style="flex:1">Add request</button><button class="btn" id="rq_cancel">Cancel</button></div></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove();modal.addEventListener("click",e=>{if(e.target===modal)close();});
+  modal.querySelector("#rq_cancel").onclick=close;
+  modal.querySelector("#rq_save").onclick=async()=>{
+    const title=modal.querySelector("#rq_title").value.trim();if(!title){toast("Title required");return;}
+    const body={title,control_id:modal.querySelector("#rq_ctrl").value.trim()||null,assignee:modal.querySelector("#rq_assignee").value.trim()||null};
+    if(STATE.mode==="demo"){a._requests=a._requests||[];a._requests.push({id:"q"+Date.now(),...body,state:"open"});a.evidence_requests_open=(a.evidence_requests_open||0)+1;a.evidence_requests_total=(a.evidence_requests_total||0)+1;close();renderAuditDetail(host,a);toast("Request added (demo)");return;}
+    try{await apiPOST(withTenant("/audits/"+a.id+"/requests"),body);const reqs=await apiGET(withTenant("/audits/"+a.id+"/requests"));a._requests=reqs;close();renderAuditDetail(host,a);toast("Request added");}catch(e){toast("Error: "+e.message);}};
+}
+
+async function exportAuditPackage(a){
+  if(STATE.mode==="demo"){
+    const pkg={audit:{name:a.name,framework:a.framework,auditor:a.auditor,status:a.status},generated_at:new Date().toISOString(),summary:{readiness_pct:a.readiness_pct,controls_total:a.controls_total,controls_approved:a.controls_approved},controls:a._controls||[],evidence_requests:a._requests||[],attestation:"Demo export package."};
+    dlBlob(JSON.stringify(pkg,null,2),"application/json","audit_"+a.name.replace(/\s+/g,"_")+".json");toast("Package exported (demo)");return;}
+  try{const pkg=await apiGET(withTenant("/audits/"+a.id+"/export"));dlBlob(JSON.stringify(pkg,null,2),"application/json","audit_"+a.name.replace(/\s+/g,"_")+".json");toast("Auditor package exported");}catch(e){toast("Export failed: "+e.message);}
 }
 
 boot();
