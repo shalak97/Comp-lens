@@ -982,3 +982,123 @@ def trust_graph(tenant_id: str = "default", db: Session = Depends(get_db), p: Pr
 @app.get("/trust/risk-telemetry", tags=["trust"])
 def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
     authorize_tenant(p, tenant_id); return _TrustGraph(db).risk_telemetry(tenant_id)
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# AUDIT MANAGEMENT  (engagement lifecycle + PBC requests + export package)
+# ════════════════════════════════════════════════════════════════════
+from app.audit_models import (AuditIn as _AuditIn, AuditPatch as _AuditPatch,
+                              ControlReviewPatch as _CtrlPatch,
+                              EvidenceRequestIn as _ReqIn, EvidenceRequestPatch as _ReqPatch)
+from app.services.audit_service import AuditService as _AuditSvc
+
+
+@app.get("/audits", tags=["audit"])
+def audit_list(tenant_id: str = "default", db: Session = Depends(get_db),
+               p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).list(tenant_id)
+
+
+@app.post("/audits", tags=["audit"])
+def audit_create(data: _AuditIn, tenant_id: str = "default", db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).create(tenant_id, data)
+
+
+@app.get("/audits/{audit_id}", tags=["audit"])
+def audit_get(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+              p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).get(tenant_id, audit_id)
+    if out is None:
+        raise HTTPException(404, "audit not found")
+    return out
+
+
+@app.patch("/audits/{audit_id}", tags=["audit"])
+def audit_update(audit_id: str, patch: _AuditPatch, tenant_id: str = "default",
+                 db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).update(tenant_id, audit_id, patch)
+    if out is None:
+        raise HTTPException(404, "audit not found")
+    return out
+
+
+@app.delete("/audits/{audit_id}", tags=["audit"])
+def audit_delete(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _AuditSvc(db).delete(tenant_id, audit_id):
+        raise HTTPException(404, "audit not found")
+    return {"deleted": audit_id}
+
+
+@app.post("/audits/{audit_id}/refresh-posture", tags=["audit"])
+def audit_refresh(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                  p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).refresh_posture(tenant_id, audit_id)
+
+
+@app.get("/audits/{audit_id}/controls", tags=["audit"])
+def audit_controls(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                   p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).list_controls(tenant_id, audit_id)
+
+
+@app.patch("/audits/controls/{control_row_id}", tags=["audit"])
+def audit_review_control(control_row_id: str, patch: _CtrlPatch, tenant_id: str = "default",
+                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).review_control(tenant_id, control_row_id, patch)
+    if out is None:
+        raise HTTPException(404, "control not found")
+    return out
+
+
+@app.get("/audits/{audit_id}/requests", tags=["audit"])
+def audit_requests(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                   p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).list_requests(tenant_id, audit_id)
+
+
+@app.post("/audits/{audit_id}/requests", tags=["audit"])
+def audit_create_request(audit_id: str, data: _ReqIn, tenant_id: str = "default",
+                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).create_request(tenant_id, audit_id, data)
+
+
+@app.patch("/audits/requests/{req_id}", tags=["audit"])
+def audit_update_request(req_id: str, patch: _ReqPatch, tenant_id: str = "default",
+                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).update_request(tenant_id, req_id, patch)
+    if out is None:
+        raise HTTPException(404, "request not found")
+    return out
+
+
+@app.delete("/audits/requests/{req_id}", tags=["audit"])
+def audit_delete_request(req_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                         p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _AuditSvc(db).delete_request(tenant_id, req_id):
+        raise HTTPException(404, "request not found")
+    return {"deleted": req_id}
+
+
+@app.get("/audits/{audit_id}/export", tags=["audit"])
+def audit_export(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).export_package(tenant_id, audit_id)
+    if out is None:
+        raise HTTPException(404, "audit not found")
+    return out

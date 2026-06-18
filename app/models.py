@@ -459,3 +459,7 @@ class RoutingDecision(Base):
 
 # GRC Risk Register + TPRM (imported so Base registers tables)
 from app.grc_tprm_models import Risk, Vendor  # noqa: E402,F401
+
+
+# Audit management
+from app.audit_models import Audit, AuditControl, EvidenceRequest  # noqa: E402,F401
