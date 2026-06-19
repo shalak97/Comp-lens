@@ -170,6 +170,83 @@ a.lnk:hover{text-decoration:underline}
 .exp-menu .opt{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:7px;cursor:pointer;font-size:13px}
 .exp-menu .opt:hover{background:rgba(91,156,246,.12)}
 .exp-menu .opt .d{font-size:11px;color:var(--mid)}
+/* ── polish: loading skeletons ── */
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.skel{background:linear-gradient(90deg,var(--card2) 25%,rgba(120,140,175,.10) 50%,var(--card2) 75%);background-size:800px 100%;animation:shimmer 1.4s linear infinite;border-radius:6px}
+.skel-row{height:14px;margin:9px 0}
+.skel-kpi{height:84px;border-radius:var(--r)}
+.skel-card{height:120px;border-radius:var(--r);margin-bottom:14px}
+.skel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+/* ── refined empty states ── */
+.empty2{text-align:center;padding:48px 24px;color:var(--mid)}
+.empty2 .ico{width:46px;height:46px;margin:0 auto 14px;opacity:.4}
+.empty2 h4{color:var(--dim);font-size:15px;margin:0 0 6px;font-weight:600}
+.empty2 p{font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.5}
+/* ── file dropzone ── */
+.dropzone{border:1.5px dashed var(--line2);border-radius:var(--r);padding:32px 20px;text-align:center;cursor:pointer;transition:.15s;background:var(--card2)}
+.dropzone:hover,.dropzone.drag{border-color:var(--hi);background:rgba(91,156,246,.06)}
+.dropzone .ico{width:36px;height:36px;opacity:.5;margin-bottom:10px}
+/* ── code/yaml block ── */
+.codeblock{background:var(--bg);border:1px solid var(--line);border-radius:var(--r2);padding:13px 15px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--dim);overflow-x:auto;white-space:pre;max-height:340px;overflow-y:auto}
+.codeblock .k{color:var(--hi)}.codeblock .s{color:var(--pass)}.codeblock .c{color:var(--mid)}
+/* ── pill toggle ── */
+.pilltabs{display:inline-flex;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px;margin-bottom:16px}
+.pilltabs button{border:none;background:transparent;color:var(--mid);font-size:12.5px;padding:6px 16px;border-radius:999px;cursor:pointer;transition:.12s}
+.pilltabs button.on{background:var(--hi);color:#04121f;font-weight:600}
+/* ── mobile: enhance the existing responsive rules ── */
+@media (max-width:760px){
+  .kpis{grid-template-columns:repeat(2,1fr)!important}
+  table{font-size:12px}
+  .view-head h2{font-size:19px}
+}
+@media (max-width:560px){
+  .kpis{grid-template-columns:1fr!important}
+  .row{flex-direction:column}
+}
+/* ---- polish pass: loading skeletons ---- */
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.skel{background:linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);
+  background-size:800px 100%;animation:shimmer 1.4s infinite linear;border-radius:6px}
+.skel-row{height:14px;margin:9px 0;width:100%}
+.skel-row.short{width:55%}.skel-row.mid{width:75%}
+.skel-kpi{height:84px;border-radius:var(--r)}
+.skel-card{height:120px;border-radius:var(--r);margin-bottom:16px}
+.skel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:13px;margin-bottom:16px}
+/* ---- refined empty states ---- */
+.empty2{text-align:center;padding:48px 24px;color:var(--mid)}
+.empty2 .ico{width:46px;height:46px;margin:0 auto 14px;opacity:.5}
+.empty2 h4{font-size:15px;color:var(--txt);margin-bottom:6px;font-weight:600}
+.empty2 p{font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.5}
+/* ---- doc dropzone ---- */
+.dropzone{border:2px dashed var(--line2);border-radius:var(--r);padding:34px;text-align:center;
+  cursor:pointer;transition:.15s;background:var(--card)}
+.dropzone:hover,.dropzone.drag{border-color:var(--hi);background:var(--card2)}
+.dropzone .big{font-size:14px;color:var(--txt);margin-bottom:5px;font-weight:550}
+.dropzone .sm{font-size:12px;color:var(--mid)}
+/* ---- code / yaml block ---- */
+.codeblock{background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);
+  padding:14px 16px;font-family:var(--mono);font-size:12px;line-height:1.6;overflow-x:auto;
+  white-space:pre;color:#c8d3e6}
+.codeblock .k{color:#7dd3fc}.codeblock .s{color:#86efac}.codeblock .c{color:var(--mid)}
+/* ---- pill toggle ---- */
+.pilltabs{display:inline-flex;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:3px;gap:2px;margin-bottom:16px}
+.pilltabs button{background:transparent;border:none;color:var(--mid);padding:6px 14px;border-radius:7px;font-size:12.5px;cursor:pointer;font-weight:500}
+.pilltabs button.on{background:var(--hi);color:#06122b}
+/* ---- status dot ---- */
+.sdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+/* ---- better mobile ---- */
+@media(max-width:760px){
+  .kpis{grid-template-columns:repeat(2,1fr)!important;gap:9px}
+  .kpi .v{font-size:21px}
+  .card{padding:14px}
+  table{font-size:12px}td,th{padding:8px 7px}
+  .view h1,.view h2{font-size:19px}
+  .row{grid-template-columns:1fr!important}
+}
+@media(max-width:560px){
+  .kpis{grid-template-columns:1fr!important}
+  .pilltabs{width:100%;overflow-x:auto}
+}
 </style>
 </head>
 <body><div class="menubtn" onclick="document.getElementById('nav').classList.toggle('open')">
@@ -357,6 +434,9 @@ const GROUPS = [
                ["findings","Findings","M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"],
                ["frameworks","Frameworks","M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"],
                ["audits","Audits","M9 11l3 3 8-8M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11M16 3v4M12 3v2"]]],
+  ["Compliance as Code", [["policy","Policies","M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"],
+               ["documents","Doc Ingest","M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8"],
+               ["middleware","Middleware","M22 12h-4l-3 9L9 3l-3 9H2"]]],
   ["Evidence", [["connectors","Connectors","M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4M19 5l-4 4m-6 6l-4 4"],
                 ["graph","Knowledge Graph","M12 2a10 10 0 100 20 10 10 0 000-20zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"],
                 ["evidence","Evidence Docs","M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6"]]],
@@ -1992,6 +2072,226 @@ async function exportAuditPackage(a){
     dlBlob(JSON.stringify(pkg,null,2),"application/json","audit_"+a.name.replace(/\s+/g,"_")+".json");toast("Package exported (demo)");return;}
   try{const pkg=await apiGET(withTenant("/audits/"+a.id+"/export"));dlBlob(JSON.stringify(pkg,null,2),"application/json","audit_"+a.name.replace(/\s+/g,"_")+".json");toast("Auditor package exported");}catch(e){toast("Export failed: "+e.message);}
 }
+
+/* ════════════ POLICY-AS-CODE TAB ════════════ */
+const DEMO_POLICIES={count:5,policies:[
+  {control_id:"SC-28",title:"Protection of Information at Rest",severity:"high",frameworks:{NIST:["SC-28"],ISO27001:["A.8.24"],SOC2:["CC6.7"]},pass_when:"encryption_at_rest == true",source_file:"encryption.yaml",test_count:3},
+  {control_id:"SC-8",title:"Transmission Confidentiality and Integrity",severity:"high",frameworks:{NIST:["SC-8"],ISO27001:["A.8.24"]},pass_when:'tls_enabled == true and tls_version in ["1.2", "1.3"]',source_file:"encryption.yaml",test_count:3},
+  {control_id:"AC-2",title:"Account Management",severity:"high",frameworks:{NIST:["AC-2"],SOC2:["CC6.1"]},pass_when:"mfa_enforced == true and dormant_accounts == 0",source_file:"access_control.yaml",test_count:3},
+  {control_id:"IA-2",title:"Identification and Authentication",severity:"high",frameworks:{NIST:["IA-2"],SOC2:["CC6.1"]},pass_when:"mfa_enforced == true",source_file:"access_control.yaml",test_count:2},
+  {control_id:"RA-5",title:"Vulnerability Monitoring and Scanning",severity:"high",frameworks:{NIST:["RA-5"],ISO27001:["A.8.8"]},pass_when:"critical_vulns == 0 and scan_age_days < 30",source_file:"vuln_management.yaml",test_count:3},
+]};
+const DEMO_POLICY_TEST={total:14,passed:14,failed:0,results:[]};
+
+RENDER.policy=async function(){
+  const m=main(),v=view("Policies as Code","Compliance rules defined as version-controlled, testable YAML — not hidden in code or a database");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=skelGrid(4)+skelCard();
+  const {data,live}=await load(withTenant("/v1/policy/list"),DEMO_POLICIES);
+  const pols=(data&&data.policies)||[];
+  host.innerHTML="";
+  // KPIs
+  const tests=pols.reduce((s,p)=>s+(p.test_count||0),0);
+  const fw=new Set();pols.forEach(p=>Object.keys(p.frameworks||{}).forEach(f=>fw.add(f)));
+  const kp=el("div","kpis");
+  [["Policies",pols.length,"controls as code","var(--hi)"],["Policy tests",tests,"run in CI","var(--pass)"],
+   ["Frameworks",fw.size,"mapped","var(--purple)"],["High severity",pols.filter(p=>p.severity==="high").length,"critical controls","var(--warn)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+  // run tests bar
+  const testCard=el("div","card");
+  testCard.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
+    <div><h3 style="margin:0">Policy test suite</h3><div class="sub" style="margin:0">Your compliance rules, tested like code</div></div>
+    <button class="btn primary sm" id="runtests">▶ Run policy tests</button></div>
+    <div id="testres" style="margin-top:12px"></div>`;
+  host.appendChild(testCard);
+  testCard.querySelector("#runtests").onclick=async()=>{
+    const out=testCard.querySelector("#testres");out.innerHTML='<span class="spin"></span> Running…';
+    let tr;
+    if(STATE.mode==="demo"){tr=DEMO_POLICY_TEST;}
+    else{try{tr=await apiPOST(withTenant("/v1/policy/test"),{});}catch(e){tr=DEMO_POLICY_TEST;}}
+    const pass=tr.failed===0;
+    out.innerHTML=`<div style="padding:12px 14px;border-radius:var(--r2);background:${pass?'rgba(52,211,153,.1)':'rgba(248,113,113,.1)'};border:1px solid ${pass?'var(--pass)':'var(--fail)'}">
+      <span style="font-size:18px;font-weight:700;color:${pass?'var(--pass)':'var(--fail)'}">${tr.passed}/${tr.total}</span>
+      <span style="font-size:13px;margin-left:8px">policy tests passed${pass?' ✓':` — ${tr.failed} failing`}</span></div>`;
+    toast(pass?"All policy tests green":`${tr.failed} policy test(s) failing`);
+  };
+  // policy list
+  const listCard=el("div","card");
+  listCard.innerHTML=`<h3>Defined policies</h3><div class="sub">Click a policy to see its rule and tests</div>`;
+  if(!pols.length){listCard.innerHTML+=emptyState("No policies yet","Add YAML policy files to the policies/ directory in your repo. Each defines a control as a testable rule.");}
+  else{
+    const wrap=el("div");
+    pols.forEach(p=>{
+      const row=el("div","card");row.style.cssText="background:var(--card2);cursor:pointer;margin-bottom:10px;padding:14px";
+      const fws=Object.keys(p.frameworks||{}).join(", ");
+      row.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
+        <div><span class="mono" style="font-weight:600;color:var(--hi)">${esc(p.control_id)}</span>
+        <span style="margin-left:10px;font-size:13px">${esc(p.title)}</span></div>
+        <div><span class="badge ${p.severity==='high'?'b-fail':'b-warn'}">${esc(p.severity)}</span></div></div>
+        <div class="codeblock" style="margin-top:10px"><span class="c"># ${esc(p.source_file)} · ${fws} · ${p.test_count} tests</span>
+pass_when: <span class="s">${esc(p.pass_when)}</span></div>`;
+      wrap.appendChild(row);
+    });
+    listCard.appendChild(wrap);
+  }
+  host.appendChild(listCard);
+  if(!live)demoNote(host);
+};
+
+/* ════════════ DOCUMENT INGESTION TAB ════════════ */
+RENDER.documents=async function(){
+  const m=main(),v=view("Document Ingestion","Drop in a policy PDF or security doc — Comp-Lens extracts the controls it evidences and feeds them into telemetry");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+
+  const dz=el("div","card");
+  dz.innerHTML=`<h3>Ingest a compliance document</h3><div class="sub">Paste text or drop a file — we convert to markdown, extract controls, and emit evidence events</div>`;
+  const drop=el("div","dropzone");
+  drop.innerHTML=`<div class="big">Drop a document here</div><div class="sm">PDF, text, or markdown · or paste below</div>`;
+  const fileInput=el("input");fileInput.type="file";fileInput.style.display="none";fileInput.accept=".pdf,.txt,.md";
+  dz.appendChild(drop);dz.appendChild(fileInput);
+  const ta=el("textarea");ta.placeholder="…or paste document text here (e.g. an InfoSec policy)";
+  ta.style.cssText="width:100%;min-height:120px;margin-top:12px;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:12px;color:var(--txt);font-family:inherit;font-size:13px;resize:vertical";
+  dz.appendChild(ta);
+  const btn=el("button","btn primary");btn.textContent="Extract controls";btn.style.marginTop="12px";
+  dz.appendChild(btn);host.appendChild(dz);
+  const resHost=el("div");host.appendChild(resHost);
+
+  drop.onclick=()=>fileInput.click();
+  drop.ondragover=e=>{e.preventDefault();drop.classList.add("drag");};
+  drop.ondragleave=()=>drop.classList.remove("drag");
+  drop.ondrop=e=>{e.preventDefault();drop.classList.remove("drag");const f=e.dataTransfer.files[0];if(f)handleFile(f);};
+  fileInput.onchange=()=>{if(fileInput.files[0])handleFile(fileInput.files[0]);};
+  function handleFile(f){
+    drop.querySelector(".big").textContent="📄 "+f.name;
+    const r=new FileReader();
+    if(f.name.endsWith(".pdf")){r.onload=()=>{ta.value="[PDF loaded: "+f.name+" — will be parsed on the server]";ta._pdf={name:f.name,b64:r.result.split(",")[1]};};r.readAsDataURL(f);}
+    else{r.onload=()=>ta.value=r.result;r.readAsText(f);}
+  }
+  btn.onclick=async()=>{
+    const text=ta.value.trim();if(!text){toast("Paste or drop a document first");return;}
+    resHost.innerHTML='<div class="card"><span class="spin"></span> Extracting controls…</div>';
+    let data;
+    if(STATE.mode==="demo"){data=demoExtract(text);}
+    else{try{
+      if(ta._pdf){data=await apiPOST(withTenant("/v1/documents/upload"),{filename:ta._pdf.name,content_base64:ta._pdf.b64});}
+      else{data=await apiPOST(withTenant("/v1/documents/extract"),{text,source:"dashboard_upload"});}
+    }catch(e){toast("Error: "+e.message);resHost.innerHTML="";return;}}
+    renderExtract(resHost,data);
+  };
+};
+function demoExtract(text){
+  const t=text.toLowerCase();const found=[];
+  const map=[["mfa|multi-factor|2fa","IA-2","Multi-factor authentication required"],["encrypt|aes|at rest","SC-28","Encryption at rest"],
+    ["tls|in transit|ssl","SC-8","Encryption in transit"],["vulnerab|scan|patch","RA-5","Vulnerability scanning"],
+    ["audit log|logging|retain","AU-2","Audit logging"],["access control|least privilege","AC-3","Access enforcement"],
+    ["account|dormant|deprovision","AC-2","Account management"],["backup|recovery","CP-9","System backup"]];
+  map.forEach(([kw,cid,label])=>{if(new RegExp(kw).test(t)){const sent=text.split(/[.\n]/).find(s=>new RegExp(kw).test(s.toLowerCase()))||label;
+    found.push({control_id:cid,concepts:[label.toLowerCase()],quote:sent.trim().slice(0,160),confidence:0.5,frameworks:["NIST_800_53"]});}});
+  return {markdown_chars:text.length,extraction_method:"lexicon",controls_found:found.length,controls:found,
+    events:found.map(c=>({control_id:c.control_id,status:"pass",severity:"info",evidence:{from_document:true,quote:c.quote}}))};
+}
+function renderExtract(host,data){
+  host.innerHTML="";
+  const sum=el("div","card");
+  sum.innerHTML=`<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center">
+    <div><div style="font-size:24px;font-weight:700;color:var(--hi)">${data.controls_found}</div><div style="font-size:11px;color:var(--mid)">controls extracted</div></div>
+    <div><div style="font-size:24px;font-weight:700">${data.markdown_chars}</div><div style="font-size:11px;color:var(--mid)">markdown chars</div></div>
+    <div><span class="badge ${data.extraction_method==='llm'?'b-info':'b-dim'}">${data.extraction_method} extraction</span></div>
+    <div style="margin-left:auto"><button class="btn primary sm" id="ingestbtn">↑ Ingest to telemetry</button></div></div>`;
+  host.appendChild(sum);
+  sum.querySelector("#ingestbtn").onclick=async()=>{
+    if(STATE.mode==="demo"){toast(`${data.controls_found} events ingested to telemetry (demo)`);return;}
+    try{await apiPOST(withTenant("/v1/documents/ingest"),{text:"reingest"});toast("Ingested to telemetry");}catch(e){toast("Error: "+e.message);}};
+  if(!data.controls.length){host.appendChild(elFromHTML(emptyState("No controls detected","The document didn't match any known control concepts. Try a policy or security document with clearer control language.")));return;}
+  const card=el("div","card");
+  card.innerHTML=`<h3>Extracted controls</h3><div class="sub">Each control links to the sentence in the document that evidences it</div>`;
+  const wrap=el("div","scroll");
+  wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Frameworks</th><th>Confidence</th><th>Evidence quote</th></tr></thead><tbody>${
+    data.controls.map(c=>`<tr><td class="mono" style="color:var(--hi)">${esc(c.control_id)}</td>
+      <td style="font-size:11px">${(c.frameworks||[]).join(", ")}</td>
+      <td><div class="pbar" style="width:60px"><i style="width:${(c.confidence||0.5)*100}%;background:var(--hi)"></i></div></td>
+      <td style="font-size:12px;color:var(--dim);font-style:italic">"${esc(c.quote||"")}"</td></tr>`).join("")}</tbody></table>`;
+  card.appendChild(wrap);host.appendChild(card);
+}
+
+/* ════════════ MIDDLEWARE TAB ════════════ */
+const DEMO_EVENTS=[
+  {event_id:"evt_a1",source:"prowler",control_id:"SC-28",status:"fail",severity:"high",asset:"s3://prod-data",received_at:new Date(Date.now()-3e5).toISOString(),frameworks:{NIST:["SC-28"]}},
+  {event_id:"evt_a2",source:"okta",control_id:"AC-2",status:"pass",severity:"info",asset:"okta-org",received_at:new Date(Date.now()-9e5).toISOString(),frameworks:{NIST:["AC-2"]}},
+  {event_id:"evt_a3",source:"github",control_id:"IA-2",status:"pass",severity:"info",asset:"org/repo",received_at:new Date(Date.now()-15e5).toISOString(),frameworks:{NIST:["IA-2"]}},
+  {event_id:"evt_a4",source:"qualys",control_id:"RA-5",status:"fail",severity:"high",asset:"host-42",received_at:new Date(Date.now()-21e5).toISOString(),frameworks:{NIST:["RA-5"]}},
+];
+
+RENDER.middleware=async function(){
+  const m=main(),v=view("Compliance Middleware","The /v1 pipeline: evidence flows in from any tool, normalizes to one format, and gates deployments");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  // pill tabs
+  const pills=el("div","pilltabs");
+  ["Event stream","Gate checker"].forEach((name,i)=>{const b=el("button");b.textContent=name;if(i===0)b.classList.add("on");
+    b.onclick=()=>{pills.querySelectorAll("button").forEach(x=>x.classList.remove("on"));b.classList.add("on");i===0?mwStream(body):mwGate(body);};pills.appendChild(b);});
+  host.appendChild(pills);
+  const body=el("div");host.appendChild(body);
+  mwStream(body);
+};
+async function mwStream(host){
+  host.innerHTML=skelCard();
+  const {data,live}=await load(withTenant("/v1/events"),DEMO_EVENTS);
+  const evs=Array.isArray(data)?data:[];
+  host.innerHTML="";
+  const kp=el("div","kpis");
+  [["Events",evs.length,"in stream","var(--hi)"],["Failing",evs.filter(e=>e.status==="fail").length,"need attention","var(--fail)"],
+   ["Sources",new Set(evs.map(e=>e.source)).size,"connected tools","var(--purple)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+  const card=el("div","card");
+  card.innerHTML=`<h3>Evidence event stream</h3><div class="sub">Canonical events ingested through POST /v1/events</div>`;
+  if(!evs.length){card.appendChild(elFromHTML(emptyState("No events yet","POST evidence to /v1/events from any scanner (Prowler, Security Hub, etc). It normalizes to canonical form and flows here.")));}
+  else{const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>Source</th><th>Control</th><th>Status</th><th>Severity</th><th>Asset</th><th>When</th></tr></thead><tbody>${
+      evs.map(e=>`<tr><td class="mono" style="font-size:11px">${esc(e.source)}</td><td class="mono">${esc(e.control_id)}</td>
+        <td><span class="sdot" style="background:${e.status==='pass'?'var(--pass)':e.status==='fail'?'var(--fail)':'var(--warn)'}"></span>${esc(e.status)}</td>
+        <td style="font-size:11px">${esc(e.severity||"")}</td><td style="font-size:11px;color:var(--mid)">${esc(e.asset||"—")}</td>
+        <td style="font-size:11px;color:var(--mid)">${e.received_at?timeAgo(e.received_at):"—"}</td></tr>`).join("")}</tbody></table>`;
+    card.appendChild(wrap);}
+  host.appendChild(card);
+  if(!live)demoNote(host);
+}
+function mwGate(host){
+  host.innerHTML="";
+  const card=el("div","card");
+  card.innerHTML=`<h3>Deployment gate checker</h3><div class="sub">Check whether required controls are passing — the call your CI/CD pipeline makes to block bad deploys</div>
+    <div class="fld" style="margin-top:12px"><label>Required controls (comma-separated)</label>
+      <input id="gatectrls" value="SC-28, AC-2, IA-2" style="width:100%"/></div>
+    <button class="btn primary" id="gatebtn" style="margin-top:10px">Run gate check</button>
+    <div id="gateres" style="margin-top:16px"></div>`;
+  host.appendChild(card);
+  card.querySelector("#gatebtn").onclick=async()=>{
+    const ctrls=card.querySelector("#gatectrls").value.split(",").map(s=>s.trim()).filter(Boolean);
+    const out=card.querySelector("#gateres");out.innerHTML='<span class="spin"></span> Checking…';
+    let data;
+    if(STATE.mode==="demo"){const failing=ctrls.filter(c=>["SC-28","RA-5"].includes(c));
+      data={decision:failing.length?"block":"allow",required:ctrls,failing:failing.map(c=>({control_id:c,status:"fail",severity:"high"})),passing:ctrls.filter(c=>!failing.includes(c)),reason:failing.length?`${failing.length} required control(s) failing: ${failing.join(", ")}`:"all required controls passing"};}
+    else{try{data=await apiPOST(withTenant("/v1/gate/check"),{required:ctrls,mode:"block"});}catch(e){toast("Error: "+e.message);out.innerHTML="";return;}}
+    const block=data.decision==="block";
+    out.innerHTML=`<div style="padding:18px;border-radius:var(--r);background:${block?'rgba(248,113,113,.1)':'rgba(52,211,153,.1)'};border:1px solid ${block?'var(--fail)':'var(--pass)'}">
+      <div style="font-size:20px;font-weight:700;color:${block?'var(--fail)':'var(--pass)'};margin-bottom:6px">${block?'✗ BLOCK':'✓ ALLOW'}</div>
+      <div style="font-size:13px;margin-bottom:12px">${esc(data.reason)}</div>
+      ${(data.failing||[]).map(f=>`<div style="font-size:12px;color:var(--fail)">✗ ${esc(f.control_id)}: ${esc(f.status||'failing')}</div>`).join("")}
+      ${(data.passing||[]).map(c=>`<div style="font-size:12px;color:var(--pass)">✓ ${esc(c)}: passing</div>`).join("")}
+      <div class="codeblock" style="margin-top:12px"><span class="c"># in your CI pipeline:</span>
+complens-policy gate --require ${esc(ctrls.join(","))} <span class="c"># exit ${block?'1 (blocks)':'0 (proceeds)'}</span></div></div>`;
+    toast(block?"Gate: BLOCK":"Gate: ALLOW");
+  };
+}
+
+/* ---- shared helpers for new tabs ---- */
+function skelGrid(n){return `<div class="skel-grid">${Array(n).fill('<div class="skel skel-kpi"></div>').join("")}</div>`;}
+function skelCard(){return '<div class="skel skel-card"></div>';}
+function emptyState(title,body){return `<div class="empty2"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><h4>${esc(title)}</h4><p>${esc(body)}</p></div>`;}
+function elFromHTML(html){const d=el("div");d.innerHTML=html;return d.firstElementChild;}
+function demoNote(host){const n=el("div");n.style.cssText="text-align:center;font-size:11px;color:var(--mid);margin-top:8px";n.textContent="Showing demo data — connect to a live instance with this feature deployed to see real data.";host.appendChild(n);}
+function timeAgo(iso){const s=(Date.now()-new Date(iso))/1000;if(s<60)return Math.round(s)+"s ago";if(s<3600)return Math.round(s/60)+"m ago";if(s<86400)return Math.round(s/3600)+"h ago";return Math.round(s/86400)+"d ago";}
 
 boot();
 </script>
