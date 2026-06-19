@@ -639,6 +639,8 @@ class _DocumentRequest(_BaseModel):
     name: str | None = None
     content: str | None = None
     url: str | None = None
+    content_base64: str | None = None
+    filename: str | None = None
     source_type: str = "text"
 
 
@@ -769,6 +771,24 @@ def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
                           p: Principal = Depends(require_principal)) -> dict:
     authorize_tenant(p, req.tenant_id)
     content, name, stype = req.content, req.name, req.source_type
+    if req.content_base64:
+        import base64 as _b64
+        try:
+            raw = _b64.b64decode(req.content_base64, validate=True)
+        except Exception:
+            raise HTTPException(status_code=422, detail="content_base64 is not valid base64")
+        fn = (req.filename or "upload").lower()
+        if fn.endswith(".pdf"):
+            from app.services.doc_fetch import _pdf_to_text
+            try:
+                content = _pdf_to_text(raw)
+            except Exception as e:
+                raise HTTPException(status_code=422, detail=f"could not read PDF: {e}")
+            stype = "upload:pdf"
+        else:
+            content = raw.decode("utf-8", errors="replace")
+            stype = "upload:text"
+        name = name or req.filename or "uploaded document"
     if req.url:
         from app.services.doc_fetch import fetch_url_text, FetchError
         try:
@@ -777,7 +797,7 @@ def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
             raise HTTPException(status_code=400, detail=f"URL fetch failed: {e}")
         name = name or req.url.strip()[:120]
     if not content or not content.strip():
-        raise HTTPException(status_code=400, detail="No content (provide 'content' or a fetchable 'url').")
+        raise HTTPException(status_code=400, detail="No content (provide 'content', 'content_base64', or a fetchable 'url').")
     return _EvidenceService(db).add_document(req.tenant_id, name or "document", content, stype)
 
 
