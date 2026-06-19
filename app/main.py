@@ -683,9 +683,594 @@ class _SimRequest(_BaseModel):
 def simulate_blast_radius(req: _SimRequest,
                           p: Principal = Depends(require_principal)) -> dict:
     from app.services.simulator import simulate
-    return simulate(req.framework, [c.model_dump() for c in req.changes],
-                    max_depth=req.max_depth, min_weight=req.min_weight,
-                    exclude_edges=req.exclude_edges)
+    result = simulate(req.framework, [c.model_dump() for c in req.changes],
+                      max_depth=req.max_depth, min_weight=req.min_weight,
+                      exclude_edges=req.exclude_edges)
+    try:
+        from app.services import threat_intel as _ti
+        cids = [c["control_id"] for c in result.get("cascade", [])]
+        cids += [c["control_id"] for c in result.get("directly_changed", [])]
+        enrichment = _ti.enrich_controls(cids)
+        if enrichment:
+            for node in result.get("cascade", []):
+                if node["control_id"] in enrichment:
+                    node["threat_context"] = enrichment[node["control_id"]]
+            result["threat_intel"] = {"enriched": len(enrichment),
+                                      "pressure": _ti.threat_pressure()}
+    except Exception:
+        pass
+    return result
+
+
+@app.get("/controls/{control_id}/dependencies", tags=["simulation"])
+def control_dependencies(control_id: str, p: Principal = Depends(require_principal)) -> dict:
+    from app.services import dependency_graph as dg
+    return {"control_id": control_id,
+            "depends_on": dg.in_edges(control_id),
+            "affects": dg.out_edges(control_id),
+            "graph_stats": dg.stats()}
+
+
+@app.get("/controls/{control_id}/fragility", tags=["simulation"])
+def control_fragility(control_id: str, framework: str = "NIST_800_53",
+                      tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services.simulator import fragility
+    return fragility(db, tenant_id, framework, control_id)
+
+
+class _RemediationRequest(_BaseModel):
+    framework: str = "NIST_800_53"
+    failing_controls: list[str] | None = None
+    available_connectors: list[str] | None = None
+    tenant_id: str = "default"
+
+
+@app.post("/remediation/plan", tags=["simulation"])
+def remediation_plan(req: _RemediationRequest, db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    from app.services import remediation_optimizer
+    return remediation_optimizer.plan(db, req.tenant_id, req.framework,
+                                      req.failing_controls, req.available_connectors)
+
+
+@app.get("/controls/{control_id}/remediation", tags=["simulation"])
+def control_remediation(control_id: str, framework: str = "NIST_800_53",
+                        tenant_id: str = "default", db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services import remediation_optimizer
+    return remediation_optimizer.detail(db, tenant_id, framework, control_id)
+
+
+@app.get("/evidence/documents/{doc_id}/verify", tags=["evidence-graph"])
+def verify_evidence_document(doc_id: str, tenant_id: str = "default",
+                            db: Session = Depends(get_db),
+                            p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.models import EvidenceDocument
+    from app.services.evidence_sign import verify
+    doc = db.get(EvidenceDocument, doc_id)
+    if not doc or doc.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="document not found")
+    ok = verify(doc.content_hash, doc.tenant_id, doc.doc_id, doc.signed_at, doc.signature or "")
+    return {"doc_id": doc_id, "signed": bool(doc.signature),
+            "verified": ok, "signed_at": doc.signed_at,
+            "detail": "Signature valid — content unchanged since ingestion." if ok
+                      else ("No signature on record." if not doc.signature
+                            else "SIGNATURE MISMATCH — document may have been altered.")}
+
+
+@app.get("/evidence/crosswalk", tags=["evidence-graph"])
+def control_crosswalk(control_id: str, framework: str = "NIST_800_53",
+                      p: Principal = Depends(require_principal)) -> dict:
+    from app.services.crosswalk import mapped_controls
+    return {"control_id": control_id, "framework": framework,
+            "mapped": mapped_controls(control_id, framework)}
+
+
+@app.get("/evidence/export/oscal", tags=["evidence-graph"])
+def export_oscal(framework: str = "NIST_800_53", tenant_id: str = "default",
+                 db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services.oscal_export import export_assessment_results
+    return export_assessment_results(db, tenant_id, framework)
+
+
+@app.post("/evidence/documents", tags=["evidence-graph"])
+def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
+                          p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    content, name, stype = req.content, req.name, req.source_type
+    if req.content_base64:
+        import base64 as _b64
+        try:
+            raw = _b64.b64decode(req.content_base64, validate=True)
+        except Exception:
+            raise HTTPException(status_code=422, detail="content_base64 is not valid base64")
+        fn = (req.filename or "upload").lower()
+        if fn.endswith(".pdf"):
+            from app.services.doc_fetch import _pdf_to_text
+            try:
+                content = _pdf_to_text(raw)
+            except Exception as e:
+                raise HTTPException(status_code=422, detail=f"could not read PDF: {e}")
+            stype = "upload:pdf"
+        else:
+            content = raw.decode("utf-8", errors="replace")
+            stype = "upload:text"
+        name = name or req.filename or "uploaded document"
+    if req.url:
+        from app.services.doc_fetch import fetch_url_text, FetchError
+        try:
+            content, stype = fetch_url_text(req.url.strip())
+        except FetchError as e:
+            raise HTTPException(status_code=400, detail=f"URL fetch failed: {e}")
+        name = name or req.url.strip()[:120]
+    if not content or not content.strip():
+        raise HTTPException(status_code=400, detail="No content (provide 'content', 'content_base64', or a fetchable 'url').")
+    return _EvidenceService(db).add_document(req.tenant_id, name or "document", content, stype)
+
+
+@app.get("/evidence/documents", tags=["evidence-graph"])
+def list_evidence_documents(tenant_id: str = "default", db: Session = Depends(get_db),
+                            p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _EvidenceService(db).list_documents(tenant_id)
+
+
+@app.get("/evidence/graph", tags=["evidence-graph"])
+def evidence_graph(tenant_id: str = "default", framework: str | None = None,
+                   db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _EvidenceService(db).graph(tenant_id, framework)
+
+
+@app.post("/evidence/hits/{hit_id}/confirm", tags=["evidence-graph"])
+def confirm_evidence_hit(hit_id: str, req: _ConfirmRequest, db: Session = Depends(get_db),
+                         p: Principal = Depends(require_principal)) -> dict:
+    try:
+        return _EvidenceService(db).confirm_hit(hit_id, req.confirmed, req.auto_attest, req.approver)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.delete("/evidence/documents/{doc_id}", tags=["evidence-graph"])
+def delete_evidence_document(doc_id: str, db: Session = Depends(get_db),
+                             p: Principal = Depends(require_principal)) -> dict:
+    _EvidenceService(db).delete_document(doc_id)
+    return {"deleted": doc_id}
+
+
+# ── ontology-driven resolver (telemetry / document / attestation routing) ──
+from app.services import resolver as _resolver
+
+
+class _ResolveRequest(_BaseModel):
+    tenant_id: str = "default"
+    framework: str = "NIST_800_53"
+    control_id: str
+    asset: dict | None = None
+    available_connectors: list[str] = []
+    dry_run: bool = False
+
+
+@app.get("/ontology/planes", tags=["ontology"])
+def ontology_planes(_: Principal = Depends(require_principal)) -> dict:
+    return _resolver.ontology()
+
+
+@app.get("/ontology/bindings", tags=["ontology"])
+def ontology_bindings(control_id: str, framework: str = "NIST_800_53",
+                      _: Principal = Depends(require_principal)) -> dict:
+    b = _resolver.control_binding(framework, control_id)
+    if not b:
+        raise HTTPException(status_code=404, detail=f"No binding for {control_id} in {framework}")
+    return {"framework": framework, "control_id": control_id, **b}
+
+
+@app.post("/resolve", tags=["ontology"])
+def resolve_control(req: _ResolveRequest, db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    try:
+        return _resolver.resolve(db, req.tenant_id, req.framework, req.control_id,
+                                 req.asset, req.available_connectors, req.dry_run)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/resolve/decisions", tags=["ontology"])
+def list_routing_decisions(tenant_id: str = "default", control_id: str | None = None,
+                           db: Session = Depends(get_db),
+                           p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return [{"decision_id": d.id, "control_id": d.control_id, "framework": d.framework,
+             "asset_type": d.asset_type, "plane": d.plane, "strategy_type": d.strategy_type,
+             "module": d.module, "status": d.status, "reason": d.reason,
+             "executed": d.executed, "skipped": d.skipped, "finding_id": d.finding_id,
+             "created_at": d.created_at.isoformat()}
+            for d in _resolver.list_decisions(db, tenant_id, control_id)]
+
+
+# ── evidence mindmap ──
+import os as _os_evm
+from fastapi.responses import FileResponse as _FileResponse_evm
+
+_EVMAP_FILE = _os_evm.path.join(_os_evm.path.dirname(__file__), "static", "evidence-map.html")
+
+
+@app.get("/evidence-map", include_in_schema=False)
+def _serve_evidence_map():
+    return _FileResponse_evm(_EVMAP_FILE, headers={"Cache-Control":"no-cache,no-store,must-revalidate","Pragma":"no-cache","Expires":"0"})
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# GRC Risk Register + TPRM (Third-Party Risk Management)
+# ════════════════════════════════════════════════════════════════════
+from app.grc_tprm_models import (RiskIn as _RiskIn, RiskPatch as _RiskPatch,
+                                 VendorIn as _VendorIn, VendorPatch as _VendorPatch)
+from app.services.grc_tprm import (RiskService as _RiskService,
+                                   VendorService as _VendorService)
+
+
+@app.get("/grc/risks", tags=["grc"])
+def grc_list_risks(tenant_id: str = "default", db: Session = Depends(get_db),
+                   p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _RiskService(db).list(tenant_id)
+
+
+@app.get("/grc/risks/summary", tags=["grc"])
+def grc_risk_summary(tenant_id: str = "default", db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _RiskService(db).summary(tenant_id)
+
+
+@app.post("/grc/risks", tags=["grc"])
+def grc_create_risk(data: _RiskIn, tenant_id: str = "default",
+                    db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _RiskService(db).create(tenant_id, data)
+
+
+@app.patch("/grc/risks/{risk_id}", tags=["grc"])
+def grc_update_risk(risk_id: str, patch: _RiskPatch, tenant_id: str = "default",
+                    db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _RiskService(db).update(tenant_id, risk_id, patch)
+    if out is None:
+        raise HTTPException(404, f"risk '{risk_id}' not found")
+    return out
+
+
+@app.delete("/grc/risks/{risk_id}", tags=["grc"])
+def grc_delete_risk(risk_id: str, tenant_id: str = "default",
+                    db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _RiskService(db).delete(tenant_id, risk_id):
+        raise HTTPException(404, f"risk '{risk_id}' not found")
+    return {"deleted": risk_id}
+
+
+@app.get("/tprm/vendors", tags=["tprm"])
+def tprm_list_vendors(tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _VendorService(db).list(tenant_id)
+
+
+@app.get("/tprm/vendors/summary", tags=["tprm"])
+def tprm_vendor_summary(tenant_id: str = "default", db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _VendorService(db).summary(tenant_id)
+
+
+@app.post("/tprm/vendors", tags=["tprm"])
+def tprm_create_vendor(data: _VendorIn, tenant_id: str = "default",
+                       db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _VendorService(db).create(tenant_id, data)
+
+
+@app.patch("/tprm/vendors/{vendor_id}", tags=["tprm"])
+def tprm_update_vendor(vendor_id: str, patch: _VendorPatch, tenant_id: str = "default",
+                       db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _VendorService(db).update(tenant_id, vendor_id, patch)
+    if out is None:
+        raise HTTPException(404, f"vendor '{vendor_id}' not found")
+    return out
+
+
+@app.delete("/tprm/vendors/{vendor_id}", tags=["tprm"])
+def tprm_delete_vendor(vendor_id: str, tenant_id: str = "default",
+                       db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _VendorService(db).delete(tenant_id, vendor_id):
+        raise HTTPException(404, f"vendor '{vendor_id}' not found")
+    return {"deleted": vendor_id}
+
+
+
+from app.services.trust_graph import TrustGraphService as _TrustGraph
+
+
+@app.get("/trust/graph", tags=["trust"])
+def trust_graph(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id); return _TrustGraph(db).graph(tenant_id)
+
+
+@app.get("/trust/risk-telemetry", tags=["trust"])
+def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id); return _TrustGraph(db).risk_telemetry(tenant_id)
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# AUDIT MANAGEMENT  (engagement lifecycle + PBC requests + export package)
+# ════════════════════════════════════════════════════════════════════
+from app.audit_models import (AuditIn as _AuditIn, AuditPatch as _AuditPatch,
+                              ControlReviewPatch as _CtrlPatch,
+                              EvidenceRequestIn as _ReqIn, EvidenceRequestPatch as _ReqPatch)
+from app.services.audit_service import AuditService as _AuditSvc
+
+
+@app.get("/audits", tags=["audit"])
+def audit_list(tenant_id: str = "default", db: Session = Depends(get_db),
+               p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).list(tenant_id)
+
+
+@app.post("/audits", tags=["audit"])
+def audit_create(data: _AuditIn, tenant_id: str = "default", db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).create(tenant_id, data)
+
+
+@app.get("/audits/{audit_id}", tags=["audit"])
+def audit_get(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+              p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).get(tenant_id, audit_id)
+    if out is None:
+        raise HTTPException(404, "audit not found")
+    return out
+
+
+@app.patch("/audits/{audit_id}", tags=["audit"])
+def audit_update(audit_id: str, patch: _AuditPatch, tenant_id: str = "default",
+                 db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).update(tenant_id, audit_id, patch)
+    if out is None:
+        raise HTTPException(404, "audit not found")
+    return out
+
+
+@app.delete("/audits/{audit_id}", tags=["audit"])
+def audit_delete(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _AuditSvc(db).delete(tenant_id, audit_id):
+        raise HTTPException(404, "audit not found")
+    return {"deleted": audit_id}
+
+
+@app.post("/audits/{audit_id}/refresh-posture", tags=["audit"])
+def audit_refresh(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                  p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).refresh_posture(tenant_id, audit_id)
+
+
+@app.get("/audits/{audit_id}/controls", tags=["audit"])
+def audit_controls(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                   p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).list_controls(tenant_id, audit_id)
+
+
+@app.patch("/audits/controls/{control_row_id}", tags=["audit"])
+def audit_review_control(control_row_id: str, patch: _CtrlPatch, tenant_id: str = "default",
+                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).review_control(tenant_id, control_row_id, patch)
+    if out is None:
+        raise HTTPException(404, "control not found")
+    return out
+
+
+@app.get("/audits/{audit_id}/requests", tags=["audit"])
+def audit_requests(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                   p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).list_requests(tenant_id, audit_id)
+
+
+@app.post("/audits/{audit_id}/requests", tags=["audit"])
+def audit_create_request(audit_id: str, data: _ReqIn, tenant_id: str = "default",
+                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    return _AuditSvc(db).create_request(tenant_id, audit_id, data)
+
+
+@app.patch("/audits/requests/{req_id}", tags=["audit"])
+def audit_update_request(req_id: str, patch: _ReqPatch, tenant_id: str = "default",
+                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).update_request(tenant_id, req_id, patch)
+    if out is None:
+        raise HTTPException(404, "request not found")
+    return out
+
+
+@app.delete("/audits/requests/{req_id}", tags=["audit"])
+def audit_delete_request(req_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                         p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    if not _AuditSvc(db).delete_request(tenant_id, req_id):
+        raise HTTPException(404, "request not found")
+    return {"deleted": req_id}
+
+
+@app.get("/audits/{audit_id}/export", tags=["audit"])
+def audit_export(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                 p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    out = _AuditSvc(db).export_package(tenant_id, audit_id)
+    if out is None:
+        raise HTTPException(404, "audit not found")
+    return out
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# DOCUMENT → POLICY/TELEMETRY  (ingest a doc, auto-extract controls)
+# ════════════════════════════════════════════════════════════════════
+from app.services import doc_ingest as _doc_ingest
+
+
+@app.post("/v1/documents/extract", tags=["documents"])
+def doc_extract(payload: dict, tenant_id: str = "default",
+                p: Principal = Depends(require_principal)) -> dict:
+    """Doc text → markdown → controls → events (preview, does not persist).
+
+    Body: {"text": "<document content>", "source": "soc2_report"}
+    """
+    authorize_tenant(p, tenant_id)
+    text = payload.get("text", "")
+    if not text:
+        raise HTTPException(400, "provide 'text': document content")
+    return _doc_ingest.ingest_document(text, tenant_id,
+                                       payload.get("source", "document"))
+
+
+@app.post("/v1/documents/ingest", tags=["documents"])
+def doc_ingest_endpoint(payload: dict, tenant_id: str = "default",
+                        db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    """Extract controls from a document AND persist the resulting events into
+    telemetry (so they flow into the policy / posture layer).
+
+    Body: {"text": "<document content>", "source": "soc2_report"}
+    """
+    authorize_tenant(p, tenant_id)
+    text = payload.get("text", "")
+    if not text:
+        raise HTTPException(400, "provide 'text': document content")
+    result = _doc_ingest.ingest_document(text, tenant_id, payload.get("source", "document"))
+    # persist via the middleware pipeline if available; else return events to caller
+    persisted = None
+    try:
+        from app.middleware_core import normalize as _norm
+        from app.services.middleware_service import MiddlewareService as _MW
+        events = _norm(result["events"], "canonical", tenant_id)
+        persisted = _MW(db).ingest(events)
+    except Exception:
+        persisted = {"note": "middleware not available; events returned but not stored"}
+    result["persisted"] = persisted
+    return result
+
+
+@app.post("/v1/documents/upload", tags=["documents"])
+def doc_upload(payload: dict, tenant_id: str = "default",
+               db: Session = Depends(get_db),
+               p: Principal = Depends(require_principal)) -> dict:
+    """Ingest a base64-encoded file (PDF/text/markdown) → extract → telemetry.
+
+    Body: {"filename": "policy.pdf", "content_base64": "<b64>"}  — base64 keeps
+    this dependency-free (no python-multipart needed on the host).
+    """
+    authorize_tenant(p, tenant_id)
+    import base64
+    name = (payload.get("filename") or "upload").lower()
+    b64 = payload.get("content_base64", "")
+    if not b64:
+        raise HTTPException(400, "provide 'content_base64': base64-encoded file content")
+    try:
+        raw = base64.b64decode(b64)
+    except Exception:
+        raise HTTPException(422, "content_base64 is not valid base64")
+    if name.endswith(".pdf"):
+        from app.services.doc_fetch import _pdf_to_text
+        text = _pdf_to_text(raw)
+    else:
+        text = raw.decode("utf-8", errors="replace")
+    if not text.strip():
+        raise HTTPException(422, "could not extract text from document")
+    result = _doc_ingest.ingest_document(text, tenant_id, source=payload.get("filename", "upload"))
+    try:
+        from app.middleware_core import normalize as _norm
+        from app.services.middleware_service import MiddlewareService as _MW
+        events = _norm(result["events"], "canonical", tenant_id)
+        result["persisted"] = _MW(db).ingest(events)
+    except Exception:
+        result["persisted"] = {"note": "middleware not available; events not stored"}
+    return result
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# THREAT INTELLIGENCE  (CISA KEV + EPSS + NVD — external feeds)
+# ════════════════════════════════════════════════════════════════════
+from app.services import threat_intel as _threat
+
+
+@app.get("/v1/threat/summary", tags=["threat-intel"])
+def threat_summary(p: Principal = Depends(require_principal)) -> dict:
+    """Live threat posture from CISA KEV: actively-exploited count, ransomware, recent."""
+    return _threat.kev_summary()
+
+
+@app.get("/v1/threat/kev", tags=["threat-intel"])
+def threat_kev(limit: int = 50, ransomware_only: bool = False, q: str = "",
+               p: Principal = Depends(require_principal)) -> dict:
+    """The CISA Known Exploited Vulnerabilities catalog (filterable)."""
+    kev = _threat.get_kev()
+    vulns = kev["vulnerabilities"]
+    if ransomware_only:
+        vulns = [v for v in vulns
+                 if str(v.get("knownRansomwareCampaignUse", "")).lower() == "known"]
+    if q:
+        ql = q.lower()
+        vulns = [v for v in vulns
+                 if ql in str(v.get("vulnerabilityName", "")).lower()
+                 or ql in str(v.get("product", "")).lower()
+                 or ql in str(v.get("vendorProject", "")).lower()
+                 or ql in str(v.get("cveID", "")).lower()]
+    vulns = sorted(vulns, key=lambda v: v.get("dateAdded", ""), reverse=True)[:limit]
+    return {"source": kev["source"], "count": len(vulns),
+            "vulnerabilities": [{"cve": v.get("cveID"), "name": v.get("vulnerabilityName"),
+                                 "vendor": v.get("vendorProject"), "product": v.get("product"),
+                                 "date_added": v.get("dateAdded"),
+                                 "ransomware": str(v.get("knownRansomwareCampaignUse", "")).lower() == "known"}
+                                for v in vulns]}
+
+
+@app.post("/v1/threat/enrich", tags=["threat-intel"])
+def threat_enrich(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+    """Enrich a set of controls with threat context. Body: {"controls": [...], "cve_map": {...}}"""
+    controls = payload.get("controls", [])
+    cve_map = payload.get("cve_map", {})
+    if not controls:
+        raise HTTPException(400, "provide 'controls': [control_ids]")
+    return {"enrichment": _threat.enrich_controls(controls, cve_map),
+            "pressure": _threat.threat_pressure()}
 
 
 @app.get("/controls/{control_id}/dependencies", tags=["simulation"])
