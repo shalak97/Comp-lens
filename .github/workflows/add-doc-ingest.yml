@@ -1,0 +1,36 @@
+name: Add document ingestion (doc to markdown to controls to telemetry)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      B64: "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"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and unpack
+        run: |
+          echo "$B64" | base64 -d > /tmp/d.tgz
+          tar xzf /tmp/d.tgz -C .
+          test -f app/services/doc_ingest.py
+          echo unpacked
+      - name: Apply idempotent patch
+        run: |
+          python3 _apply_doc.py
+          rm -f _apply_doc.py _doc_endpoints.txt /tmp/d.tgz d.tgz
+      - name: Syntax check
+        run: |
+          python3 -m py_compile app/main.py app/services/doc_ingest.py
+          echo compiles
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "nothing to commit"; else
+            git commit -m "feat: document ingestion — doc to markdown to controls to telemetry events"
+            git push; fi
