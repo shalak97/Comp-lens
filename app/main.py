@@ -1102,3 +1102,89 @@ def audit_export(audit_id: str, tenant_id: str = "default", db: Session = Depend
     if out is None:
         raise HTTPException(404, "audit not found")
     return out
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# DOCUMENT → POLICY/TELEMETRY  (ingest a doc, auto-extract controls)
+# ════════════════════════════════════════════════════════════════════
+from app.services import doc_ingest as _doc_ingest
+
+
+@app.post("/v1/documents/extract", tags=["documents"])
+def doc_extract(payload: dict, tenant_id: str = "default",
+                p: Principal = Depends(require_principal)) -> dict:
+    """Doc text → markdown → controls → events (preview, does not persist).
+
+    Body: {"text": "<document content>", "source": "soc2_report"}
+    """
+    authorize_tenant(p, tenant_id)
+    text = payload.get("text", "")
+    if not text:
+        raise HTTPException(400, "provide 'text': document content")
+    return _doc_ingest.ingest_document(text, tenant_id,
+                                       payload.get("source", "document"))
+
+
+@app.post("/v1/documents/ingest", tags=["documents"])
+def doc_ingest_endpoint(payload: dict, tenant_id: str = "default",
+                        db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    """Extract controls from a document AND persist the resulting events into
+    telemetry (so they flow into the policy / posture layer).
+
+    Body: {"text": "<document content>", "source": "soc2_report"}
+    """
+    authorize_tenant(p, tenant_id)
+    text = payload.get("text", "")
+    if not text:
+        raise HTTPException(400, "provide 'text': document content")
+    result = _doc_ingest.ingest_document(text, tenant_id, payload.get("source", "document"))
+    # persist via the middleware pipeline if available; else return events to caller
+    persisted = None
+    try:
+        from app.middleware_core import normalize as _norm
+        from app.services.middleware_service import MiddlewareService as _MW
+        events = _norm(result["events"], "canonical", tenant_id)
+        persisted = _MW(db).ingest(events)
+    except Exception:
+        persisted = {"note": "middleware not available; events returned but not stored"}
+    result["persisted"] = persisted
+    return result
+
+
+@app.post("/v1/documents/upload", tags=["documents"])
+def doc_upload(payload: dict, tenant_id: str = "default",
+               db: Session = Depends(get_db),
+               p: Principal = Depends(require_principal)) -> dict:
+    """Ingest a base64-encoded file (PDF/text/markdown) → extract → telemetry.
+
+    Body: {"filename": "policy.pdf", "content_base64": "<b64>"}  — base64 keeps
+    this dependency-free (no python-multipart needed on the host).
+    """
+    authorize_tenant(p, tenant_id)
+    import base64
+    name = (payload.get("filename") or "upload").lower()
+    b64 = payload.get("content_base64", "")
+    if not b64:
+        raise HTTPException(400, "provide 'content_base64': base64-encoded file content")
+    try:
+        raw = base64.b64decode(b64)
+    except Exception:
+        raise HTTPException(422, "content_base64 is not valid base64")
+    if name.endswith(".pdf"):
+        from app.services.doc_fetch import _pdf_to_text
+        text = _pdf_to_text(raw)
+    else:
+        text = raw.decode("utf-8", errors="replace")
+    if not text.strip():
+        raise HTTPException(422, "could not extract text from document")
+    result = _doc_ingest.ingest_document(text, tenant_id, source=payload.get("filename", "upload"))
+    try:
+        from app.middleware_core import normalize as _norm
+        from app.services.middleware_service import MiddlewareService as _MW
+        events = _norm(result["events"], "canonical", tenant_id)
+        result["persisted"] = _MW(db).ingest(events)
+    except Exception:
+        result["persisted"] = {"note": "middleware not available; events not stored"}
+    return result
