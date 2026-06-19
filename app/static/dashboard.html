@@ -971,25 +971,108 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
 /* ============ EVIDENCE DOCS ============ */
 RENDER.evidence = async function() {
-  const m=main(), v=view("Evidence Documents","Ingested policies and evidence, mapped to controls with trust signatures");
+  const m=main(), v=view("Evidence Documents","Collect evidence by uploading a policy or security document — it's extracted, mapped to controls, and signed");
   m.appendChild(v);const host=el("div");v.appendChild(host);
-  host.innerHTML=`<div class="empty"><span class="spin"></span> Loading…</div>`;
+
+  // ── upload / collect card ──
+  const up=el("div","card");
+  up.innerHTML=`<h3>Collect evidence</h3><div class="sub">Drop a document — Comp-Lens extracts which controls it evidences and stores it with a trust signature</div>`;
+  const drop=el("div","dropzone");
+  drop.innerHTML=`<div class="big">Drop a document here</div><div class="sm">PDF, text, or markdown · or paste below</div>`;
+  const fileInput=el("input");fileInput.type="file";fileInput.style.display="none";fileInput.accept=".pdf,.txt,.md";
+  up.appendChild(drop);up.appendChild(fileInput);
+  const ta=el("textarea");ta.placeholder="…or paste document text (e.g. an InfoSec policy)";
+  ta.style.cssText="width:100%;min-height:90px;margin-top:12px;background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:12px;color:var(--txt);font-family:inherit;font-size:13px;resize:vertical";
+  up.appendChild(ta);
+  const btnRow=el("div");btnRow.style.cssText="display:flex;gap:9px;margin-top:12px;align-items:center";
+  const nameIn=el("input");nameIn.placeholder="Document name (optional)";nameIn.style.cssText="flex:1";
+  const collectBtn=el("button","btn primary");collectBtn.textContent="Collect evidence";
+  btnRow.appendChild(nameIn);btnRow.appendChild(collectBtn);up.appendChild(btnRow);
+  host.appendChild(up);
+  const resHost=el("div");host.appendChild(resHost);
+  const listHost=el("div");host.appendChild(listHost);
+
+  let pdfData=null;
+  drop.onclick=()=>fileInput.click();
+  drop.ondragover=e=>{e.preventDefault();drop.classList.add("drag");};
+  drop.ondragleave=()=>drop.classList.remove("drag");
+  drop.ondrop=e=>{e.preventDefault();drop.classList.remove("drag");if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);};
+  fileInput.onchange=()=>{if(fileInput.files[0])handleFile(fileInput.files[0]);};
+  function handleFile(f){
+    drop.querySelector(".big").textContent="📄 "+f.name;
+    nameIn.value=nameIn.value||f.name;
+    const r=new FileReader();
+    if(f.name.toLowerCase().endsWith(".pdf")){r.onload=()=>{pdfData={filename:f.name,b64:r.result.split(",")[1]};ta.value="[PDF: "+f.name+" — parsed on server]";ta.disabled=true;};r.readAsDataURL(f);}
+    else{r.onload=()=>{ta.value=r.result;ta.disabled=false;pdfData=null;};r.readAsText(f);}
+  }
+  collectBtn.onclick=async()=>{
+    const text=ta.value.trim();
+    if(!pdfData && !text){toast("Drop a file or paste text first");return;}
+    resHost.innerHTML='<div class="card"><span class="spin"></span> Collecting & extracting…</div>';
+    let data;
+    if(STATE.mode==="demo"){data=demoCollect(nameIn.value||(pdfData&&pdfData.filename)||"document",text);}
+    else{
+      const body=pdfData?{filename:pdfData.filename,content_base64:pdfData.b64,name:nameIn.value||pdfData.filename}
+                        :{content:text,name:nameIn.value||"document"};
+      try{data=await apiPOST(withTenant("/evidence/documents"),body);}
+      catch(e){toast("Error: "+e.message);resHost.innerHTML="";return;}
+    }
+    renderCollected(resHost,data);
+    ta.value="";ta.disabled=false;nameIn.value="";pdfData=null;drop.querySelector(".big").textContent="Drop a document here";
+    loadEvidenceList(listHost);
+    toast("Evidence collected: "+(data.concepts_found||0)+" controls mapped");
+  };
+
+  await loadEvidenceList(listHost);
+};
+function demoCollect(name,text){
+  const t=(text||"").toLowerCase();const hits=[];
+  [["mfa|multi-factor","mfa","IA-2"],["encrypt|aes|at rest","encryption","SC-28"],["tls|in transit","tls","SC-8"],
+   ["vulnerab|scan|patch","vuln","RA-5"],["audit log|logging","logging","AU-2"],["access control","access","AC-3"]]
+   .forEach(([kw,cid,ctrl])=>{if(new RegExp(kw).test(t)){const sent=(text||"").split(/[.\n]/).find(s=>new RegExp(kw).test(s.toLowerCase()))||ctrl;
+     hits.push({concept_id:cid,control:ctrl,quote:sent.trim().slice(0,140),confidence:0.5});}});
+  return {doc_id:"demo_"+Date.now(),name,method:"lexicon",concepts_found:hits.length,char_count:(text||"").length,hits,signed:true,_demo:true};
+}
+function renderCollected(host,data){
+  host.innerHTML="";
+  const card=el("div","card");
+  card.style.cssText="border-color:var(--pass);background:rgba(52,211,153,.06)";
+  card.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div><span style="font-size:15px;font-weight:600">✓ ${esc(data.name||"Document")}</span>
+      <span class="badge b-pass" style="margin-left:10px">signed</span>
+      <span class="badge b-dim" style="margin-left:6px">${esc(data.method||"lexicon")}</span></div>
+    <div style="font-size:13px;color:var(--mid)">${data.concepts_found||0} controls · ${data.char_count||0} chars</div></div>`;
+  if((data.hits||[]).length){
+    const wrap=el("div","scroll");wrap.style.marginTop="12px";
+    wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Confidence</th><th>Evidence quote</th></tr></thead><tbody>${
+      data.hits.map(h=>`<tr><td class="mono" style="color:var(--hi)">${esc(h.control||h.concept_id)}</td>
+        <td><div class="pbar" style="width:60px"><i style="width:${(h.confidence||.5)*100}%;background:var(--pass)"></i></div></td>
+        <td style="font-size:12px;color:var(--dim);font-style:italic">"${esc(h.quote||"")}"</td></tr>`).join("")}</tbody></table>`;
+    card.appendChild(wrap);
+  }
+  host.appendChild(card);
+}
+async function loadEvidenceList(host){
+  host.innerHTML=skelCard();
   const {data}=await load(withTenant("/evidence/documents"),[
-    {id:"d1",title:"Information Security Policy v3.2",source:"upload",controls_mapped:14,signed:true,created_at:new Date(Date.now()-10*864e5).toISOString()},
-    {id:"d2",title:"Access Control Procedure",source:"confluence",controls_mapped:8,signed:true,created_at:new Date(Date.now()-22*864e5).toISOString()},
-    {id:"d3",title:"Incident Response Plan",source:"upload",controls_mapped:11,signed:false,created_at:new Date(Date.now()-5*864e5).toISOString()},
+    {doc_id:"d1",name:"Information Security Policy v3.2",source_type:"upload:pdf",control_count:14,signed:true,created_at:new Date(Date.now()-10*864e5).toISOString()},
+    {doc_id:"d2",name:"Access Control Procedure",source_type:"confluence",control_count:8,signed:true,created_at:new Date(Date.now()-22*864e5).toISOString()},
+    {doc_id:"d3",name:"Incident Response Plan",source_type:"upload:text",control_count:11,signed:false,created_at:new Date(Date.now()-5*864e5).toISOString()},
   ]);
   const docs=Array.isArray(data)?data:[];host.innerHTML="";
-  if(!docs.length){host.innerHTML=`<div class="card"><div class="empty">No evidence documents yet. Ingest via the API (<span class="mono">POST /evidence/documents</span>) or connect Confluence/SharePoint.</div></div>`;return;}
-  const card=el("div","card");card.innerHTML=`<h3>Documents</h3><div class="sub">${docs.length} ingested</div>`;
-  const wrap=el("div","scroll");
-  wrap.innerHTML=`<table><thead><tr><th>Title</th><th>Source</th><th>Controls mapped</th><th>Trust</th><th>Ingested</th></tr></thead><tbody>${
-    docs.slice(0,200).map(d=>`<tr><td>${esc(d.title||d.name||d.id)}</td><td>${esc(d.source||"—")}</td>
-      <td class="mono">${d.controls_mapped??d.control_count??"—"}</td>
-      <td>${d.signed?'<span class="badge b-pass">signed</span>':'<span class="badge b-dim">unsigned</span>'}</td>
-      <td class="mono" style="color:var(--mid)">${ago(d.created_at)}</td></tr>`).join("")}</tbody></table>`;
-  card.appendChild(wrap);host.appendChild(card);
-};
+  const card=el("div","card");
+  card.innerHTML=`<h3>Collected evidence</h3><div class="sub">${docs.length} document(s) · each mapped to controls and signed</div>`;
+  if(!docs.length){card.appendChild(elFromHTML(emptyState("No evidence yet","Upload your first policy or security document above. Comp-Lens will extract the controls it evidences and store it with a trust signature.")));}
+  else{const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>Document</th><th>Source</th><th>Controls</th><th>Trust</th><th>Collected</th></tr></thead><tbody>${
+      docs.slice(0,200).map(d=>`<tr><td>${esc(d.name||d.title||d.doc_id)}</td>
+        <td style="font-size:11px;color:var(--mid)">${esc(d.source_type||d.source||"—")}</td>
+        <td class="mono">${d.control_count??d.controls_mapped??d.concepts_found??"—"}</td>
+        <td>${d.signed?'<span class="badge b-pass">signed</span>':'<span class="badge b-dim">unsigned</span>'}</td>
+        <td class="mono" style="color:var(--mid)">${ago(d.created_at)}</td></tr>`).join("")}</tbody></table>`;
+    card.appendChild(wrap);}
+  host.appendChild(card);
+}
 
 /* ============ EVIDENCE MAP (link out) ============ */
 /* ============ 3D KNOWLEDGE GRAPH (incl. evidence documents layer) ============ */
