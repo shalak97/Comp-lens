@@ -444,7 +444,8 @@ const GROUPS = [
                     ["remediation","Remediation","M9 11l3 3L22 4M12 2a10 10 0 100 20 10 10 0 000-20"],
                     ["trends","Trends","M3 3v18h18M7 14l4-4 3 3 5-5"],
                     ["inventory","AI Inventory","M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"],
-                    ["waivers","Waivers","M9 12l2 2 4-4M21 12c0 5-3.5 7.5-8.5 9.5C7.5 19.5 4 17 4 12V5l8-3 8 3v7z"]]],
+                    ["waivers","Waivers","M9 12l2 2 4-4M21 12c0 5-3.5 7.5-8.5 9.5C7.5 19.5 4 17 4 12V5l8-3 8 3v7z"],
+                    ["threat","Threat Intel","M12 2L4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4zm-1 13l-3-3 1.4-1.4L11 12.2l4.6-4.6L17 9l-6 6z"]]],
   ["Risk & Vendors", [["risks","Risk Register","M12 2L2 7v10l10 5 10-5V7L12 2zm0 4l6 3v6l-6 3-6-3V9l6-3z M12 8v4m0 3h.01"],
                       ["vendors","Vendors (TPRM)","M3 21h18M5 21V7l8-4v18M19 21V11l-6-3M9 9v.01M9 12v.01M9 15v.01M9 18v.01"],
                       ["trustgraph","Trust Graph","M12 2v6m0 8v6M5 12H2m20 0h-3M6.3 6.3L4 4m16 2.3L17.7 6.3M6.3 17.7L4 20m13.7-2.3L20 20M9 12a3 3 0 116 0 3 3 0 01-6 0z"]]]
@@ -1309,10 +1310,23 @@ function renderSim(out,res,seed){
   out.appendChild(kp);
   const card=el("div","card");
   card.innerHTML=`<h3>Cascade result</h3><div class="sub">Failing ${seed.join(", ")} impacts ${imp.length} downstream control(s)</div>`;
+  // threat-intel banner (external KEV/EPSS enrichment)
+  if(res.threat_intel&&res.threat_intel.pressure){
+    const p=res.threat_intel.pressure;
+    const tb=el("div");tb.style.cssText="margin:10px 0;padding:11px 14px;border-radius:var(--r2);background:rgba(251,191,36,.1);border:1px solid var(--warn);font-size:12.5px";
+    tb.innerHTML=`<b style="color:var(--warn)">⚡ External threat context:</b> ${p.actively_exploited} vulnerabilities are actively exploited in the wild right now (${p.ransomware_linked} ransomware-linked) per the CISA KEV catalog. Failing vulnerability-management controls below carry real-world exploitation pressure.`;
+    card.appendChild(tb);
+  }
   if(imp.length){
     const wrap=el("div","scroll");
-    wrap.innerHTML=`<table><thead><tr><th>Impacted control</th><th>Edge weight</th><th>Depth</th></tr></thead><tbody>${
-      imp.map(i=>`<tr><td class="mono">${esc(i.control_id||i.target||i.id)}</td><td class="mono">${(i.weight??i.edge_weight??"—")}</td><td class="mono">${i.depth??1}</td></tr>`).join("")}</tbody></table>`;
+    wrap.innerHTML=`<table><thead><tr><th>Impacted control</th><th>Edge weight</th><th>Depth</th><th>Threat context</th></tr></thead><tbody>${
+      imp.map(i=>{const tc=i.threat_context;
+        let badge='<span style="color:var(--mid)">—</span>';
+        if(tc){
+          if(tc.kev_exploited_cves&&tc.kev_exploited_cves.length){badge=`<span class="badge b-fail">⚡ ${tc.kev_exploited_cves.length} exploited CVE(s)</span>`;}
+          else if(tc.exploitation_pressure!=null){badge=`<span class="badge b-warn">KEV pressure: ${tc.actively_exploited} active${tc.ransomware_linked?` · ${tc.ransomware_linked} ransomware`:''}</span>`;}
+        }
+        return `<tr><td class="mono">${esc(i.control_id||i.target||i.id)}</td><td class="mono">${(i.weight??i.edge_weight??i.severity??"—")}</td><td class="mono">${i.depth??1}</td><td style="font-size:11px">${badge}</td></tr>`;}).join("")}</tbody></table>`;
     card.appendChild(wrap);
   }else card.innerHTML+=`<div class="empty">No downstream dependencies — these controls are leaf nodes.</div>`;
   out.appendChild(card);
@@ -2375,6 +2389,78 @@ function emptyState(title,body){return `<div class="empty2"><svg class="ico" vie
 function elFromHTML(html){const d=el("div");d.innerHTML=html;return d.firstElementChild;}
 function demoNote(host){const n=el("div");n.style.cssText="text-align:center;font-size:11px;color:var(--mid);margin-top:8px";n.textContent="Showing demo data — connect to a live instance with this feature deployed to see real data.";host.appendChild(n);}
 function timeAgo(iso){const s=(Date.now()-new Date(iso))/1000;if(s<60)return Math.round(s)+"s ago";if(s<3600)return Math.round(s/60)+"m ago";if(s<86400)return Math.round(s/3600)+"h ago";return Math.round(s/86400)+"d ago";}
+
+/* ════════════ THREAT INTELLIGENCE TAB ════════════ */
+const DEMO_THREAT={total_known_exploited:1283,ransomware_linked:247,source:"seed-fallback",recent:[
+  {cve:"CVE-2024-3400",name:"PAN-OS Command Injection",vendor:"Palo Alto Networks",product:"PAN-OS",date_added:"2024-04-12",ransomware:true},
+  {cve:"CVE-2024-6387",name:"OpenSSH RCE (regreSSHion)",vendor:"OpenBSD",product:"OpenSSH",date_added:"2024-07-01",ransomware:false},
+  {cve:"CVE-2023-34362",name:"MOVEit Transfer SQL Injection",vendor:"Progress",product:"MOVEit Transfer",date_added:"2023-06-02",ransomware:true},
+  {cve:"CVE-2021-44228",name:"Apache Log4j2 RCE (Log4Shell)",vendor:"Apache",product:"Log4j2",date_added:"2021-12-10",ransomware:true},
+  {cve:"CVE-2022-22965",name:"Spring Framework RCE (Spring4Shell)",vendor:"VMware",product:"Spring",date_added:"2022-04-04",ransomware:true},
+]};
+
+RENDER.threat=async function(){
+  const m=main(),v=view("Threat Intelligence","Live external feeds — CISA Known Exploited Vulnerabilities, ransomware campaigns, and exploitation pressure on your controls");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=skelGrid(4)+skelCard();
+  const {data:sum,live}=await load(withTenant("/v1/threat/summary"),DEMO_THREAT);
+  host.innerHTML="";
+  // KPIs
+  const kp=el("div","kpis");
+  [["Actively exploited",sum.total_known_exploited,"in CISA KEV","var(--fail)"],
+   ["Ransomware-linked",sum.ransomware_linked,"campaign CVEs","var(--warn)"],
+   ["Feed source",sum.source==="cisa-live"?"LIVE":sum.source==="cached"?"cached":"seed",sum.source==="cisa-live"?"CISA real-time":"fallback",sum.source==="cisa-live"?"var(--pass)":"var(--mid)"],
+   ["Recent additions",(sum.recent||[]).length,"newest CVEs","var(--hi)"]]
+   .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  // source banner
+  if(sum.source!=="cisa-live"){
+    const note=el("div");note.style.cssText="font-size:11px;color:var(--mid);margin-bottom:12px;padding:8px 12px;background:var(--card2);border-radius:var(--r2)";
+    note.textContent=sum.source==="seed-fallback"?"Showing a seed of well-known KEV entries — the live CISA feed populates the full 1,200+ catalog when deployed with network access.":"Showing cached KEV data.";
+    host.appendChild(note);
+  }
+
+  // search + filter bar
+  const ctrl=el("div","card");
+  ctrl.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <input id="kevsearch" placeholder="Search CVE, product, vendor…" style="flex:1;min-width:180px"/>
+    <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="kevransom"/> Ransomware only</label>
+    <button class="btn primary sm" id="kevgo">Search</button></div>`;
+  host.appendChild(ctrl);
+  const listHost=el("div");host.appendChild(listHost);
+
+  async function loadKev(){
+    listHost.innerHTML=skelCard();
+    const q=ctrl.querySelector("#kevsearch").value.trim();
+    const ransom=ctrl.querySelector("#kevransom").checked;
+    let data;
+    if(STATE.mode==="demo"){let vs=DEMO_THREAT.recent.slice();if(ransom)vs=vs.filter(v=>v.ransomware);if(q)vs=vs.filter(v=>JSON.stringify(v).toLowerCase().includes(q.toLowerCase()));data={count:vs.length,vulnerabilities:vs,source:"seed-fallback"};}
+    else{try{data=await apiGET(withTenant(`/v1/threat/kev?limit=50${ransom?"&ransomware_only=true":""}${q?"&q="+encodeURIComponent(q):""}`));}catch(e){data={count:0,vulnerabilities:[]};}}
+    renderKevList(listHost,data);
+  }
+  ctrl.querySelector("#kevgo").onclick=loadKev;
+  ctrl.querySelector("#kevsearch").addEventListener("keydown",e=>{if(e.key==="Enter")loadKev();});
+  ctrl.querySelector("#kevransom").onchange=loadKev;
+  // initial list from summary.recent
+  renderKevList(listHost,{count:(sum.recent||[]).length,vulnerabilities:sum.recent||[]});
+};
+function renderKevList(host,data){
+  host.innerHTML="";
+  const card=el("div","card");
+  card.innerHTML=`<h3>Known Exploited Vulnerabilities</h3><div class="sub">${data.count} CVE(s) actively exploited in the wild — source: CISA KEV</div>`;
+  const vs=data.vulnerabilities||[];
+  if(!vs.length){card.appendChild(elFromHTML(emptyState("No matching CVEs","Try a different search term, or clear the ransomware filter.")));}
+  else{const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>CVE</th><th>Vulnerability</th><th>Vendor / Product</th><th>Added</th><th>Ransomware</th></tr></thead><tbody>${
+      vs.map(v=>`<tr><td class="mono" style="color:var(--hi);font-size:11px">${esc(v.cve)}</td>
+        <td style="font-size:12px">${esc(v.name||"")}</td>
+        <td style="font-size:11px;color:var(--mid)">${esc(v.vendor||"")} ${v.product?"· "+esc(v.product):""}</td>
+        <td class="mono" style="font-size:11px;color:var(--mid)">${esc(v.date_added||"")}</td>
+        <td>${v.ransomware?'<span class="badge b-fail">⚡ ransomware</span>':'<span class="badge b-dim">—</span>'}</td></tr>`).join("")}</tbody></table>`;
+    card.appendChild(wrap);}
+  host.appendChild(card);
+}
 
 boot();
 </script>
