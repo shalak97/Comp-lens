@@ -1837,3 +1837,75 @@ def policy_test(p: Principal = Depends(require_principal)) -> dict:
 def policy_reload(p: Principal = Depends(require_principal)) -> dict:
     eng = _reload_policies()
     return {"reloaded": True, "count": len(eng.policies)}
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# AI GOVERNANCE — privacy-enhancing technologies + dynamic risk
+# ════════════════════════════════════════════════════════════════════
+import json as _json
+from app.services import ai_governance as _aigov
+from app.ai_governance_models import AISystemPET as _PET
+
+
+@app.get("/v1/ai-gov/pet-catalog", tags=["ai-governance"])
+def pet_catalog(p: Principal = Depends(require_principal)) -> dict:
+    """The catalog of privacy-enhancing technologies Comp-Lens can assess."""
+    return {"count": len(_aigov.PET_CATALOG),
+            "pets": [{"id": k, **{kk: vv for kk, vv in v.items() if kk != "frameworks"},
+                      "frameworks": v["frameworks"]} for k, v in _aigov.PET_CATALOG.items()]}
+
+
+@app.post("/v1/ai-gov/assess-pet", tags=["ai-governance"])
+def assess_pet_endpoint(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+    """Assess one PET's strength. Body: {"pet":"differential_privacy","params":{"epsilon":0.5}}"""
+    pet = payload.get("pet")
+    if not pet:
+        raise HTTPException(400, "provide 'pet'")
+    return _aigov.assess_pet(pet, payload.get("params"))
+
+
+@app.post("/v1/ai-gov/systems/{system_id}/pets", tags=["ai-governance"])
+def add_system_pet(system_id: str, payload: dict, tenant_id: str = "default",
+                   db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    """Attach a PET to an AI system. Body: {"pet":"...","params":{...},"data_sensitivity":"phi"}"""
+    authorize_tenant(p, tenant_id)
+    pet = payload.get("pet")
+    if not pet or pet not in _aigov.PET_CATALOG:
+        raise HTTPException(400, f"unknown pet; valid: {list(_aigov.PET_CATALOG.keys())}")
+    row = _PET(tenant_id=tenant_id, system_id=system_id, pet=pet,
+               params_json=_json.dumps(payload.get("params", {})),
+               data_sensitivity=payload.get("data_sensitivity", "pii"))
+    db.add(row); db.commit(); db.refresh(row)
+    return {"id": row.id, "system_id": system_id, "pet": pet,
+            "assessment": _aigov.assess_pet(pet, payload.get("params"))}
+
+
+@app.get("/v1/ai-gov/systems/{system_id}/risk", tags=["ai-governance"])
+def system_privacy_risk(system_id: str, tenant_id: str = "default",
+                        db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    """Dynamic privacy-risk score for an AI system, derived from its PETs."""
+    authorize_tenant(p, tenant_id)
+    rows = db.execute(select(_PET).where(_PET.system_id == system_id,
+                                         _PET.tenant_id == tenant_id)).scalars().all()
+    sensitivity = rows[0].data_sensitivity if rows else "pii"
+    pets = [{"pet": r.pet, "params": _json.loads(r.params_json or "{}")} for r in rows]
+    risk = _aigov.compute_privacy_risk(sensitivity, pets)
+    # also pull EU AI Act obligations from the AI system record
+    from app.models import AISystem
+    sys = db.get(AISystem, system_id)
+    if sys:
+        risk["ai_act"] = _aigov.ai_act_obligations(sys.risk_tier, {
+            "impact_assessment": sys.impact_assessment, "data_governance": sys.data_governance,
+            "human_oversight": sys.human_oversight, "accuracy_tested": sys.accuracy_tested,
+            "logging_enabled": sys.logging_enabled, "transparency_notice": sys.transparency_notice})
+    return risk
+
+
+@app.post("/v1/ai-gov/score", tags=["ai-governance"])
+def score_adhoc(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+    """Score privacy risk ad-hoc without persisting.
+    Body: {"data_sensitivity":"phi","pets":[{"pet":"differential_privacy","params":{"epsilon":0.5}}]}"""
+    return _aigov.compute_privacy_risk(payload.get("data_sensitivity", "pii"),
+                                       payload.get("pets", []))
