@@ -1,0 +1,37 @@
+# Dynamic, multi-rule policy showing the mature engine capabilities.
+control: SC-28
+title: Protection of Information at Rest
+severity: high
+frameworks:
+  NIST: [SC-28]
+  ISO27001: ["A.8.24"]
+  SOC2: [CC6.7]
+description: All storage encrypted at rest; no stale scans
+params:
+  max_scan_age_days: 30
+rules:
+  - id: all_storage_encrypted
+    when: "all(storage, 'encryption_at_rest == true')"
+    else_fail: "One or more data stores are not encrypted at rest"
+    severity: high
+  - id: scan_freshness
+    when: "scan_age_days < max_scan_age_days"
+    else_fail: "Encryption evidence is stale (scan older than threshold)"
+    severity: medium
+severity_escalation:
+  - when: "any(storage, 'public == true and encryption_at_rest == false')"
+    severity: critical
+obligations:
+  on_fail:
+    - open_jira_ticket
+    - notify_security_slack
+tests:
+  - name: all encrypted + fresh passes
+    evidence: { storage: [{encryption_at_rest: true}, {encryption_at_rest: true}], scan_age_days: 5 }
+    expect: pass
+  - name: one unencrypted fails
+    evidence: { storage: [{encryption_at_rest: true}, {encryption_at_rest: false}], scan_age_days: 5 }
+    expect: fail
+  - name: stale scan fails
+    evidence: { storage: [{encryption_at_rest: true}], scan_age_days: 45 }
+    expect: fail

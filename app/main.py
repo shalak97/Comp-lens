@@ -1793,3 +1793,47 @@ def doc_upload(payload: dict, tenant_id: str = "default",
     except Exception:
         result["persisted"] = {"note": "middleware not available; events not stored"}
     return result
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# /v1/policy — DYNAMIC COMPLIANCE AS CODE
+# ════════════════════════════════════════════════════════════════════
+from app.policy_as_code import get_engine as _policy_engine, reload_engine as _reload_policies
+
+
+@app.get("/v1/policy/list", tags=["policy-as-code"])
+def policy_list(p: Principal = Depends(require_principal)) -> dict:
+    eng = _policy_engine()
+    return {"count": len(eng.policies), "policies": eng.list_policies()}
+
+
+@app.post("/v1/policy/evaluate", tags=["policy-as-code"])
+def policy_evaluate(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+    """Evaluate evidence against a policy. Body: {"control":"SC-28","evidence":{...}}"""
+    control = payload.get("control")
+    if not control:
+        raise HTTPException(400, "provide 'control'")
+    return _policy_engine().evaluate(control, payload.get("evidence", {}),
+                                     payload.get("dep_status")).to_dict()
+
+
+@app.post("/v1/policy/evaluate-all", tags=["policy-as-code"])
+def policy_evaluate_all(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+    """Evaluate all policies (two-pass, so composition `requires` resolve)."""
+    decisions = _policy_engine().evaluate_all(payload.get("evidence", {}))
+    return {"count": len(decisions),
+            "passing": sum(1 for d in decisions if d.status == "pass"),
+            "failing": sum(1 for d in decisions if d.status == "fail"),
+            "decisions": [d.to_dict() for d in decisions]}
+
+
+@app.post("/v1/policy/test", tags=["policy-as-code"])
+def policy_test(p: Principal = Depends(require_principal)) -> dict:
+    return _policy_engine().run_tests()
+
+
+@app.post("/v1/policy/reload", tags=["policy-as-code"])
+def policy_reload(p: Principal = Depends(require_principal)) -> dict:
+    eng = _reload_policies()
+    return {"reloaded": True, "count": len(eng.policies)}

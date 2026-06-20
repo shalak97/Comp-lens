@@ -1,0 +1,49 @@
+control: AC-2
+title: Account Management
+severity: high
+frameworks:
+  NIST: [AC-2]
+  SOC2: [CC6.1]
+params:
+  max_dormant: 0
+rules:
+  - id: mfa_enforced
+    when: "mfa_enforced == true"
+    else_fail: "MFA is not enforced for all users"
+    severity: high
+  - id: no_dormant
+    when: "dormant_accounts <= max_dormant"
+    else_fail: "Dormant accounts present"
+    severity: medium
+tests:
+  - name: clean passes
+    evidence: { mfa_enforced: true, dormant_accounts: 0 }
+    expect: pass
+  - name: dormant fails
+    evidence: { mfa_enforced: true, dormant_accounts: 4 }
+    expect: fail
+---
+# Composition: SOC 2 CC6.1 requires BOTH AC-2 and IA-2 to pass
+control: CC6.1
+title: Logical Access — Composite
+severity: high
+frameworks:
+  SOC2: [CC6.1]
+description: Composite control satisfied only when its dependencies pass
+pass_when: "true"
+requires: [AC-2, IA-2]
+tests:
+  - name: composite evaluated
+    evidence: {}
+    expect: pass
+---
+control: IA-2
+title: Identification and Authentication
+severity: high
+frameworks:
+  NIST: [IA-2]
+pass_when: "mfa_enforced == true"
+tests:
+  - name: mfa passes
+    evidence: { mfa_enforced: true }
+    expect: pass

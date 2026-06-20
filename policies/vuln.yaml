@@ -1,0 +1,30 @@
+control: RA-5
+title: Vulnerability Monitoring and Scanning
+severity: high
+frameworks:
+  NIST: [RA-5]
+  ISO27001: ["A.8.8"]
+params:
+  max_critical: 0
+  max_scan_age: 30
+rules:
+  - id: no_critical_vulns
+    when: "critical_vulns <= max_critical"
+    else_fail: "Critical vulnerabilities are unpatched"
+    severity: high
+  - id: recent_scan
+    when: "scan_age_days < max_scan_age"
+    else_fail: "Vulnerability scan is stale"
+    severity: medium
+severity_escalation:
+  - when: "kev_exploited == true and critical_vulns > 0"
+    severity: critical
+obligations:
+  on_fail: [open_jira_ticket]
+tests:
+  - name: clean passes
+    evidence: { critical_vulns: 0, scan_age_days: 5 }
+    expect: pass
+  - name: critical vuln fails
+    evidence: { critical_vulns: 3, scan_age_days: 5, kev_exploited: true }
+    expect: fail
