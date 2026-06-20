@@ -1186,8 +1186,17 @@ function gInfo(n){const panel=$("#ginfo");if(!panel)return;if(!n){panel.style.di
 function gFilter(f){G.filter=f;["gfa","gfc","gfx"].forEach((id,i)=>{const b=$("#"+id);if(b)b.className="seg"+(["all","connector","control"][i]===f?" on":"");});}
 
 RENDER.graph = function() {
-  const m=main(), v=view("Knowledge Graph","Documents & connectors → evidence → controls in one view, with control dependency cascade. Drag to rotate, scroll to zoom, click a node.");
+  const m=main(), v=view("Knowledge Graph","Documents & connectors → evidence → controls in one view, with control dependency cascade.");
   m.appendChild(v);
+  // view toggle: 3D force graph (default) vs 2D risk-flow
+  const toggle=el("div","pilltabs");
+  const mode=GRAPH_VIEW.mode;
+  [["3d","3D Graph"],["flow","2D Flow"]].forEach(([id,label])=>{
+    const b=el("button");b.textContent=label;if(id===mode)b.classList.add("on");
+    b.onclick=()=>{GRAPH_VIEW.mode=id;RENDER.graph();};toggle.appendChild(b);
+  });
+  v.appendChild(toggle);
+  if(GRAPH_VIEW.mode==="flow"){renderGraphFlow(v);return;}
   const ex=el("div","callout");
   ex.innerHTML=`<b>Everything that proves your controls, in one map.</b> <span style="color:#a78bfa">Documents</span> and <span style="color:#5b9cf6">connectors</span> both supply evidence → <span style="color:#34d399">evidence concepts</span> → <span style="color:#38bdf8">controls</span> they satisfy, with <span style="color:#f87171">hard dependency edges</span> showing the blast-radius cascade. This merges the connector knowledge graph and the evidence-document map into a single view.`;
   v.appendChild(ex);
@@ -2506,6 +2515,82 @@ RENDER.response = function(){
     {id:"waivers",label:"Waivers",render:()=>RENDER.waivers()},
   ],"response");
 };
+
+/* ════════════ KNOWLEDGE GRAPH — 2D RISK FLOW VIEW ════════════ */
+const GRAPH_VIEW={mode:"3d"};
+const DEMO_FEED=[
+  {t:"Okta sync · 3 controls re-evaluated",d:"+0.4 score · 2m ago",c:"var(--pass)"},
+  {t:"CC8.1 failed — change approval bypassed",d:"-1.1 score · 6m ago",c:"var(--fail)"},
+  {t:"AWS evidence refreshed · 41 resources",d:"live · 8m ago",c:"var(--mid)"},
+  {t:"Policy as code merged · log-retention.rego",d:"+0.6 score · 14m ago",c:"var(--pass)"},
+  {t:"Vendor DPA flagged · Mailchimp expired",d:"-0.3 score · 22m ago",c:"var(--warn)"},
+];
+function renderGraphFlow(v){
+  // build the three columns from live graph data
+  const g=buildGraph();
+  const conns=g.nodes.filter(n=>n.type==="connector");
+  const ctrls=g.nodes.filter(n=>n.type==="control");
+  // frameworks (derived) — map controls to frameworks
+  const FW=[["SOC 2","soc2"],["ISO 27001","iso"],["HIPAA","hipaa"],["NIST","nist"]];
+  // edges: connector→control (via evidence), control→framework
+  const ctrlOf={};ctrls.forEach(c=>ctrlOf[c.id]=c);
+  // connector→control: follow conn→evidence→control
+  const evToCtrl={},connToEv={};
+  g.edges.forEach(e=>{if(e.kind==="conn")(connToEv[e.s]=connToEv[e.s]||[]).push(e.t);
+    if(e.kind==="ev")(evToCtrl[e.s]=evToCtrl[e.s]||[]).push(e.t);});
+  const connCtrl=[];conns.forEach(c=>{const seen=new Set();(connToEv[c.id]||[]).forEach(ev=>(evToCtrl[ev]||[]).forEach(ct=>{if(!seen.has(ct)){seen.add(ct);connCtrl.push([c.id,ct]);}}));});
+  // pick a representative subset for a clean flow (like the image): top connectors + key controls
+  const showConns=conns.slice(0,4);
+  const keyCtrls=ctrls.filter(c=>["ct_AC-2","ct_AC-3","ct_AU-2","ct_SC-28","ct_RA-5","ct_IA-2"].includes(c.id)).slice(0,4);
+  const showCtrls=keyCtrls.length?keyCtrls:ctrls.slice(0,4);
+  // layout
+  const W=920,H=560,colX=[140,460,780];
+  const yFor=(i,n,pad)=> (pad||80)+ i*((H-2*(pad||80))/(Math.max(n-1,1)));
+  const cPos={},ctPos={},fPos={};
+  showConns.forEach((c,i)=>cPos[c.id]={x:colX[0],y:yFor(i,showConns.length),node:c});
+  showCtrls.forEach((c,i)=>ctPos[c.id]={x:colX[1],y:yFor(i,showCtrls.length),node:c});
+  FW.forEach((f,i)=>fPos[f[1]]={x:colX[2],y:yFor(i,FW.length),label:f[0]});
+  // control→framework (representative)
+  const ctrlFw={"ct_AC-2":["soc2","iso"],"ct_AC-3":["soc2","hipaa"],"ct_AU-2":["soc2","iso"],"ct_SC-28":["iso","hipaa"],"ct_RA-5":["soc2","nist"],"ct_IA-2":["soc2","iso"]};
+
+  const wrap=el("div");wrap.style.cssText="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start";
+  // left: the flow svg
+  const left=el("div","card");left.style.cssText="padding:18px;overflow:hidden";
+  const COL={connector:"#5b9cf6",control:"#a78bfa",framework:"#34d399",risk:"#f87171"};
+  function edge(x1,y1,x2,y2,color,risk){
+    const mx=(x1+x2)/2;
+    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${color}" stroke-width="${risk?2:1.4}" stroke-dasharray="${risk?'5 4':'4 5'}" opacity="${risk?.85:.5}"/>`;
+  }
+  let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:600px" xmlns="http://www.w3.org/2000/svg">`;
+  // legend
+  svg+=`<g font-family="var(--mono)" font-size="12">`;
+  [["Connectors",COL.connector],["Controls",COL.control],["Frameworks",COL.framework],["At risk",COL.risk]]
+    .forEach(([l,c],i)=>{svg+=`<circle cx="${30+i*120}" cy="26" r="5" fill="${c}"/><text x="${42+i*120}" y="30" fill="#9aa6bd">${l}</text>`;});
+  svg+=`</g>`;
+  // edges connector->control (only to shown controls)
+  showConns.forEach(c=>{const from=cPos[c.id];(connCtrl.filter(([s])=>s===c.id)).forEach(([,ct])=>{const to=ctPos[ct];if(to&&to.node){const risk=to.node.status==="fail"||to.node.status==="risk";svg+=edge(from.x+14,from.y,to.x-16,to.y,risk?COL.risk:COL.connector,risk);}});});
+  // edges control->framework
+  showCtrls.forEach(c=>{const from=ctPos[c.id];if(!from)return;(ctrlFw[c.id]||[]).forEach(fw=>{const to=fPos[fw];if(to){const risk=from.node.status==="fail"||from.node.status==="risk";svg+=edge(from.x+16,from.y,to.x-16,to.y,risk?COL.risk:COL.framework,risk);}});});
+  // nodes: connectors
+  showConns.forEach(c=>{const p=cPos[c.id];svg+=`<circle cx="${p.x}" cy="${p.y}" r="13" fill="#0a0d14" stroke="${COL.connector}" stroke-width="2"/><text x="${p.x}" y="${p.y-22}" fill="#9aa6bd" font-family="var(--mono)" font-size="12" text-anchor="middle">${esc(c.label)}</text>`;});
+  // nodes: controls
+  showCtrls.forEach(c=>{const p=ctPos[c.id];const risk=c.status==="fail"||c.status==="risk";const col=risk?COL.risk:COL.control;
+    svg+=`<circle cx="${p.x}" cy="${p.y}" r="15" fill="${risk?'rgba(248,113,113,.25)':'rgba(167,139,250,.18)'}" stroke="${col}" stroke-width="2.5"/><text x="${p.x}" y="${p.y-24}" fill="#9aa6bd" font-family="var(--mono)" font-size="12" text-anchor="middle">${esc(c.label.replace('ct_',''))}</text>`;});
+  // nodes: frameworks
+  FW.forEach(f=>{const p=fPos[f[1]];svg+=`<circle cx="${p.x}" cy="${p.y}" r="15" fill="#0a0d14" stroke="${COL.framework}" stroke-width="2.5"/><text x="${p.x+24}" y="${p.y+4}" fill="#cbd5e8" font-family="var(--mono)" font-size="13">${esc(f[0])}</text>`;});
+  svg+=`</svg>`;
+  left.innerHTML=`<div style="font-size:17px;font-weight:700;margin-bottom:2px">Risk flows from sources to frameworks</div>
+    <div class="sub" style="margin-bottom:8px">Every node is live evidence. Trace a failing control to the frameworks it puts at risk.</div>${svg}`;
+  wrap.appendChild(left);
+  // right: live evidence feed
+  const right=el("div","card");
+  right.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><span class="sdot" style="background:var(--pass)"></span><b style="font-size:14px">Live evidence feed</b></div>`+
+    DEMO_FEED.map(f=>`<div style="padding:11px 0;border-bottom:1px solid var(--line)">
+      <div style="font-size:13px;color:var(--txt);margin-bottom:3px">${esc(f.t)}</div>
+      <div style="font-family:var(--mono);font-size:11px;color:${f.c}">${esc(f.d)}</div></div>`).join("");
+  wrap.appendChild(right);
+  v.appendChild(wrap);
+}
 
 boot();
 </script>
