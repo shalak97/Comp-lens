@@ -15,6 +15,7 @@ which path. Remediations baked in:
 """
 from __future__ import annotations
 
+import collections
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -93,11 +94,11 @@ def simulate(framework: str, changes: List[Dict[str, Any]],
     # best impact per control: {cid: (severity, level, path, edge)}
     impact: Dict[str, Dict[str, Any]] = {}
     # BFS frontier of (control, severity, depth, path) — only hard-failed nodes expand
-    frontier: List[Tuple[str, float, int, List[str]]] = [
-        (cid, sev, 0, [cid]) for cid, sev in seeds.items()]
+    frontier: collections.deque = collections.deque(
+        (cid, sev, 0, [cid]) for cid, sev in seeds.items())
 
     while frontier:
-        node, sev, depth, path = frontier.pop(0)
+        node, sev, depth, path = frontier.popleft()  # O(1) with deque
         if depth >= max_depth:
             continue
         for e in dg.out_edges(node):

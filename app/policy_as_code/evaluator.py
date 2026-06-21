@@ -22,9 +22,20 @@ is rejected outright. Every new capability below is covered by injection tests.
 from __future__ import annotations
 
 import ast
+import functools
 import operator
 import re
 from typing import Any, Callable, Dict, List, Optional
+
+
+@functools.lru_cache(maxsize=512)
+def _parse_cached(expr: str) -> ast.Expression:
+    """Parse and cache expression ASTs — same policy expressions are evaluated
+    thousands of times per day; re-parsing each time wastes CPU."""
+    try:
+        return ast.parse(expr, mode="eval")
+    except SyntaxError as exc:
+        raise PolicyExpressionError(f"syntax error: {exc}") from exc
 
 _CMP = {
     ast.Eq: operator.eq, ast.NotEq: operator.ne, ast.Lt: operator.lt,
@@ -52,10 +63,7 @@ class SafeEvaluator:
     def eval(self, expr: str) -> Any:
         if not isinstance(expr, str) or not expr.strip():
             raise PolicyExpressionError("empty expression")
-        try:
-            tree = ast.parse(expr, mode="eval")
-        except SyntaxError as exc:
-            raise PolicyExpressionError(f"syntax error: {exc}") from exc
+        tree = _parse_cached(expr)  # cached — same expression parsed once ever
         return self._walk(tree.body)
 
     # ── core walker ──
