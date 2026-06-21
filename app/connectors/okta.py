@@ -21,6 +21,7 @@ import requests
 
 from app.config import settings
 from app.connectors.base import Asset, BaseConnector, ConnectorError
+from app.connectors.http_client import ResilientClient, paginate
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,12 @@ class OktaConnector(BaseConnector):
             "Authorization": f"SSWS {settings.okta_api_token}",
             "Accept": "application/json",
         }
-        self._timeout = settings.request_timeout_seconds
+        # enterprise HTTP: retries, backoff, 429 handling, circuit breaker, SSRF guard
+        self._client = ResilientClient(
+            service="OKTA", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str) -> Any:
-        r = requests.get(f"{self._base}{path}", headers=self._headers, timeout=self._timeout)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Okta API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}{path}", headers=self._headers)
 
     def healthcheck(self) -> bool:
         try:

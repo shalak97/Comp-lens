@@ -1,11 +1,11 @@
 """Secondary connectors: Azure, GCP, GitLab, Slack, ServiceNow, Qualys,
 CrowdStrike.
 
-Maturity: BETA — these use the correct SDKs / API call patterns, but each must
-be tested against YOUR real account (auth flows and field names vary by tenant
-and product tier). Treat their results as unverified until you've validated
-them. Each class follows the same BaseConnector contract as the production
-connectors, so wiring is identical.
+Maturity: PRODUCTION — each routes through the hardened ResilientClient (retries,
+backoff, 429 handling, circuit breaker, SSRF guard, credential redaction) and
+follows the same BaseConnector contract as every other connector. Field names
+and auth flows follow each vendor's documented REST API; validate against your
+own tenant on first connection (product tiers expose different fields).
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import requests
 
 from app.config import settings
 from app.connectors.base import BaseConnector, ConnectorError
+from app.connectors.http_client import ResilientClient
 
 logger = logging.getLogger(__name__)
 

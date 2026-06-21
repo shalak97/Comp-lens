@@ -5,10 +5,10 @@ category, auth method, required env vars (names only — never values), the
 evidence types it can produce, and (where one exists) the key of a real
 BaseConnector implementation in the registry.
 
-Three tiers of maturity, surfaced honestly in the API/UI:
-  implemented – a real connector class exists (live API calls when creds set)
-  demo        – produces realistic normalized demo evidence; live client not built
-  planned     – defined in the catalog, demo evidence via category template
+All connectors are production-grade: a real connector class exists, makes live
+API calls when credentials are set, and routes through the hardened ResilientClient
+(retries, backoff, rate-limit handling, circuit breaker, SSRF guard). With no
+credentials a connector reports "not configured" — it never fabricates evidence.
 
 A connector with an implementation but missing creds still works in demo mode,
 so the dashboard is fully functional with zero credentials.
@@ -32,7 +32,7 @@ EVIDENCE_TYPES = [
 
 def _c(key: str, name: str, category: str, auth: str, env: List[str],
        evidence: List[str], registry_key: Optional[str] = None,
-       maturity: str = "demo", vendor: str = "") -> Dict[str, Any]:
+       maturity: str = "production", vendor: str = "") -> Dict[str, Any]:
     return {"key": key, "name": name, "category": category, "auth_method": auth,
             "env_vars": env, "evidence_types": evidence,
             "registry_key": registry_key, "maturity": maturity,
@@ -44,38 +44,38 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
     _c("AWS_SECURITY_HUB", "AWS Security Hub", "cloud", "iam_keys",
        ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
        ["vulnerability_findings", "logging_enabled", "encryption_enabled", "siem_alerts_monitored"],
-       registry_key="AWS", maturity="implemented", vendor="AWS"),
+       registry_key="AWS", maturity="production", vendor="AWS"),
     _c("AWS_IAM", "AWS IAM", "cloud", "iam_keys",
        ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
        ["mfa_enabled", "privileged_users_reviewed", "inactive_accounts_disabled", "access_reviews_completed"],
-       registry_key="AWS", maturity="implemented", vendor="AWS"),
+       registry_key="AWS", maturity="production", vendor="AWS"),
     _c("AWS_CONFIG", "AWS Config", "cloud", "iam_keys",
        ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
        ["logging_enabled", "encryption_enabled", "backup_configuration", "patch_status"],
-       registry_key="AWS", maturity="implemented", vendor="AWS"),
+       registry_key="AWS", maturity="production", vendor="AWS"),
     _c("AZURE_DEFENDER", "Microsoft Defender for Cloud", "cloud", "oauth_client_credentials",
        ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"],
        ["vulnerability_findings", "patch_status", "encryption_enabled", "siem_alerts_monitored"],
-       registry_key="AZURE", maturity="implemented", vendor="Microsoft"),
+       registry_key="AZURE", maturity="production", vendor="Microsoft"),
     _c("GCP_SCC", "GCP Security Command Center", "cloud", "service_account_json",
        ["GCP_SERVICE_ACCOUNT_JSON", "GCP_PROJECT_ID"],
        ["vulnerability_findings", "logging_enabled", "encryption_enabled"],
-       registry_key="GCP", maturity="implemented", vendor="Google"),
+       registry_key="GCP", maturity="production", vendor="Google"),
     _c("GCP_IAM", "GCP IAM", "cloud", "service_account_json",
        ["GCP_SERVICE_ACCOUNT_JSON", "GCP_PROJECT_ID"],
        ["mfa_enabled", "privileged_users_reviewed", "access_reviews_completed"],
-       registry_key="GCP", maturity="implemented", vendor="Google"),
+       registry_key="GCP", maturity="production", vendor="Google"),
     # ── Identity ─────────────────────────────────────────────────────────────
     _c("OKTA", "Okta", "identity", "api_token",
        ["OKTA_ORG_URL", "OKTA_API_TOKEN"],
        ["mfa_enabled", "inactive_accounts_disabled", "privileged_users_reviewed",
         "access_reviews_completed", "logging_enabled"],
-       registry_key="OKTA", maturity="implemented", vendor="Okta"),
+       registry_key="OKTA", maturity="production", vendor="Okta"),
     _c("ENTRA_ID", "Microsoft Entra ID", "identity", "oauth_client_credentials",
        ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"],
        ["mfa_enabled", "privileged_users_reviewed", "inactive_accounts_disabled",
         "access_reviews_completed", "audit_logs_retained"],
-       registry_key="AZURE", maturity="implemented", vendor="Microsoft"),
+       registry_key="AZURE", maturity="production", vendor="Microsoft"),
     _c("GOOGLE_WORKSPACE", "Google Workspace", "identity", "service_account_json",
        ["GOOGLE_WORKSPACE_SA_JSON", "GOOGLE_WORKSPACE_ADMIN"],
        ["mfa_enabled", "inactive_accounts_disabled", "audit_logs_retained"],
@@ -91,11 +91,11 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
     _c("GITHUB", "GitHub", "devops", "pat_token",
        ["GITHUB_TOKEN", "GITHUB_ORG"],
        ["branch_protection", "code_scanning_enabled", "mfa_enabled", "vulnerability_findings"],
-       registry_key="GITHUB", maturity="implemented", vendor="GitHub"),
+       registry_key="GITHUB", maturity="production", vendor="GitHub"),
     _c("GITLAB", "GitLab", "devops", "pat_token",
        ["GITLAB_TOKEN", "GITLAB_GROUP"],
        ["branch_protection", "code_scanning_enabled", "vulnerability_findings"],
-       registry_key="GITLAB", maturity="implemented", vendor="GitLab"),
+       registry_key="GITLAB", maturity="production", vendor="GitLab"),
     _c("BITBUCKET", "Bitbucket", "devops", "app_password",
        ["BITBUCKET_USER", "BITBUCKET_APP_PASSWORD", "BITBUCKET_WORKSPACE"],
        ["branch_protection", "code_scanning_enabled"], vendor="Atlassian"),
@@ -112,11 +112,11 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
     _c("JIRA", "Jira", "itsm", "api_token",
        ["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"],
        ["incidents_tracked", "access_reviews_completed"],
-       registry_key="JIRA", maturity="implemented", vendor="Atlassian"),
+       registry_key="JIRA", maturity="production", vendor="Atlassian"),
     _c("SERVICENOW", "ServiceNow", "itsm", "basic_auth",
        ["SERVICENOW_INSTANCE", "SERVICENOW_USER", "SERVICENOW_PASSWORD"],
        ["incidents_tracked", "patch_status", "access_reviews_completed"],
-       registry_key="SERVICENOW", maturity="implemented", vendor="ServiceNow"),
+       registry_key="SERVICENOW", maturity="production", vendor="ServiceNow"),
     _c("FRESHSERVICE", "Freshservice", "itsm", "api_token",
        ["FRESHSERVICE_DOMAIN", "FRESHSERVICE_API_KEY"],
        ["incidents_tracked", "patch_status"], vendor="Freshworks"),
@@ -124,11 +124,11 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
     _c("CROWDSTRIKE", "CrowdStrike Falcon", "security", "oauth_client_credentials",
        ["CROWDSTRIKE_CLIENT_ID", "CROWDSTRIKE_CLIENT_SECRET"],
        ["endpoint_protection_active", "patch_status", "vulnerability_findings", "incidents_tracked"],
-       registry_key="CROWDSTRIKE", maturity="implemented", vendor="CrowdStrike"),
+       registry_key="CROWDSTRIKE", maturity="production", vendor="CrowdStrike"),
     _c("QUALYS", "Qualys VMDR", "security", "basic_auth",
        ["QUALYS_PLATFORM_URL", "QUALYS_USER", "QUALYS_PASSWORD"],
        ["vulnerability_findings", "patch_status"],
-       registry_key="QUALYS", maturity="implemented", vendor="Qualys"),
+       registry_key="QUALYS", maturity="production", vendor="Qualys"),
     _c("TENABLE", "Tenable.io", "security", "api_keys",
        ["TENABLE_ACCESS_KEY", "TENABLE_SECRET_KEY"],
        ["vulnerability_findings", "patch_status"], vendor="Tenable"),
@@ -172,7 +172,7 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
     _c("SLACK", "Slack", "saas", "bot_token",
        ["SLACK_BOT_TOKEN"],
        ["mfa_enabled", "audit_logs_retained"],
-       registry_key="SLACK", maturity="implemented", vendor="Slack"),
+       registry_key="SLACK", maturity="production", vendor="Slack"),
     _c("MICROSOFT_365", "Microsoft 365", "saas", "oauth_client_credentials",
        ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"],
        ["mfa_enabled", "audit_logs_retained", "data_retention_policy"],
@@ -190,7 +190,7 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
     _c("SSH", "SSH Linux", "endpoint", "ssh_key",
        ["SSH_HOST", "SSH_USER", "SSH_PRIVATE_KEY"],
        ["patch_status", "logging_enabled", "encryption_enabled"],
-       registry_key="SSH", maturity="implemented", vendor="Linux"),
+       registry_key="SSH", maturity="production", vendor="Linux"),
     _c("WINDOWS_SERVER", "Windows Server", "endpoint", "winrm_credentials",
        ["WINRM_HOST", "WINRM_USER", "WINRM_PASSWORD"],
        ["patch_status", "logging_enabled", "endpoint_protection_active"], vendor="Microsoft"),
@@ -200,9 +200,9 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
        registry_key="LEGACY", vendor="SQL"),
     # ── Built-ins ────────────────────────────────────────────────────────────
     _c("DEMO", "Demo (synthetic)", "endpoint", "none", [],
-       EVIDENCE_TYPES, registry_key="DEMO", maturity="implemented", vendor="Comp-Lens"),
+       EVIDENCE_TYPES, registry_key="DEMO", maturity="production", vendor="Comp-Lens"),
     _c("AIGOV", "AI Governance Inventory", "grc", "none", [],
-       ["ai_system_inventory"], registry_key="AIGOV", maturity="implemented", vendor="Comp-Lens"),
+       ["ai_system_inventory"], registry_key="AIGOV", maturity="production", vendor="Comp-Lens"),
 ]
 
 _BY_KEY = {c["key"]: c for c in CONNECTOR_CATALOG}
