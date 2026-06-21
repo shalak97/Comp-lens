@@ -90,6 +90,16 @@ tr:hover td{background:rgba(255,255,255,.018)}
 /* progress bar */
 .pbar{height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
 .pbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--pass),var(--info))}
+/* toggle switch (PET playground) */
+.toggle{position:relative;width:42px;height:23px;cursor:pointer;flex-shrink:0;display:inline-block}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle .track{position:absolute;inset:0;background:var(--card2);border:1px solid var(--line2);border-radius:23px;transition:.18s}
+.toggle .knob{position:absolute;left:3px;top:3px;width:15px;height:15px;background:var(--mid);border-radius:50%;transition:.18s}
+.toggle input:checked + .track{background:rgba(91,156,246,.25);border-color:var(--hi)}
+.toggle input:checked + .track .knob{transform:translateX(19px);background:var(--hi)}
+select{background:var(--bg);border:1px solid var(--line2);border-radius:var(--r2);padding:9px 11px;color:var(--txt);font-size:13px;font-family:inherit}
+select:focus{outline:none;border-color:var(--hi)}
+input[type=range]{accent-color:var(--hi)}
 /* empty/loading */
 .empty{padding:38px;text-align:center;color:var(--mid);font-size:13px}
 .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line2);
@@ -1425,9 +1435,15 @@ RENDER.trends = async function() {
 };
 
 /* ============ AI INVENTORY ============ */
-RENDER.inventory = async function() {
-  const m=main(), v=view("AI System Inventory","Registered AI/ML systems for ISO 42001, NIST AI RMF and EU AI Act governance");
-  m.appendChild(v);const host=el("div");v.appendChild(host);
+RENDER.inventory = function() {
+  subTabs("AI Governance","Registered AI/ML systems plus a live privacy-risk model — assess the privacy-enhancing technologies each system uses",[
+    {id:"systems",label:"Systems",render:()=>RENDER.inventory_systems()},
+    {id:"privacy",label:"Privacy Risk",render:()=>RENDER.inventory_privacy()},
+  ],"inventory");
+};
+
+RENDER.inventory_systems = async function() {
+  const host=main();
   host.innerHTML=`<div class="empty"><span class="spin"></span> Loading inventory…</div>`;
   const {data}=await load(withTenant("/inventory"),DEMO.inventory);
   const inv=Array.isArray(data)?data:[];host.innerHTML="";
@@ -1444,6 +1460,140 @@ RENDER.inventory = async function() {
       <td><span class="badge ${x.risk_level==="high"?"b-fail":x.risk_level==="limited"?"b-warn":"b-dim"}">${esc(x.risk_level||"—")}</span></td>
       <td>${esc(x.owner||"—")}</td><td>${(x.frameworks||[]).map(f=>`<span class="badge b-dim">${esc(f)}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table>`;
   card.appendChild(wrap);host.appendChild(card);
+};
+
+/* ============ AI PRIVACY-RISK PLAYGROUND ============ */
+// Mirrors the backend ai_governance.compute_privacy_risk exactly, so the dashboard
+// shows the same dynamic residual the API computes.
+const PET_DEFS=[
+  {id:"differential_privacy",label:"Differential Privacy",param:"epsilon",
+   desc:"Prevents inference about any single individual"},
+  {id:"homomorphic_encryption",label:"Homomorphic Encryption",param:"scheme",
+   desc:"Computation on encrypted data — plaintext never exposed"},
+  {id:"federated_learning",label:"Federated Learning",param:null,
+   desc:"Training data never leaves its source"},
+  {id:"secure_mpc",label:"Secure Multi-Party Computation",param:null,
+   desc:"No party sees others' raw inputs"},
+  {id:"k_anonymity",label:"k-Anonymity",param:"k",
+   desc:"Each record indistinguishable among k-1 others"},
+  {id:"synthetic_data",label:"Synthetic Data",param:null,
+   desc:"Generated data, not real subjects"},
+  {id:"data_minimization",label:"Data Minimization",param:null,
+   desc:"Only strictly necessary data collected"},
+];
+const SENSITIVITY={none:5,internal:20,pii:60,financial:75,phi:80,biometric:90,special_category:95};
+function assessPET(id,params){
+  params=params||{};let eff=0.5,note="present";
+  if(id==="differential_privacy"){const e=parseFloat(params.epsilon);
+    if(isNaN(e))[eff,note]=[0.4,"no ε budget set"];
+    else if(e<1)[eff,note]=[0.95,`strong (ε=${e})`];
+    else if(e<=10)[eff,note]=[0.65,`moderate (ε=${e})`];
+    else [eff,note]=[0.3,`weak (ε=${e})`];}
+  else if(id==="homomorphic_encryption"){const s=(params.scheme||"").toUpperCase();
+    if(["CKKS","BFV","BGV","TFHE","FHE"].includes(s))[eff,note]=[0.9,`${s} fully homomorphic`];
+    else if(["PAILLIER","RSA","PHE"].includes(s))[eff,note]=[0.6,`${s} partially homomorphic`];
+    else [eff,note]=[0.5,"scheme unspecified"];}
+  else if(id==="k_anonymity"){const k=parseFloat(params.k);
+    if(isNaN(k))[eff,note]=[0.4,"k not set"];
+    else if(k>=10)[eff,note]=[0.8,`strong (k=${k})`];
+    else if(k>=3)[eff,note]=[0.55,`moderate (k=${k})`];
+    else [eff,note]=[0.25,`weak (k=${k})`];}
+  else if(id==="federated_learning"||id==="secure_mpc")[eff,note]=[0.85,"raw data never centralized"];
+  else if(id==="synthetic_data")[eff,note]=[0.8,"no real subjects"];
+  else if(id==="data_minimization")[eff,note]=[0.5,"scope-limited"];
+  return {eff,note};
+}
+function computePrivacyRisk(sensitivity,active){
+  const inherent=SENSITIVITY[sensitivity]||40;
+  let remaining=1;const assessed=[];
+  active.forEach(a=>{const r=assessPET(a.id,a.params);remaining*=(1-r.eff);assessed.push({...a,...r});});
+  const mitigation=1-remaining;
+  const floor=Math.round(inherent*0.08);
+  const residual=Math.max(Math.round(inherent*remaining),floor);
+  const band=residual<25?"low":residual<50?"medium":residual<75?"high":"critical";
+  return {inherent,mitigation:Math.round(mitigation*100),residual,band,assessed};
+}
+
+RENDER.inventory_privacy = function() {
+  const host=main();
+  const PG={sensitivity:"phi",pets:{}};
+
+  const intro=el("div","callout");
+  intro.innerHTML=`<b>Privacy risk is computed, not typed.</b> Pick a data sensitivity and toggle the privacy-enhancing technologies a system uses — the residual risk is derived from inherent sensitivity reduced by each PET's assessed strength, the same math the <span class="mono">/v1/ai-gov</span> API runs.`;
+  host.appendChild(intro);
+
+  const grid=el("div");grid.style.cssText="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start";
+  // left: controls
+  const left=el("div","card");
+  left.innerHTML=`<h3>Data sensitivity</h3>`;
+  const sel=el("select");sel.style.cssText="width:100%;margin-bottom:18px";
+  [["none","None / public"],["internal","Internal"],["pii","PII (personal data)"],["financial","Financial"],["phi","PHI (health)"],["biometric","Biometric"],["special_category","Special category (GDPR Art.9)"]]
+    .forEach(([v,l])=>{const o=el("option");o.value=v;o.textContent=l;if(v==="phi")o.selected=true;sel.appendChild(o);});
+  left.appendChild(sel);
+  const petHead=el("h3");petHead.textContent="Privacy-enhancing technologies";left.appendChild(petHead);
+  const petList=el("div");left.appendChild(petList);
+  grid.appendChild(left);
+  // right: verdict
+  const right=el("div","card");right.style.cssText="position:sticky;top:12px";
+  grid.appendChild(right);
+  host.appendChild(grid);
+
+  function recompute(){
+    const active=Object.entries(PG.pets).filter(([,p])=>p.on).map(([id,p])=>({id,params:p.params}));
+    const r=computePrivacyRisk(PG.sensitivity,active);
+    const col=r.band==="low"?"var(--pass)":r.band==="medium"?"var(--warn)":"var(--fail)";
+    right.innerHTML=`
+      <div class="sub" style="margin-bottom:6px">Residual privacy risk</div>
+      <div style="font-size:42px;font-weight:800;font-family:var(--mono);color:${col};line-height:1">${r.residual}</div>
+      <div><span class="badge ${r.band==="low"?"b-pass":r.band==="medium"?"b-warn":"b-fail"}" style="margin-top:8px">${r.band.toUpperCase()}</span></div>
+      <div class="pbar" style="margin:16px 0"><i style="width:${r.residual}%;background:${col}"></i></div>
+      <div style="font-size:12px;color:var(--mid);line-height:1.7">
+        Inherent risk <b style="color:var(--txt)">${r.inherent}</b> (from ${PG.sensitivity} data)<br>
+        Mitigated <b style="color:var(--pass)">${r.mitigation}%</b> by ${active.length} technolog${active.length===1?"y":"ies"}<br>
+        Residual <b style="color:${col}">${r.residual}</b> ${r.residual===Math.round(r.inherent*0.08)&&active.length?'<span style="color:var(--dim)">(floored — no PET is perfect)</span>':""}
+      </div>
+      ${r.assessed.length?`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">${
+        r.assessed.map(a=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span class="mono" style="color:var(--mid)">${a.id.replace(/_/g,' ')}</span><span style="color:var(--pass)">${Math.round(a.eff*100)}% · ${esc(a.note)}</span></div>`).join("")
+      }</div>`:""}`;
+  }
+
+  PET_DEFS.forEach(pet=>{
+    PG.pets[pet.id]={on:false,params:{}};
+    const row=el("div");row.style.cssText="padding:11px 0;border-bottom:1px solid var(--line)";
+    const top=el("div");top.style.cssText="display:flex;align-items:center;justify-content:space-between;gap:10px";
+    const lbl=el("div");lbl.innerHTML=`<div style="font-size:13px;font-weight:600">${pet.label}</div><div style="font-size:11px;color:var(--dim)">${pet.desc}</div>`;
+    const tog=el("label","toggle");
+    const cb=el("input");cb.type="checkbox";
+    tog.innerHTML='<span class="track"><span class="knob"></span></span>';tog.insertBefore(cb,tog.firstChild);
+    top.appendChild(lbl);top.appendChild(tog);row.appendChild(top);
+    // param input (epsilon / scheme / k)
+    let paramEl=null;
+    if(pet.param){
+      paramEl=el("div");paramEl.style.cssText="margin-top:10px;display:none";
+      if(pet.param==="scheme"){
+        const s=el("select");["CKKS","BFV","BGV","TFHE","Paillier","RSA"].forEach(o=>{const op=el("option");op.value=o;op.textContent=o;s.appendChild(op);});
+        s.style.cssText="width:100%";s.onchange=()=>{PG.pets[pet.id].params.scheme=s.value;recompute();};
+        PG.pets[pet.id].params.scheme="CKKS";
+        const wrap=el("div");wrap.innerHTML=`<div style="font-size:11px;color:var(--mid);margin-bottom:4px">Scheme</div>`;wrap.appendChild(s);paramEl.appendChild(wrap);
+      } else {
+        const isEps=pet.param==="epsilon";
+        const inp=el("input");inp.type="range";
+        inp.min=isEps?"0.1":"1";inp.max=isEps?"20":"50";inp.step=isEps?"0.1":"1";inp.value=isEps?"0.5":"10";
+        inp.style.cssText="width:100%";
+        const valLbl=el("div");valLbl.style.cssText="font-size:11px;color:var(--mid);margin-bottom:4px";
+        const setLbl=()=>valLbl.innerHTML=`${isEps?"ε (epsilon)":"k value"}: <b style="color:var(--hi)">${inp.value}</b> ${isEps?"<span style='color:var(--dim)'>(lower = stronger)</span>":"<span style='color:var(--dim)'>(higher = stronger)</span>"}`;
+        PG.pets[pet.id].params[pet.param]=inp.value;setLbl();
+        inp.oninput=()=>{PG.pets[pet.id].params[pet.param]=inp.value;setLbl();recompute();};
+        paramEl.appendChild(valLbl);paramEl.appendChild(inp);
+      }
+      row.appendChild(paramEl);
+    }
+    cb.onchange=()=>{PG.pets[pet.id].on=cb.checked;if(paramEl)paramEl.style.display=cb.checked?"block":"none";recompute();};
+    petList.appendChild(row);
+  });
+
+  sel.onchange=()=>{PG.sensitivity=sel.value;recompute();};
+  recompute();
 };
 
 /* ============ WAIVERS ============ */
