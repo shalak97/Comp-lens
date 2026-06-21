@@ -1909,3 +1909,58 @@ def score_adhoc(payload: dict, p: Principal = Depends(require_principal)) -> dic
     Body: {"data_sensitivity":"phi","pets":[{"pet":"differential_privacy","params":{"epsilon":0.5}}]}"""
     return _aigov.compute_privacy_risk(payload.get("data_sensitivity", "pii"),
                                        payload.get("pets", []))
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# INTEGRATION — wires policy/AI-gov/threat into findings + risk register
+# ════════════════════════════════════════════════════════════════════
+from app.services import integration as _integ
+
+
+@app.post("/v1/integrate/policy-to-findings", tags=["integration"])
+def integrate_policy_findings(payload: dict, tenant_id: str = "default",
+                              db: Session = Depends(get_db),
+                              p: Principal = Depends(require_principal)) -> dict:
+    """Evaluate policies against evidence and persist results as findings.
+    Body: {"evidence": {"SC-28": {...}, "AC-2": {...}}, "framework": "ALL"}"""
+    authorize_tenant(p, tenant_id)
+    return _integ.evaluate_policies_to_findings(
+        db, tenant_id, payload.get("evidence", {}), payload.get("framework", "ALL"))
+
+
+@app.post("/v1/integrate/ai-systems/{system_id}/to-risk", tags=["integration"])
+def integrate_ai_to_risk(system_id: str, tenant_id: str = "default",
+                         db: Session = Depends(get_db),
+                         p: Principal = Depends(require_principal)) -> dict:
+    """Create a risk-register entry from an AI system's computed privacy risk."""
+    authorize_tenant(p, tenant_id)
+    return _integ.ai_system_to_risk(db, tenant_id, system_id)
+
+
+@app.post("/v1/integrate/ai-to-risk", tags=["integration"])
+def integrate_all_ai_risks(tenant_id: str = "default",
+                           db: Session = Depends(get_db),
+                           p: Principal = Depends(require_principal)) -> dict:
+    """Push every AI system with PETs into the risk register."""
+    authorize_tenant(p, tenant_id)
+    return _integ.sync_all_ai_risks(db, tenant_id)
+
+
+@app.post("/v1/integrate/threat-escalation", tags=["integration"])
+def integrate_threat_escalation(tenant_id: str = "default",
+                                db: Session = Depends(get_db),
+                                p: Principal = Depends(require_principal)) -> dict:
+    """Escalate risks on vuln controls under active KEV exploitation pressure."""
+    authorize_tenant(p, tenant_id)
+    return _integ.escalate_risks_from_threat(db, tenant_id)
+
+
+@app.post("/v1/integrate/run", tags=["integration"])
+def integrate_run_all(payload: dict = None, tenant_id: str = "default",
+                      db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+    """Run the whole integrated pipeline: policy→findings, AI→risk, threat→escalation."""
+    authorize_tenant(p, tenant_id)
+    payload = payload or {}
+    return _integ.run_unified_pipeline(db, tenant_id, payload.get("evidence"))
