@@ -14,16 +14,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App source
 COPY app ./app
 
-# Alembic migrations (needed to run `alembic upgrade head` on startup)
+# Alembic migrations (run on startup)
 COPY alembic ./alembic
 COPY alembic.ini .
 
+# Policy-as-code definitions + CLI (the policy engine needs these at runtime)
+COPY policies ./policies
+COPY cli ./cli
+
+# Evidence store dir
+RUN mkdir -p /data/evidence
+
 # Non-root user
-RUN useradd -m appuser && chown -R appuser /app
+RUN useradd -m appuser && chown -R appuser /app /data
 USER appuser
 
 EXPOSE 8000
 
-# Run migrations first, then start the server.
-# `alembic upgrade head` is idempotent — safe to run on every deploy.
+# Migrations are idempotent — safe to run on every boot. Then start the server.
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

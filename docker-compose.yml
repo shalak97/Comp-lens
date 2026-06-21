@@ -1,0 +1,68 @@
+# Comp-Lens — self-hosted stack. One command brings up the app + database.
+#
+#   docker compose up -d
+#
+# The app waits for Postgres to be healthy, runs migrations automatically,
+# then serves the dashboard at http://localhost:8000/dashboard
+#
+# Configuration is read from the .env file (created by ./install.sh).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-complens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-complens}
+    volumes:
+      - complens_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-complens} -d ${POSTGRES_DB:-complens}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # not exposed to the host by default — the app talks to it on the internal network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      PORT: 8000
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-complens}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-complens}
+      EVIDENCE_SIGNING_KEY: ${EVIDENCE_SIGNING_KEY:?set EVIDENCE_SIGNING_KEY in .env}
+      AUTO_CREATE_TABLES: "false"
+      ENABLE_SCHEDULER: ${ENABLE_SCHEDULER:-false}
+      POLICY_DIR: /app/policies
+      EVIDENCE_BACKEND: ${EVIDENCE_BACKEND:-local}
+      EVIDENCE_LOCAL_PATH: /data/evidence
+      COMP_LENS_API_KEYS: ${COMP_LENS_API_KEYS:-}
+      LIVE_CONNECTORS_ALLOWLIST: ${LIVE_CONNECTORS_ALLOWLIST:-}
+      # connector credentials pass through from .env (uncomment in .env as needed)
+      OKTA_ORG_URL: ${OKTA_ORG_URL:-}
+      OKTA_API_TOKEN: ${OKTA_API_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      NOTIFY_SLACK_WEBHOOK: ${NOTIFY_SLACK_WEBHOOK:-}
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    volumes:
+      - complens_evidence:/data/evidence
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live',timeout=3).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+volumes:
+  complens_pgdata:
+  complens_evidence:
