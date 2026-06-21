@@ -451,6 +451,7 @@ const GROUPS = [
   ["Compliance as Code", [["policy","Policies","M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"],
                ["middleware","Middleware","M22 12h-4l-3 9L9 3l-3 9H2"]]],
   ["Evidence", [["connectors","Connectors","M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4M19 5l-4 4m-6 6l-4 4"],
+                ["grcplatforms","GRC Platforms","M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2zM9 22V12h6v10M12 6.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"],
                 ["graph","Knowledge Graph","M12 2a10 10 0 100 20 10 10 0 000-20zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"],
                 ["evidencehub","Evidence","M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6"]]],
   ["Intelligence", [["response","Response","M13 2L3 14h7l-1 8 10-12h-7l1-8z"],
@@ -2948,6 +2949,113 @@ function svgGauge(value,opts={}){
 function chartCard(title,sub,inner){
   return `<div class="card"><h3>${esc(title)}</h3>${sub?`<div class="sub" style="margin-bottom:14px">${esc(sub)}</div>`:'<div style="height:8px"></div>'}${inner}</div>`;
 }
+
+/* ════════════════════ GRC PLATFORMS TAB (separate connector set) ════════════════════ */
+const GRC_PLATFORM_DEMO={
+  platforms:{VANTA:"Vanta",DRATA:"Drata",ONETRUST:"OneTrust"},
+  status:{
+    available_platforms:{VANTA:"Vanta",DRATA:"Drata",ONETRUST:"OneTrust"},
+    connected:["VANTA","DRATA"],
+    by_platform:{
+      VANTA:{total:42,pass:36,fail:6,mapped:38},
+      DRATA:{total:31,pass:28,fail:3,mapped:27},
+    }
+  },
+  multi:{
+    controls_attested:18, multi_source:7, conflicts:2,
+    attestations:[
+      {control_id:"AC-2",source_count:2,agreement:"conflict",consensus:"fail",sources:[{source:"VANTA",kind:"grc_platform",status:"fail",freshness_days:1,confidence:0.9},{source:"DRATA",kind:"grc_platform",status:"pass",freshness_days:3,confidence:0.9}]},
+      {control_id:"SC-7",source_count:2,agreement:"conflict",consensus:"fail",sources:[{source:"VANTA",status:"pass",freshness_days:2,confidence:0.9},{source:"DRATA",status:"fail",freshness_days:5,confidence:0.85}]},
+      {control_id:"RA-5",source_count:2,agreement:"agree",consensus:"pass",sources:[{source:"VANTA",status:"pass",freshness_days:1,confidence:0.9},{source:"DRATA",status:"pass",freshness_days:2,confidence:0.9}]},
+      {control_id:"SC-28",source_count:2,agreement:"agree",consensus:"pass",sources:[{source:"VANTA",status:"pass",freshness_days:4,confidence:0.9},{source:"DRATA",status:"pass",freshness_days:6,confidence:0.85}]},
+      {control_id:"AC-3",source_count:1,agreement:"agree",consensus:"pass",sources:[{source:"VANTA",status:"pass",freshness_days:2,confidence:0.9}]},
+    ]
+  }
+};
+const GRC_META={
+  VANTA:{vendor:"Vanta",auth:"OAuth2",env:["VANTA_CLIENT_ID","VANTA_CLIENT_SECRET"],desc:"SOC 2 / ISO automation — test results pre-mapped to controls"},
+  DRATA:{vendor:"Drata",auth:"API key",env:["DRATA_API_KEY"],desc:"Continuous control monitoring — readiness + monitor health"},
+  ONETRUST:{vendor:"OneTrust",auth:"API key",env:["ONETRUST_API_KEY","ONETRUST_BASE_URL"],desc:"Privacy & vendor-risk — assessments and DPAs"},
+};
+
+RENDER.grcplatforms = async function(){
+  const m=main(),v=view("GRC Platforms","Inherit trust telemetry from the GRC tools you already run. A separate connector set — these platforms already collected the evidence; we re-express it as live trust telemetry and surface what no single platform can: cross-platform agreement.");
+  m.appendChild(v);const host=el("div");v.appendChild(host);
+  host.innerHTML=skelGrid(4)+skelCard();
+
+  const {data:status}=await load(withTenant("/v1/grc-sync/status"),GRC_PLATFORM_DEMO.status);
+  const {data:multi}=await load(withTenant("/v1/grc-sync/multi-source"),GRC_PLATFORM_DEMO.multi);
+  host.innerHTML="";
+
+  // explainer banner — the separation + the USP
+  const banner=el("div","callout");
+  banner.innerHTML=`<b>This is inherited evidence, kept in its own lane.</b> Vanta/Drata/OneTrust already did the collection. Comp-Lens ingests their results as trust telemetry tagged <span class="mono">source_kind=grc_platform</span> — never mixed with native connector evidence. When two platforms attest the same control, you see whether they <b style="color:var(--pass)">agree</b> or <b style="color:var(--fail)">conflict</b> — a signal neither platform can give you alone.`;
+  host.appendChild(banner);
+
+  // KPIs
+  const connected=status.connected||[];
+  const totalAtt=Object.values(status.by_platform||{}).reduce((s,p)=>s+(p.total||0),0);
+  const kp=el("div","kpis");
+  [["Platforms connected",connected.length+"/3","var(--pass)"],
+   ["Inherited attestations",totalAtt,"var(--hi)"],
+   ["Multi-source controls",multi.multi_source||0,"var(--purple)"],
+   ["Cross-platform conflicts",multi.conflicts||0,(multi.conflicts>0?"var(--fail)":"var(--mid)")]]
+   .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
+  host.appendChild(kp);
+
+  // ── MULTI-SOURCE ATTESTATION (the USP) — show conflicts first ──
+  if(multi.attestations&&multi.attestations.length){
+    const msCard=el("div","card");
+    msCard.innerHTML=`<h3>Cross-platform attestation</h3><div class="sub" style="margin-bottom:14px">Which controls are attested by more than one platform — and whether they agree</div>`;
+    const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Sources</th><th>Agreement</th><th>Per-source status</th></tr></thead><tbody>${
+      multi.attestations.map(a=>{
+        const agreeBadge=a.agreement==="conflict"
+          ?`<span class="badge b-fail">⚠ conflict</span>`
+          :(a.source_count>1?`<span class="badge b-pass">✓ agree (${a.source_count})</span>`:`<span class="badge b-dim">single source</span>`);
+        const perSource=a.sources.map(s=>`<span class="badge ${s.status==="pass"?"b-pass":s.status==="fail"?"b-fail":"b-dim"}" style="font-size:10px">${esc(s.source)}: ${s.status}${s.freshness_days!=null?` · ${s.freshness_days}d`:""}</span>`).join(" ");
+        return `<tr${a.agreement==="conflict"?' style="background:rgba(248,113,113,.06)"':''}><td class="mono" style="color:var(--hi)">${esc(a.control_id)}</td><td class="mono">${a.source_count}</td><td>${agreeBadge}</td><td style="font-size:11px">${perSource}</td></tr>`;
+      }).join("")
+    }</tbody></table>`;
+    msCard.appendChild(wrap);
+    host.appendChild(msCard);
+  }
+
+  // ── PLATFORM CARDS — the separate set, each connect-able ──
+  const grid=el("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px";
+  Object.entries(GRC_META).forEach(([key,meta])=>{
+    const isConn=connected.includes(key);
+    const stat=(status.by_platform||{})[key];
+    const card=el("div","card");card.style.cssText="padding:20px;border:1px solid "+(isConn?"rgba(52,211,153,.35)":"var(--line)");
+    card.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:15px;font-weight:700">${esc(meta.vendor)}</div>
+        <span class="badge ${isConn?"b-pass":"b-dim"}">${isConn?"🟢 Connected":"⚪ Not connected"}</span>
+      </div>
+      <div style="font-size:12px;color:var(--mid);margin-bottom:14px;line-height:1.5">${esc(meta.desc)}</div>
+      ${isConn&&stat?`<div style="display:flex;gap:14px;margin-bottom:14px">
+        <div><div style="font-family:var(--mono);font-size:20px;font-weight:700">${stat.total}</div><div style="font-size:10px;color:var(--dim)">attestations</div></div>
+        <div><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--pass)">${stat.pass}</div><div style="font-size:10px;color:var(--dim)">passing</div></div>
+        <div><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--fail)">${stat.fail}</div><div style="font-size:10px;color:var(--dim)">failing</div></div>
+        <div><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--hi)">${stat.mapped}</div><div style="font-size:10px;color:var(--dim)">mapped</div></div>
+      </div>`:`<div style="font-size:11px;color:var(--dim);margin-bottom:12px">Auth: ${esc(meta.auth)} · Set <span class="mono">${meta.env.slice(0,2).join(", ")}</span> on your deployment</div>`}
+      <div style="display:flex;gap:8px">
+        <button class="btn sm ${isConn?"":"primary"}" data-sync="${key}">${isConn?"↻ Re-sync":"Sync now"}</button>
+        ${!isConn?`<button class="btn sm" onclick="openSelfHost();return false">Setup ↗</button>`:""}
+      </div>`;
+    grid.appendChild(card);
+  });
+  host.appendChild(grid);
+
+  // wire sync buttons
+  host.querySelectorAll("[data-sync]").forEach(b=>{
+    b.onclick=async()=>{const key=b.getAttribute("data-sync");b.disabled=true;b.textContent="syncing…";
+      if(STATE.mode==="demo"){await sleep(500);toast(key+" sync simulated — connect on your own deployment for live data");b.disabled=false;b.textContent="↻ Re-sync";return;}
+      try{const r=await apiPOST(withTenant("/v1/grc-sync/"+key),{});toast(`${key}: ${r.ingested} attestations (${r.mapped} mapped)`);RENDER.grcplatforms();}
+      catch(e){toast(key+": "+(e.message||"sync failed — check credentials"),"err");b.disabled=false;b.textContent="Sync now";}
+    };
+  });
+};
 
 boot();
 </script>
