@@ -588,7 +588,21 @@ RENDER.overview = async function() {
     e.innerHTML=`<div class="k">${k}</div><div class="v">${vv}</div><div class="s">${sub}</div>`;kp.appendChild(e);});
   host.appendChild(kp);
 
-  // ── NEEDS ATTENTION: actionable, links into the connected workflow ──
+  // ── control-status donut + risk-exposure gauge ──
+  const ocharts=el("div");ocharts.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px";
+  const statusData=[["pass",STATUS_COL.pass],["fail",STATUS_COL.fail],["error",STATUS_COL.error],["not_applicable",STATUS_COL.not_applicable]]
+    .map(([k,cl])=>({label:k.replace("_"," "),value:bs[k]||0,color:cl})).filter(d=>d.value>0);
+  ocharts.innerHTML=chartCard("Control status","Where every assessed control stands",
+    statusData.length?svgDonut(statusData,{size:170,center:s.total||0,centerLabel:"controls"}):'<div class="empty">no data</div>');
+  const gaugeCard=el("div","card");
+  const exposure=typeof s.risk_exposure==="number"?s.risk_exposure:50;
+  gaugeCard.innerHTML=`<h3>Posture at a glance</h3><div class="sub" style="margin-bottom:8px">Compliance score and risk exposure</div>
+    <div style="display:flex;justify-content:space-around;align-items:center;flex-wrap:wrap;gap:12px">
+      <div style="text-align:center">${svgGauge(score,{label:"compliance"})}</div>
+      <div style="text-align:center">${svgGauge(100-exposure,{label:"risk headroom"})}</div>
+    </div>`;
+  ocharts.appendChild(gaugeCard);
+  host.appendChild(ocharts);
   const attn = el("div","card");
   attn.innerHTML=`<h3>Needs your attention</h3><div class="sub">Top issues, ranked — click to act</div>`;
   const items=[];
@@ -758,6 +772,24 @@ RENDER.findings = async function() {
   [["Total",f.length,"var(--hi)"],["Failing",counts.fail||0,"var(--fail)"],["Errors",counts.error||0,"var(--warn)"],["Passing",counts.pass||0,"var(--pass)"]]
    .forEach(([k,n,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div>`;kp.appendChild(e);});
   host.appendChild(kp);
+
+  // ── status donut + severity bars + source bars ──
+  const fcharts=el("div");fcharts.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px";
+  const statusData=[["pass",STATUS_COL.pass],["fail",STATUS_COL.fail],["error",STATUS_COL.error],["not_applicable",STATUS_COL.not_applicable],["pending",STATUS_COL.pending]]
+    .map(([s,cl])=>({label:s.replace("_"," "),value:counts[s]||0,color:cl})).filter(d=>d.value>0);
+  fcharts.innerHTML=chartCard("Status distribution","Pass / fail / error across all findings",svgDonut(statusData,{size:170,center:f.length,centerLabel:"findings"}));
+  // severity breakdown of FAILING findings
+  const sevCount={};f.filter(x=>x.status==="fail").forEach(x=>{const s=x.severity||"medium";sevCount[s]=(sevCount[s]||0)+1;});
+  const sevData=["critical","high","medium","low","info"].filter(s=>sevCount[s]).map(s=>({label:s,value:sevCount[s],color:SEV_COL[s]}));
+  // by source
+  const srcCount={};f.forEach(x=>{const s=x.source_system||"unknown";srcCount[s]=(srcCount[s]||0)+1;});
+  const srcData=Object.entries(srcCount).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([label,value])=>({label,value,color:CHART_COL.hi}));
+  const fcard=el("div","card");
+  fcard.innerHTML=`<h3>Failing by severity & source</h3><div class="sub" style="margin-bottom:14px">Where the failures concentrate</div>
+    ${sevData.length?svgBars(sevData,{barH:22,width:380,labelW:90}):'<div class="empty" style="padding:10px">no failing findings</div>'}
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">By source system</div>${svgBars(srcData,{barH:20,width:380,labelW:100})}</div>`;
+  fcharts.appendChild(fcard);
+  host.appendChild(fcharts);
   const card=el("div","card");card.innerHTML=`<h3>All findings</h3>`;
   const wrap=el("div","scroll");
   const rows=f.slice(0,300).map(x=>`<tr>
@@ -779,13 +811,25 @@ RENDER.frameworks = async function() {
   const {data}=await load("/frameworks", {frameworks:DEMO.frameworks});
   const fws=(data.frameworks||DEMO.frameworks);
   host.innerHTML="";
-  const card=el("div","card");
-  card.innerHTML=`<h3>Supported frameworks</h3><div class="sub">Per-framework compliance score (click to filter summary)</div>`;
-  const grid=el("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:13px";
+  // collect scores first (for the radar)
+  const fwScores=[];
   for(const fw of fws){
     let score=null;
     if(STATE.mode==="live"){try{const s=await apiGET(withTenant("/summary")+"&framework="+encodeURIComponent(fw));score=s.compliance_score;}catch(e){}}
     if(score==null)score=60+Math.random()*35;
+    fwScores.push({fw,score});
+  }
+  // ── RADAR: all frameworks compared on one chart ──
+  if(fwScores.length>=3){
+    const radarCard=el("div","card");
+    radarCard.innerHTML=`<h3>Framework readiness</h3><div class="sub" style="margin-bottom:10px">Compliance score across every framework at a glance</div>
+      <div style="display:flex;justify-content:center">${svgRadar(fwScores.map(f=>({label:f.fw.replace(/_/g," ").slice(0,12),value:f.score/100})),{size:300})}</div>`;
+    host.appendChild(radarCard);
+  }
+  const card=el("div","card");
+  card.innerHTML=`<h3>Supported frameworks</h3><div class="sub">Per-framework compliance score</div>`;
+  const grid=el("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:13px";
+  for(const {fw,score} of fwScores){
     const c=el("div","kpi");c.style.setProperty("--accent",score>=80?"var(--pass)":score>=60?"var(--warn)":"var(--fail)");
     c.innerHTML=`<div class="k">${esc(fw)}</div><div class="v">${fmtPct(score)}</div>
       <div class="pbar" style="margin-top:8px"><i style="width:${score}%"></i></div>`;
@@ -1709,6 +1753,25 @@ function renderRisks(host){
    .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
   host.appendChild(kp);
 
+  // ── RISK MATRIX 5×5 + category/band breakdown ──
+  const rcharts=el("div");rcharts.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px";
+  const matrixRisks=rows.map(r=>({
+    likelihood:r.likelihood||Math.min(5,Math.max(1,Math.round((r.inherent_score||9)/5))),
+    impact:r.impact||Math.min(5,Math.max(1,Math.round((r.inherent_score||9)/5))),
+    title:r.title}));
+  rcharts.innerHTML=chartCard("Risk matrix","Likelihood x impact - bubble size = risks in that cell",svgRiskMatrix(matrixRisks));
+  const byCat={};rows.forEach(r=>{const cc=(r.category||"other").replace(/_/g," ");byCat[cc]=(byCat[cc]||0)+1;});
+  const catData=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([label,value])=>({label,value,color:CHART_COL.hi}));
+  const bandData=[["critical",CHART_COL.fail],["high","#fb923c"],["medium",CHART_COL.warn],["low",CHART_COL.pass]]
+    .map(([b,cl])=>({label:b,value:bands[b]||0,color:cl}));
+  const catCard=el("div","card");
+  catCard.innerHTML=`<h3>Risk distribution</h3><div class="sub" style="margin-bottom:14px">By inherent severity band and category</div>
+    ${svgDonut(bandData,{size:150,center:rows.length,centerLabel:"risks"})}
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px"><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">By category</div>${catData.length?svgBars(catData,{barH:22,width:380,labelW:110}):'<div class="empty">no data</div>'}</div>`;
+  rcharts.appendChild(catCard);
+  host.appendChild(rcharts);
+
+
   // lifecycle pipeline
   const pipe=el("div","card");
   pipe.innerHTML=`<h3>Risk lifecycle</h3><div class="sub">Risks flow from identification to closure</div>`;
@@ -2573,6 +2636,25 @@ RENDER.threat=async function(){
    .forEach(([k,n,s,c])=>{const e=el("div","kpi");e.style.setProperty("--accent",c);e.innerHTML=`<div class="k">${k}</div><div class="v">${n}</div><div class="s">${s}</div>`;kp.appendChild(e);});
   host.appendChild(kp);
 
+  // ── KEV additions over time + ransomware split ──
+  const recent=sum.recent||[];
+  if(recent.length){
+    const tcharts=el("div");tcharts.style.cssText="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:16px";
+    // group recent CVEs by month-added
+    const byMonth={};recent.forEach(v=>{const d=(v.date_added||"").slice(0,7);if(d)byMonth[d]=(byMonth[d]||0)+1;});
+    const months=Object.keys(byMonth).sort();
+    const trendSeries=[{name:"KEV additions",color:CHART_COL.fail,values:months.map(m=>byMonth[m])}];
+    tcharts.innerHTML=chartCard("KEV additions over time","Newly catalogued actively-exploited CVEs by month",
+      months.length>1?svgStackedArea(trendSeries,months,{height:180}):svgBars(months.map(m=>({label:m,value:byMonth[m],color:CHART_COL.fail})),{barH:24,width:400,labelW:70}));
+    // ransomware split donut
+    const ransom=recent.filter(v=>v.ransomware).length;
+    const ransomData=[{label:"Ransomware-linked",value:ransom,color:CHART_COL.fail},{label:"Other exploited",value:recent.length-ransom,color:CHART_COL.warn}];
+    const rcard=el("div","card");
+    rcard.innerHTML=`<h3>Ransomware exposure</h3><div class="sub" style="margin-bottom:14px">Share of exploited CVEs tied to ransomware</div>${svgDonut(ransomData,{size:160,center:ransom,centerLabel:"ransomware"})}`;
+    tcharts.appendChild(rcard);
+    host.appendChild(tcharts);
+  }
+
   // source banner
   if(sum.source!=="cisa-live"){
     const note=el("div");note.style.cssText="font-size:11px;color:var(--mid);margin-bottom:12px;padding:8px 12px;background:var(--card2);border-radius:var(--r2)";
@@ -2739,6 +2821,132 @@ function renderGraphFlow(v){
       <div style="font-family:var(--mono);font-size:11px;color:${f.c}">${esc(f.d)}</div></div>`).join("");
   wrap.appendChild(right);
   v.appendChild(wrap);
+}
+
+/* ════════════════════ SVG CHART TOOLKIT (no deps, themeable) ════════════════════ */
+const CHART_COL={pass:"#34d399",fail:"#f87171",warn:"#fbbf24",hi:"#5b9cf6",purple:"#a78bfa",info:"#38bdf8",mid:"#6b7689",dim:"#8b97ad"};
+const SEV_COL={critical:"#f87171",high:"#fb923c",medium:"#fbbf24",low:"#5b9cf6",info:"#6b7689"};
+const STATUS_COL={pass:"#34d399",fail:"#f87171",error:"#fb923c",not_applicable:"#6b7689",pending:"#a78bfa"};
+
+// ── DONUT chart: [{label,value,color}] ──
+function svgDonut(data,opts={}){
+  const size=opts.size||180,r=size/2,inner=opts.inner||r*0.62,cx=r,cy=r;
+  const total=data.reduce((s,d)=>s+d.value,0)||1;
+  let a0=-Math.PI/2,paths="";
+  data.forEach(d=>{
+    const frac=d.value/total,a1=a0+frac*Math.PI*2;
+    if(frac>0){
+      const x0=cx+r*Math.cos(a0),y0=cy+r*Math.sin(a0),x1=cx+r*Math.cos(a1),y1=cy+r*Math.sin(a1);
+      const xi0=cx+inner*Math.cos(a1),yi0=cy+inner*Math.sin(a1),xi1=cx+inner*Math.cos(a0),yi1=cy+inner*Math.sin(a0);
+      const large=frac>0.5?1:0;
+      paths+=`<path d="M${x0},${y0} A${r},${r} 0 ${large} 1 ${x1},${y1} L${xi0},${yi0} A${inner},${inner} 0 ${large} 0 ${xi1},${yi1} Z" fill="${d.color}" opacity="0.9"><title>${esc(d.label)}: ${d.value}</title></path>`;
+    }
+    a0=a1;
+  });
+  const center=opts.center!=null?`<text x="${cx}" y="${cy-2}" text-anchor="middle" fill="var(--txt)" font-size="${opts.centerSize||26}" font-weight="700" font-family="var(--mono)">${opts.center}</text>${opts.centerLabel?`<text x="${cx}" y="${cy+16}" text-anchor="middle" fill="var(--dim)" font-size="10">${esc(opts.centerLabel)}</text>`:""}`:"";
+  const legend=opts.legend===false?"":`<div style="display:flex;flex-direction:column;gap:6px;font-size:12px">${data.map(d=>`<div style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:2px;background:${d.color};flex-shrink:0"></span><span style="color:var(--mid)">${esc(d.label)}</span><span style="margin-left:auto;color:var(--txt);font-family:var(--mono)">${d.value}</span></div>`).join("")}</div>`;
+  return `<div style="display:flex;align-items:center;gap:20px"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">${paths}${center}</svg>${legend}</div>`;
+}
+
+// ── horizontal BAR chart: [{label,value,color?}] ──
+function svgBars(data,opts={}){
+  const max=opts.max||Math.max(...data.map(d=>d.value),1);
+  const barH=opts.barH||26,gap=8,labelW=opts.labelW||120,W=opts.width||420;
+  const h=data.length*(barH+gap);
+  return `<svg width="100%" viewBox="0 0 ${W} ${h}" style="max-width:${W}px">${
+    data.map((d,i)=>{const y=i*(barH+gap),bw=(d.value/max)*(W-labelW-50);
+      const c=d.color||CHART_COL.hi;
+      return `<text x="0" y="${y+barH/2+4}" fill="var(--mid)" font-size="12">${esc(d.label)}</text>
+        <rect x="${labelW}" y="${y}" width="${W-labelW-50}" height="${barH}" rx="4" fill="rgba(255,255,255,.04)"/>
+        <rect x="${labelW}" y="${y}" width="${Math.max(bw,2)}" height="${barH}" rx="4" fill="${c}" opacity="0.85"><title>${esc(d.label)}: ${d.value}</title></rect>
+        <text x="${labelW+Math.max(bw,2)+8}" y="${y+barH/2+4}" fill="var(--txt)" font-size="12" font-family="var(--mono)">${d.display||d.value}</text>`;}).join("")
+  }</svg>`;
+}
+
+// ── STACKED AREA (trend over time): series=[{name,color,values:[]}], labels=[] ──
+function svgStackedArea(series,labels,opts={}){
+  const W=opts.width||640,H=opts.height||200,pad=30,padB=24;
+  const n=labels.length;if(!n)return"";
+  const totals=labels.map((_,i)=>series.reduce((s,ser)=>s+(ser.values[i]||0),0));
+  const max=Math.max(...totals,1);
+  const px=i=>pad+i*(W-pad-10)/Math.max(n-1,1);
+  const py=v=>H-padB-(v/max)*(H-pad-padB);
+  let acc=labels.map(()=>0),areas="";
+  series.forEach(ser=>{
+    const top=labels.map((_,i)=>acc[i]+(ser.values[i]||0));
+    const up=top.map((v,i)=>`${px(i)},${py(v)}`).join(" ");
+    const down=acc.map((v,i)=>`${px(n-1-i)},${py(acc[n-1-i])}`).join(" ");
+    areas+=`<polygon points="${up} ${down}" fill="${ser.color}" opacity="0.7"><title>${esc(ser.name)}</title></polygon>`;
+    acc=top;
+  });
+  const xlabels=labels.map((l,i)=>(i%Math.ceil(n/6)===0)?`<text x="${px(i)}" y="${H-6}" fill="var(--dim)" font-size="9" text-anchor="middle">${esc(l)}</text>`:"").join("");
+  const gridY=[0,0.5,1].map(f=>`<line x1="${pad}" y1="${py(max*f)}" x2="${W-10}" y2="${py(max*f)}" stroke="var(--line)" stroke-width="1"/><text x="${pad-4}" y="${py(max*f)+3}" fill="var(--dim)" font-size="9" text-anchor="end">${Math.round(max*f)}</text>`).join("");
+  const legend=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px">${series.map(s=>`<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:${s.color}"></span><span style="color:var(--mid)">${esc(s.name)}</span></span>`).join("")}</div>`;
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:100%">${gridY}${areas}${xlabels}</svg>${legend}`;
+}
+
+// ── RADAR chart: axes=[{label,value 0..1}] ──
+function svgRadar(axes,opts={}){
+  const size=opts.size||280,c=size/2,rmax=c*0.72,n=axes.length;
+  const ang=i=>-Math.PI/2+i*2*Math.PI/n;
+  const pt=(i,r)=>[c+r*rmax*Math.cos(ang(i)),c+r*rmax*Math.sin(ang(i))];
+  let rings="";[0.25,0.5,0.75,1].forEach(f=>{
+    rings+=`<polygon points="${axes.map((_,i)=>pt(i,f).join(",")).join(" ")}" fill="none" stroke="var(--line)" stroke-width="1"/>`;});
+  let spokes="",labels="";
+  axes.forEach((a,i)=>{const[x,y]=pt(i,1);
+    spokes+=`<line x1="${c}" y1="${c}" x2="${x}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+    const[lx,ly]=pt(i,1.16);
+    labels+=`<text x="${lx}" y="${ly}" fill="var(--mid)" font-size="10" text-anchor="middle" dominant-baseline="middle">${esc(a.label)}</text>`;});
+  const poly=axes.map((a,i)=>pt(i,Math.max(0,Math.min(1,a.value))).join(",")).join(" ");
+  const dots=axes.map((a,i)=>{const[x,y]=pt(i,Math.max(0,Math.min(1,a.value)));return `<circle cx="${x}" cy="${y}" r="3" fill="${CHART_COL.hi}"/>`;}).join("");
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${rings}${spokes}<polygon points="${poly}" fill="rgba(91,156,246,.25)" stroke="${CHART_COL.hi}" stroke-width="2"/>${dots}${labels}</svg>`;
+}
+
+// ── RISK MATRIX 5×5 heatmap: risks=[{likelihood 1-5,impact 1-5,title}] ──
+function svgRiskMatrix(risks,opts={}){
+  const cell=opts.cell||62,pad=42,W=pad+5*cell+10,H=pad+5*cell+30;
+  // risk band color by likelihood*impact
+  const band=(l,i)=>{const s=l*i;return s>=15?"rgba(248,113,113,.30)":s>=8?"rgba(251,146,60,.26)":s>=4?"rgba(251,191,36,.22)":"rgba(52,211,153,.18)";};
+  let cells="";
+  for(let i=5;i>=1;i--){for(let l=1;l<=5;l++){
+    const x=pad+(l-1)*cell,y=pad+(5-i)*cell;
+    cells+=`<rect x="${x}" y="${y}" width="${cell-2}" height="${cell-2}" rx="4" fill="${band(l,i)}" stroke="var(--line)"/>`;
+  }}
+  // axis labels
+  let axes="";
+  for(let l=1;l<=5;l++)axes+=`<text x="${pad+(l-1)*cell+cell/2}" y="${H-8}" fill="var(--dim)" font-size="10" text-anchor="middle">${l}</text>`;
+  for(let i=5;i>=1;i--)axes+=`<text x="${pad-10}" y="${pad+(5-i)*cell+cell/2+4}" fill="var(--dim)" font-size="10" text-anchor="end">${i}</text>`;
+  axes+=`<text x="${pad+2.5*cell}" y="${H+4}" fill="var(--mid)" font-size="11" text-anchor="middle" font-weight="600">Impact →</text>`;
+  axes+=`<text x="12" y="${pad+2.5*cell}" fill="var(--mid)" font-size="11" text-anchor="middle" font-weight="600" transform="rotate(-90 12 ${pad+2.5*cell})">Likelihood →</text>`;
+  // bubble per cell (count of risks)
+  const byCell={};
+  risks.forEach(r=>{const l=Math.max(1,Math.min(5,r.impact||3)),i=Math.max(1,Math.min(5,r.likelihood||3));const k=`${l},${i}`;(byCell[k]=byCell[k]||[]).push(r);});
+  let bubbles="";
+  Object.entries(byCell).forEach(([k,rs])=>{const[l,i]=k.split(",").map(Number);
+    const x=pad+(l-1)*cell+cell/2,y=pad+(5-i)*cell+cell/2;
+    const sev=l*i>=15?CHART_COL.fail:l*i>=8?"#fb923c":l*i>=4?CHART_COL.warn:CHART_COL.pass;
+    bubbles+=`<circle cx="${x}" cy="${y}" r="${Math.min(13,8+rs.length*2)}" fill="${sev}" opacity="0.9"><title>${rs.map(r=>esc(r.title||"risk")).join(", ")}</title></circle><text x="${x}" y="${y+4}" fill="#0a0d14" font-size="12" font-weight="700" text-anchor="middle">${rs.length}</text>`;});
+  return `<svg width="100%" viewBox="0 0 ${W} ${H+12}" style="max-width:${W}px">${cells}${axes}${bubbles}</svg>`;
+}
+
+// ── GAUGE (semicircle): value 0..100 ──
+function svgGauge(value,opts={}){
+  const size=opts.size||180,c=size/2,r=c*0.78,sw=14;
+  const v=Math.max(0,Math.min(100,value));
+  const a0=Math.PI,a1=Math.PI+(v/100)*Math.PI;
+  const arc=(start,end)=>{const x0=c+r*Math.cos(start),y0=c+r*Math.sin(start),x1=c+r*Math.cos(end),y1=c+r*Math.sin(end);return `M${x0},${y0} A${r},${r} 0 ${end-start>Math.PI?1:0} 1 ${x1},${y1}`;};
+  const col=v>=75?CHART_COL.pass:v>=50?CHART_COL.warn:CHART_COL.fail;
+  return `<svg width="${size}" height="${size*0.62}" viewBox="0 0 ${size} ${size*0.62}">
+    <path d="${arc(Math.PI,2*Math.PI)}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="${sw}" stroke-linecap="round"/>
+    <path d="${arc(a0,a1)}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round"/>
+    <text x="${c}" y="${c-2}" text-anchor="middle" fill="var(--txt)" font-size="30" font-weight="700" font-family="var(--mono)">${Math.round(v)}</text>
+    <text x="${c}" y="${c+16}" text-anchor="middle" fill="var(--dim)" font-size="11">${esc(opts.label||"")}</text>
+  </svg>`;
+}
+
+// helper: wrap a chart in a titled card
+function chartCard(title,sub,inner){
+  return `<div class="card"><h3>${esc(title)}</h3>${sub?`<div class="sub" style="margin-bottom:14px">${esc(sub)}</div>`:'<div style="height:8px"></div>'}${inner}</div>`;
 }
 
 boot();
