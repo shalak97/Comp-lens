@@ -1436,3 +1436,47 @@ def integrate_run_all(payload: dict = None, tenant_id: str = "default",
     authorize_tenant(p, tenant_id)
     payload = payload or {}
     return _integ.run_unified_pipeline(db, tenant_id, payload.get("evidence"))
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# GRC-PLATFORM SYNC — separate connector set (Vanta / Drata / OneTrust)
+# Inherited trust telemetry, kept in its own lane (source_kind=grc_platform)
+# ════════════════════════════════════════════════════════════════════
+from app.grc_platforms import service as _grc_svc
+from app.grc_platforms.registry import GRC_PLATFORM_REGISTRY as _GRC_REG
+
+
+@app.get("/v1/grc-sync/platforms", tags=["grc-platforms"])
+def grc_platforms(p: Principal = Depends(require_principal)) -> dict:
+    """The available GRC-platform connectors — a set distinct from native connectors."""
+    return {"platforms": _GRC_REG,
+            "note": "separate set from native connectors; evidence tagged source_kind=grc_platform"}
+
+
+@app.post("/v1/grc-sync/{platform}", tags=["grc-platforms"])
+def grc_sync(platform: str, tenant_id: str = "default",
+             db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+    """Sync inherited attestations from a GRC platform (Vanta/Drata/OneTrust)."""
+    authorize_tenant(p, tenant_id)
+    from app.connectors.base import ConnectorError
+    try:
+        return _grc_svc.sync_platform(db, tenant_id, platform)
+    except ConnectorError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/v1/grc-sync/status", tags=["grc-platforms"])
+def grc_status(tenant_id: str = "default", db: Session = Depends(get_db),
+               p: Principal = Depends(require_principal)) -> dict:
+    """Connected GRC platforms and their ingested attestation counts."""
+    authorize_tenant(p, tenant_id)
+    return _grc_svc.sync_status(db, tenant_id)
+
+
+@app.get("/v1/grc-sync/multi-source", tags=["grc-platforms"])
+def grc_multi_source(tenant_id: str = "default", db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> dict:
+    """Controls attested by multiple independent sources — agreement vs conflict."""
+    authorize_tenant(p, tenant_id)
+    return _grc_svc.multi_source_attestation(db, tenant_id)

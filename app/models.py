@@ -465,3 +465,5 @@ from app.grc_tprm_models import Risk, Vendor  # noqa: E402,F401
 from app.audit_models import Audit, AuditControl, EvidenceRequest  # noqa: E402,F401
 
 from app.ai_governance_models import AISystemPET  # noqa: E402,F401
+
+from app.grc_platforms.models import GRCAttestation  # noqa: E402,F401
