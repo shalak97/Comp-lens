@@ -2970,7 +2970,24 @@ const GRC_PLATFORM_DEMO={
       {control_id:"SC-28",source_count:2,agreement:"agree",consensus:"pass",sources:[{source:"VANTA",status:"pass",freshness_days:4,confidence:0.9},{source:"DRATA",status:"pass",freshness_days:6,confidence:0.85}]},
       {control_id:"AC-3",source_count:1,agreement:"agree",consensus:"pass",sources:[{source:"VANTA",status:"pass",freshness_days:2,confidence:0.9}]},
     ]
-  }
+  },
+  trust:{
+    grc_trust_score:64, band:"medium", controls_scored:18, corroborated:7, conflicts:2,
+    conflict_controls:["AC-2","SC-7"],
+    source_kind:"grc_platform",
+    policy:{fresh_days:7,stale_days:90,freshness_floor:0.25,conflict_factor:0.35,band_high:75,band_medium:50,band_low:25},
+  },
+  trustControls:{controls:[
+    {control_id:"AC-2",trust:0,band:"critical",agreement:"conflict",source_count:2,sources:[{platform:"VANTA",status:"fail",freshness_days:1,signal:0.0},{platform:"DRATA",status:"pass",freshness_days:3,signal:0.9}]},
+    {control_id:"SC-7",trust:0,band:"critical",agreement:"conflict",source_count:2,sources:[{platform:"VANTA",status:"pass",freshness_days:2,signal:0.9},{platform:"DRATA",status:"fail",freshness_days:5,signal:0.0}]},
+    {control_id:"CM-3",trust:34,band:"low",agreement:"single",source_count:1,sources:[{platform:"VANTA",status:"pass",freshness_days:78,signal:0.34}]},
+    {control_id:"SC-28",trust:88,band:"high",agreement:"agree",source_count:2,sources:[{platform:"VANTA",status:"pass",freshness_days:4,signal:0.81},{platform:"DRATA",status:"pass",freshness_days:6,signal:0.77}]},
+    {control_id:"RA-5",trust:100,band:"high",agreement:"agree",source_count:2,sources:[{platform:"VANTA",status:"pass",freshness_days:1,signal:0.9},{platform:"DRATA",status:"pass",freshness_days:2,signal:0.9}]},
+  ]},
+  trustPlatforms:{by_platform:{
+    VANTA:{trust:84,attestations:42,passing:36,stale:3},
+    DRATA:{trust:71,attestations:31,passing:28,stale:5},
+  }},
 };
 const GRC_META={
   VANTA:{vendor:"Vanta",auth:"OAuth2",env:["VANTA_CLIENT_ID","VANTA_CLIENT_SECRET"],desc:"SOC 2 / ISO automation — test results pre-mapped to controls"},
@@ -2978,9 +2995,15 @@ const GRC_META={
   ONETRUST:{vendor:"OneTrust",auth:"API key",env:["ONETRUST_API_KEY","ONETRUST_BASE_URL"],desc:"Privacy & vendor-risk — assessments and DPAs"},
 };
 
-RENDER.grcplatforms = async function(){
-  const m=main(),v=view("GRC Platforms","Inherit trust telemetry from the GRC tools you already run. A separate connector set — these platforms already collected the evidence; we re-express it as live trust telemetry and surface what no single platform can: cross-platform agreement.");
-  m.appendChild(v);const host=el("div");v.appendChild(host);
+RENDER.grcplatforms = function(){
+  subTabs("GRC Platforms","Inherit trust telemetry from the GRC tools you already run — a separate connector set. These platforms collected the evidence; we re-express it as a dedicated trust score and surface what no single platform can.",[
+    {id:"platforms",label:"Platforms",render:()=>RENDER.grcplatforms_platforms()},
+    {id:"trust",label:"Trust Telemetry",render:()=>RENDER.grcplatforms_trust()},
+  ],"grcplatforms");
+};
+
+RENDER.grcplatforms_platforms = async function(){
+  const host=main();
   host.innerHTML=skelGrid(4)+skelCard();
 
   const {data:status}=await load(withTenant("/v1/grc-sync/status"),GRC_PLATFORM_DEMO.status);
@@ -3051,11 +3074,137 @@ RENDER.grcplatforms = async function(){
   host.querySelectorAll("[data-sync]").forEach(b=>{
     b.onclick=async()=>{const key=b.getAttribute("data-sync");b.disabled=true;b.textContent="syncing…";
       if(STATE.mode==="demo"){await sleep(500);toast(key+" sync simulated — connect on your own deployment for live data");b.disabled=false;b.textContent="↻ Re-sync";return;}
-      try{const r=await apiPOST(withTenant("/v1/grc-sync/"+key),{});toast(`${key}: ${r.ingested} attestations (${r.mapped} mapped)`);RENDER.grcplatforms();}
+      try{const r=await apiPOST(withTenant("/v1/grc-sync/"+key),{});toast(`${key}: ${r.ingested} attestations (${r.mapped} mapped)`);RENDER.grcplatforms_platforms();}
       catch(e){toast(key+": "+(e.message||"sync failed — check credentials"),"err");b.disabled=false;b.textContent="Sync now";}
     };
   });
 };
+
+/* ════════════════════ GRC TRUST TELEMETRY (the scoring layer) ════════════════════ */
+RENDER.grcplatforms_trust = async function(){
+  const host=main();
+  host.innerHTML=skelGrid(3)+skelCard();
+  const {data:score}=await load(withTenant("/v1/grc-trust/score"),GRC_PLATFORM_DEMO.trust);
+  const {data:ctrlsR}=await load(withTenant("/v1/grc-trust/controls"),GRC_PLATFORM_DEMO.trustControls);
+  const {data:platsR}=await load(withTenant("/v1/grc-trust/platforms"),GRC_PLATFORM_DEMO.trustPlatforms);
+  host.innerHTML="";
+
+  // explainer
+  const banner=el("div","callout");
+  banner.innerHTML=`<b>A dedicated trust score for inherited evidence.</b> The GRC platforms only report pass/fail — this layer derives a 0–100 trust score per control from four signals: the verdict, evidence <b>freshness</b> (it decays with age), cross-platform <b>corroboration</b> (agreement raises trust), and <b>conflict</b> (disagreement collapses it). Kept separate from the native trust graph. The weights are tunable below.`;
+  host.appendChild(banner);
+
+  const sc=score.grc_trust_score;
+  if(sc==null){host.appendChild(Object.assign(el("div","card"),{innerHTML:`<div class="empty">No mapped GRC attestations yet. Connect a platform and sync from the <b>Platforms</b> tab.</div>`}));return;}
+
+  // ── top row: aggregate gauge + breakdown ──
+  const top=el("div");top.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px";
+  const gaugeCard=el("div","card");
+  gaugeCard.innerHTML=`<h3>GRC trust score</h3><div class="sub" style="margin-bottom:6px">Aggregate inherited-trust across ${score.controls_scored} mapped controls</div>
+    <div style="display:flex;justify-content:center">${svgGauge(sc,{label:score.band+" trust"})}</div>`;
+  top.appendChild(gaugeCard);
+  const bd=el("div","card");
+  const conflictCol=score.conflicts>0?"var(--fail)":"var(--mid)";
+  bd.innerHTML=`<h3>Signal breakdown</h3><div class="sub" style="margin-bottom:14px">What's driving the score</div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px">
+      <div><div style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--pass)">${score.corroborated}</div><div style="font-size:11px;color:var(--dim)">corroborated</div></div>
+      <div><div style="font-family:var(--mono);font-size:26px;font-weight:700;color:${conflictCol}">${score.conflicts}</div><div style="font-size:11px;color:var(--dim)">conflicts</div></div>
+      <div><div style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--hi)">${score.controls_scored}</div><div style="font-size:11px;color:var(--dim)">controls scored</div></div>
+    </div>
+    ${score.conflict_controls&&score.conflict_controls.length?`<div style="border-top:1px solid var(--line);padding-top:12px"><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Conflicts dragging trust down</div>${score.conflict_controls.map(c=>`<span class="badge b-fail" style="margin:2px">${esc(c)}</span>`).join("")}</div>`:`<div style="font-size:12px;color:var(--pass)">No cross-platform conflicts — all multi-source controls agree.</div>`}`;
+  top.appendChild(bd);
+  host.appendChild(top);
+
+  // ── per-platform standalone trust ──
+  const byp=platsR.by_platform||{};
+  if(Object.keys(byp).length){
+    const platData=Object.entries(byp).map(([k,v])=>({label:k,value:v.trust,color:v.trust>=75?CHART_COL.pass:v.trust>=50?CHART_COL.warn:CHART_COL.fail,display:v.trust+" / 100"}));
+    const pcard=el("div","card");
+    pcard.innerHTML=`<h3>Per-platform trust</h3><div class="sub" style="margin-bottom:14px">Each platform's standalone trust (no cross-platform corroboration applied)</div>${svgBars(platData,{barH:26,width:460,labelW:90,max:100})}
+      <div style="display:flex;gap:18px;margin-top:12px;flex-wrap:wrap">${Object.entries(byp).map(([k,v])=>`<div style="font-size:11px;color:var(--dim)"><b style="color:var(--mid)">${esc(k)}</b>: ${v.attestations} attestations, ${v.passing} passing${v.stale?`, <span style="color:var(--warn)">${v.stale} stale</span>`:""}</div>`).join("")}</div>`;
+    host.appendChild(pcard);
+  }
+
+  // ── per-control trust (conflicts/lowest first) ──
+  const ctrls=ctrlsR.controls||[];
+  if(ctrls.length){
+    const cc=el("div","card");
+    cc.innerHTML=`<h3>Control trust scores</h3><div class="sub" style="margin-bottom:14px">Lowest trust and conflicts first — these are where inherited evidence is weakest</div>`;
+    const wrap=el("div","scroll");
+    wrap.innerHTML=`<table><thead><tr><th>Control</th><th>Trust</th><th>Band</th><th>Agreement</th><th>Per-source signal</th></tr></thead><tbody>${
+      ctrls.map(c=>{
+        const tc=c.trust>=75?"var(--pass)":c.trust>=50?"var(--warn)":"var(--fail)";
+        const agB=c.agreement==="conflict"?`<span class="badge b-fail">⚠ conflict</span>`:c.agreement==="agree"?`<span class="badge b-pass">✓ agree</span>`:`<span class="badge b-dim">single</span>`;
+        const src=(c.sources||[]).map(s=>`<span class="badge ${s.status==="pass"?"b-pass":s.status==="fail"?"b-fail":"b-dim"}" style="font-size:10px">${esc(s.platform)}: ${s.signal!=null?s.signal:s.status}${s.freshness_days!=null?` · ${s.freshness_days}d`:""}</span>`).join(" ");
+        return `<tr${c.agreement==="conflict"?' style="background:rgba(248,113,113,.06)"':''}><td class="mono" style="color:var(--hi)">${esc(c.control_id)}</td>
+          <td><span style="font-family:var(--mono);font-weight:700;color:${tc}">${c.trust}</span></td>
+          <td><span class="badge ${c.band==="high"?"b-pass":c.band==="medium"?"b-warn":"b-fail"}">${esc(c.band||"")}</span></td>
+          <td>${agB}</td><td style="font-size:11px">${src}</td></tr>`;
+      }).join("")
+    }</tbody></table>`;
+    cc.appendChild(wrap);host.appendChild(cc);
+  }
+
+  // ── POLICY TUNING (tunable-as-code, live preview) ──
+  const pol=score.policy||GRC_PLATFORM_DEMO.trust.policy;
+  const PT={fresh_days:pol.fresh_days,stale_days:pol.stale_days,conflict_factor:pol.conflict_factor};
+  const tune=el("div","card");
+  tune.innerHTML=`<h3>Trust policy <span class="badge b-dim" style="font-weight:500">tunable as code</span></h3>
+    <div class="sub" style="margin-bottom:16px">These weights are configurable (env <span class="mono">GRC_TRUST_POLICY</span>, or per request). Adjust and preview the impact live — nothing is saved until you set it on your deployment.</div>`;
+  const grid=el("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;margin-bottom:16px";
+  function slider(key,label,min,max,step,hint){
+    const w=el("div");
+    const lab=el("div");lab.style.cssText="font-size:12px;color:var(--mid);margin-bottom:6px";
+    const setL=()=>lab.innerHTML=`${label}: <b style="color:var(--hi)">${PT[key]}</b> <span style="color:var(--dim);font-size:10px">${hint}</span>`;
+    const inp=el("input");inp.type="range";inp.min=min;inp.max=max;inp.step=step;inp.value=PT[key];inp.style.cssText="width:100%";
+    inp.oninput=()=>{PT[key]=parseFloat(inp.value);setL();schedulePreview();};
+    setL();w.appendChild(lab);w.appendChild(inp);return w;
+  }
+  grid.appendChild(slider("fresh_days","Fresh days",1,30,1,"full trust below this age"));
+  grid.appendChild(slider("stale_days","Stale days",10,180,5,"trust floor at/above"));
+  grid.appendChild(slider("conflict_factor","Conflict factor",0,1,0.05,"lower = harsher on disagreement"));
+  tune.appendChild(grid);
+  const result=el("div");result.style.cssText="display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);padding-top:14px";
+  result.innerHTML=`<div style="font-size:12px;color:var(--dim)">Previewed score:</div><div id="ptScore" style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--hi)">${sc}</div><div id="ptDelta" style="font-size:12px;color:var(--dim)"></div>`;
+  tune.appendChild(result);
+  host.appendChild(tune);
+
+  let ptTimer=null;
+  function schedulePreview(){clearTimeout(ptTimer);ptTimer=setTimeout(runPreview,250);}
+  async function runPreview(){
+    const scoreEl=document.getElementById("ptScore"),deltaEl=document.getElementById("ptDelta");
+    if(!scoreEl)return;
+    let newScore;
+    if(STATE.mode==="demo"){
+      newScore=previewTrustDemo(PT); // local recompute on demo data
+    } else {
+      try{const r=await apiPOST(withTenant("/v1/grc-trust/score-preview"),{policy:PT});newScore=r.grc_trust_score;}
+      catch(e){newScore=sc;}
+    }
+    scoreEl.textContent=newScore;
+    const d=newScore-sc;
+    scoreEl.style.color=newScore>=75?"var(--pass)":newScore>=50?"var(--warn)":"var(--fail)";
+    deltaEl.innerHTML=d===0?"(no change)":`<span style="color:${d>0?'var(--pass)':'var(--fail)'}">${d>0?'+':''}${d}</span> vs current (${sc})`;
+  }
+};
+
+// local trust recompute for demo mode — mirrors the backend formula
+function previewTrustDemo(pt){
+  const ctrls=GRC_PLATFORM_DEMO.trustControls.controls;
+  function freshMult(days){if(days==null)return 0.6;if(days<=pt.fresh_days)return 1;if(days>=pt.stale_days)return 0.25;return 1-(1-0.25)*((days-pt.fresh_days)/(pt.stale_days-pt.fresh_days));}
+  const statusBase={pass:1,not_applicable:0.5,error:0.3,fail:0};
+  let sum=0,n=0;
+  ctrls.forEach(c=>{
+    const sigs=c.sources.map(s=>(statusBase[s.status]??0.3)*freshMult(s.freshness_days)*0.9);
+    const statuses=new Set(c.sources.map(s=>s.status));
+    let sc;
+    if(statuses.size>1){sc=Math.min(...sigs)*pt.conflict_factor;}
+    else{const avg=sigs.reduce((a,b)=>a+b,0)/sigs.length;const bonus=c.sources.length>=3?1.25:c.sources.length===2?1.15:1;sc=Math.min(1,avg*bonus);}
+    sum+=Math.round(sc*100);n++;
+  });
+  return n?Math.round(sum/n):0;
+}
+
 
 boot();
 </script>
