@@ -1498,3 +1498,64 @@ def grc_profiles(p: Principal = Depends(require_principal)) -> dict:
         "crosswalk_entries": {fw: len(m) for fw, m in xw.CROSSWALKS.items()},
         "note": "drop a YAML file in GRC_PROFILE_DIR to add a platform — no code change",
     }
+
+
+
+# ════════════════════════════════════════════════════════════════════
+# GRC TRUST TELEMETRY — dedicated inherited-trust scoring (separate lane)
+# Tunable as code: weights come from a TrustPolicy (default / env / inline).
+# ════════════════════════════════════════════════════════════════════
+from app.grc_platforms.trust_telemetry import (
+    GRCTrustTelemetry as _GRCTrust, resolve_policy as _resolve_trust_policy,
+    TrustPolicy as _TrustPolicy)
+from dataclasses import asdict as _asdict
+
+
+@app.get("/v1/grc-trust/score", tags=["grc-trust-telemetry"])
+def grc_trust_score(tenant_id: str = "default", db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> dict:
+    """Aggregate inherited-trust score. Uses the active trust policy
+    (defaults, or GRC_TRUST_POLICY env override). Separate from native trust graph."""
+    authorize_tenant(p, tenant_id)
+    return _GRCTrust(db, _resolve_trust_policy(tenant_id)).score(tenant_id)
+
+
+@app.get("/v1/grc-trust/controls", tags=["grc-trust-telemetry"])
+def grc_trust_controls(tenant_id: str = "default", db: Session = Depends(get_db),
+                       p: Principal = Depends(require_principal)) -> dict:
+    """Per-control inherited-trust scores (conflicts and lowest-trust first)."""
+    authorize_tenant(p, tenant_id)
+    return {"controls": _GRCTrust(db, _resolve_trust_policy(tenant_id)).by_control(tenant_id)}
+
+
+@app.get("/v1/grc-trust/platforms", tags=["grc-trust-telemetry"])
+def grc_trust_platforms(tenant_id: str = "default", db: Session = Depends(get_db),
+                        p: Principal = Depends(require_principal)) -> dict:
+    """Each GRC platform's standalone trust contribution."""
+    authorize_tenant(p, tenant_id)
+    return _GRCTrust(db, _resolve_trust_policy(tenant_id)).by_platform(tenant_id)
+
+
+@app.get("/v1/grc-trust/policy", tags=["grc-trust-telemetry"])
+def grc_trust_policy(p: Principal = Depends(require_principal)) -> dict:
+    """The active trust-scoring policy (the tunable weights) + their meaning."""
+    return {"active_policy": _asdict(_resolve_trust_policy()),
+            "tunable_as": "GRC_TRUST_POLICY env var (JSON), or inline on /score-preview",
+            "fields": {
+                "fresh_days": "evidence at/below this age gets full trust",
+                "stale_days": "evidence at/above this age hits the trust floor",
+                "freshness_floor": "fraction of trust the oldest evidence retains (0..1)",
+                "conflict_factor": "multiplier applied when platforms disagree (lower = harsher)",
+                "corroboration_bonus": "trust multiplier by number of agreeing sources",
+                "status_weights": "base trust per platform verdict"}}
+
+
+@app.post("/v1/grc-trust/score-preview", tags=["grc-trust-telemetry"])
+def grc_trust_preview(payload: dict, tenant_id: str = "default",
+                      db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+    """Preview the trust score under a DIFFERENT policy without persisting it.
+    Body: {"policy": {"fresh_days": 1, "conflict_factor": 0.1}} — tune and see the impact."""
+    authorize_tenant(p, tenant_id)
+    pol = _resolve_trust_policy(tenant_id, inline=payload.get("policy"))
+    return _GRCTrust(db, pol).score(tenant_id)

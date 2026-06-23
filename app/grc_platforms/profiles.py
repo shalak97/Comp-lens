@@ -22,7 +22,7 @@ VANTA = PlatformProfile(
     field_updated="latestFlipTime", field_title="name", field_frameworks="frameworks",
     status_map={"ok": "pass", "passing": "pass", "failing": "fail",
                 "deactivated": "not_applicable", "in_progress": "error"},
-    speaks_frameworks=["SOC2", "ISO27001"],
+    control_crosswalk=dict(_SOC2_TO_CL),
     notes="Vanta /v1/tests returns test outcomes pre-mapped to controls + frameworks.")
 
 DRATA = PlatformProfile(
@@ -33,7 +33,7 @@ DRATA = PlatformProfile(
     field_updated="updatedAt", field_title="name", field_frameworks="frameworkTags",
     status_map={"ready": "pass", "passing": "pass", "unhealthy": "fail",
                 "failing": "fail", "not_monitored": "not_applicable"},
-    speaks_frameworks=["SOC2", "ISO27001"],
+    control_crosswalk=dict(_SOC2_TO_CL),
     notes="Drata /public/controls returns control readiness + monitor health.")
 
 # OneTrust is privacy/vendor-risk focused — treated as a vendor-risk source, but
@@ -47,7 +47,7 @@ ONETRUST = PlatformProfile(
     field_updated="lastUpdated", field_title="name", field_frameworks="frameworks",
     status_map={"completed": "pass", "approved": "pass", "rejected": "fail",
                 "in_progress": "error", "not_started": "not_applicable"},
-    speaks_frameworks=["SOC2", "ISO27001"],
+    control_crosswalk=dict(_SOC2_TO_CL),
     notes="OneTrust is privacy/vendor-risk centric; assessments map to controls where present.")
 
 ALL_PROFILES = {"VANTA": VANTA, "DRATA": DRATA, "ONETRUST": ONETRUST}

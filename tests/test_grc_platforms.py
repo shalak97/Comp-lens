@@ -108,5 +108,4 @@ def test_multi_source_conflict(client):
 
 def test_platforms_endpoint(client):
     pl = client.get("/v1/grc-sync/platforms").json()
-    # built-in platforms must be present; YAML profiles may add more
-    assert {"VANTA", "DRATA", "ONETRUST"} <= set(pl["platforms"].keys())
+    assert set(pl["platforms"].keys()) == {"VANTA", "DRATA", "ONETRUST"}

@@ -27,7 +27,6 @@ class ControlAttestation:
     confidence: float                   # 0..1 — how strongly we trust this mapping
     title: str = ""
     raw: Dict[str, Any] = field(default_factory=dict)
-    mapping_reason: str = ""    # WHY this got its control id + confidence
 
     def to_telemetry(self) -> Dict[str, Any]:
         """Re-express as Comp-Lens canonical evidence record."""
@@ -42,7 +41,6 @@ class ControlAttestation:
             "confidence": self.confidence,
             "title": self.title,
             "mapped": self.comp_lens_control_id is not None,
-            "mapping_reason": self.mapping_reason,
         }
 
 
@@ -71,25 +69,9 @@ class PlatformProfile:
     field_frameworks: Optional[str] = None
     # status normalization: their status string -> ours
     status_map: Dict[str, str] = field(default_factory=dict)
-    # taxonomy crosswalk: their control ref -> our control id (legacy/explicit overrides)
+    # taxonomy crosswalk: their control ref -> our control id
     control_crosswalk: Dict[str, str] = field(default_factory=dict)
-    # which framework(s) this platform speaks — drives the SHARED standards crosswalk
-    speaks_frameworks: List[str] = field(default_factory=list)
-    version: str = "1"          # profile schema version, for honest drift tracking
-    source: str = "builtin"     # builtin | yaml:<path>
     notes: str = ""
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any], source: str = "yaml") -> "PlatformProfile":
-        """Build a profile from a plain dict (loaded from YAML). Adding a platform
-        is writing one of these files — no code change, no redeploy of logic."""
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        clean = {k: v for k, v in d.items() if k in known}
-        clean["source"] = source
-        # required minimal fields with sane fallbacks
-        clean.setdefault("items_key", None)
-        clean.setdefault("pagination_key", None)
-        return cls(**clean)
 
 
 def dotted(obj: Any, path: Optional[str], default: Any = None) -> Any:
@@ -152,45 +134,21 @@ class GRCPlatformConnector(abc.ABC):
         status = p.status_map.get(raw_status, raw_status if raw_status in
                                   ("pass", "fail", "error", "not_applicable") else "error")
         control_ref = str(dotted(item, p.field_control_ref, "") or "")
+        cl_control = p.control_crosswalk.get(control_ref)
+        # confidence: mapped + fresh = high; unmapped or stale = lower
         freshness = self._freshness_days(dotted(item, p.field_updated))
+        confidence = 0.9 if cl_control else 0.4
+        if freshness is not None and freshness > 30:
+            confidence *= 0.7
         frameworks = dotted(item, p.field_frameworks, {}) or {}
         if not isinstance(frameworks, dict):
             frameworks = {}
-
-        # ── resolve the control + WHY, with transparent confidence ──
-        cl_control, confidence, reason = self._resolve_mapping(control_ref, frameworks)
-        # freshness penalty (kept separate from mapping quality so reasons stay clear)
-        if freshness is not None and freshness > 30:
-            confidence *= 0.7
-            reason += "; evidence >30d old"
-
         return ControlAttestation(
             platform=p.platform, external_test_id=str(test_id),
             external_control_ref=control_ref, comp_lens_control_id=cl_control,
             status=status, evidence_freshness_days=freshness,
             frameworks=frameworks, confidence=round(confidence, 2),
-            title=str(dotted(item, p.field_title, "") or ""), raw=item,
-            mapping_reason=reason)
-
-    def _resolve_mapping(self, control_ref, frameworks):
-        """Translate a control ref -> (comp_lens_id, confidence, human reason).
-
-        Precedence: explicit profile override > shared standards crosswalk
-        (declared frameworks) > inferred-framework fallback > unmapped-but-kept.
-        """
-        from app.grc_platforms import crosswalk as _xw
-        p = self.profile
-        # 1. explicit override on the profile (escape hatch)
-        if control_ref in p.control_crosswalk:
-            return p.control_crosswalk[control_ref], 0.92, "explicit profile override"
-        # 2/3. shared standards crosswalk
-        declared = list(p.speaks_frameworks) + list((frameworks or {}).keys())
-        mapping, fw_used = _xw.resolve_best(control_ref, declared)
-        if mapping:
-            conf = _xw.QUALITY_CONFIDENCE.get(mapping.quality, 0.5)
-            return mapping.control_id, conf, f"{fw_used} {mapping.quality} match — {mapping.note}"
-        # 4. unmapped but kept (never dropped)
-        return None, 0.35, "no crosswalk entry — evidenced but unmapped"
+            title=str(dotted(item, p.field_title, "") or ""), raw=item)
 
     @staticmethod
     def _freshness_days(ts: Any) -> Optional[int]:
