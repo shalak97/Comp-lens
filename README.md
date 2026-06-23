@@ -1,4 +1,6 @@
-# Comp-Lens 2.0 — Compliance as Code<img width="268" height="180" alt="image" src="https://github.com/user-attachments/assets/e0b4c609-73e4-47cb-8bf1-d4c1e4e4ad8f" />
+# Comp-Lens 2.0 — Compliance as Code
+
+<img width="1300" height="900" alt="image" src="https://github.com/user-attachments/assets/e0b4c609-73e4-47cb-8bf1-d4c1e4e4ad8f" />
 
 
 Open-source GRC platform where live connector evidence flows into risk scores, policies are YAML files that run in CI, and every AI system's privacy risk is computed — not hand-typed.
