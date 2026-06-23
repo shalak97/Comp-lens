@@ -1,0 +1,25 @@
+# Secureframe — added as a YAML profile, zero code change.
+# Proves the unified-portal thesis: a new trust platform is a config file.
+platform: SECUREFRAME
+name: Secureframe
+base_url: https://api.secureframe.com
+auth_method: api_key
+env_vars: [SECUREFRAME_API_KEY]
+results_path: /v1/tests
+items_key: data
+pagination_key: meta.next_cursor
+field_test_id: id
+field_status: status
+field_control_ref: control_key
+field_updated: updated_at
+field_title: name
+field_frameworks: frameworks
+status_map:
+  passed: pass
+  pass: pass
+  failing: fail
+  failed: fail
+  disabled: not_applicable
+speaks_frameworks: [SOC2, ISO27001]
+version: "1"
+notes: "Secureframe test results; field paths follow their documented API — validate on first connect."

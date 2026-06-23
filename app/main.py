@@ -1480,3 +1480,21 @@ def grc_multi_source(tenant_id: str = "default", db: Session = Depends(get_db),
     """Controls attested by multiple independent sources — agreement vs conflict."""
     authorize_tenant(p, tenant_id)
     return _grc_svc.multi_source_attestation(db, tenant_id)
+
+
+
+@app.get("/v1/grc-sync/profiles", tags=["grc-platforms"])
+def grc_profiles(p: Principal = Depends(require_principal)) -> dict:
+    """The loaded platform profiles (built-in + YAML) and the shared crosswalk —
+    the transparency layer for a unified, adaptive trust telemetry portal."""
+    from app.grc_platforms.loader import load_all_profiles
+    from app.grc_platforms import crosswalk as xw
+    profs = load_all_profiles()
+    return {
+        "profiles": [{"platform": k, "name": v.name, "source": v.source,
+                      "speaks_frameworks": v.speaks_frameworks, "auth": v.auth_method}
+                     for k, v in profs.items()],
+        "crosswalk_frameworks": list(xw.CROSSWALKS.keys()),
+        "crosswalk_entries": {fw: len(m) for fw, m in xw.CROSSWALKS.items()},
+        "note": "drop a YAML file in GRC_PROFILE_DIR to add a platform — no code change",
+    }
