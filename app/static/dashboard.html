@@ -274,6 +274,7 @@ a.lnk:hover{text-decoration:underline}
         <span class="dot off" id="conndot"></span>
         <span id="connlabel">Connecting…</span>
       </div>
+      <div class="connpill" id="aiChip" style="margin-bottom:8px;cursor:default"><span class="dot" style="background:var(--dim)"></span> AI …</div>
       <div style="display:flex;gap:7px">
         <button class="btn sm" style="flex:1;font-size:11px" onclick="openCmdK()">⌘K Search</button>
         <div class="exp-btn" style="flex:1">
@@ -447,7 +448,8 @@ const GROUPS = [
                ["controls","Controls","M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"],
                ["findings","Findings","M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"],
                ["frameworks","Frameworks","M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z"],
-               ["audits","Audits","M9 11l3 3 8-8M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11M16 3v4M12 3v2"]]],
+               ["audits","Audits","M9 11l3 3 8-8M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11M16 3v4M12 3v2"],
+               ["reports","Reports","M9 17v-6m3 6v-4m3 4v-8M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"]]],
   ["Compliance as Code", [["policy","Policies","M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"],
                ["middleware","Middleware","M22 12h-4l-3 9L9 3l-3 9H2"]]],
   ["Evidence", [["connectors","Connectors","M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4M19 5l-4 4m-6 6l-4 4"],
@@ -493,6 +495,7 @@ async function boot() {
   buildNav();
   await detectMode();
   render();
+  renderAIChip();
   if (STATE.mode === "demo") toast("Showing demo data — open connection settings to go live");
 }
 /* ============ DEMO DATA ============ */
@@ -867,9 +870,14 @@ const DEMO_ROI=[
 const DEMO_SPOF=[{name:"Okta",controls_at_risk:33,severity:"high"},{name:"GitHub",controls_at_risk:12,severity:"high"},{name:"CrowdStrike Falcon",controls_at_risk:8,severity:"high"}];
 const MKT={cat:"all",rows:null,roi:null,spof:null,demoOnly:false,safety:null};
 
-RENDER.connectors = async function() {
-  const m=main(), v=view("Connector Marketplace","Automated evidence collection across cloud, identity, DevOps, ITSM, security, GRC, SaaS and endpoints");
-  m.appendChild(v);const host=el("div");v.appendChild(host);
+RENDER.connectors = function(){
+  subTabs("Connectors","Automated evidence collection across cloud, identity, DevOps, ITSM, security, SaaS — plus sync scheduling",[
+    {id:"marketplace",label:"Marketplace",render:()=>RENDER.connectors_marketplace()},
+    {id:"schedules",label:"Auto-Sync Schedules",render:()=>RENDER.connector_schedules()},
+  ],"connectortabs");
+};
+RENDER.connectors_marketplace = async function() {
+  const host=main();
   host.innerHTML=`<div class="empty"><span class="spin"></span> Loading connectors…</div>`;
   if(STATE.mode==="demo"){
     MKT.rows=DEMO_CONNECTORS;MKT.roi={opportunities:DEMO_ROI};MKT.spof={fragility_ranking:DEMO_SPOF,single_point_count:53,redundantly_evidenced:9};
@@ -2403,9 +2411,14 @@ const DEMO_POLICIES={count:5,policies:[
 ]};
 const DEMO_POLICY_TEST={total:14,passed:14,failed:0,results:[]};
 
-RENDER.policy=async function(){
-  const m=main(),v=view("Policies as Code","Compliance rules defined as version-controlled, testable YAML — not hidden in code or a database");
-  m.appendChild(v);const host=el("div");v.appendChild(host);
+RENDER.policy=function(){
+  subTabs("Policies as Code","Compliance rules as version-controlled, testable YAML — plus AI-assisted authoring",[
+    {id:"policies",label:"Policies",render:()=>RENDER.policy_list()},
+    {id:"authoring",label:"AI Authoring",render:()=>RENDER.policy_authoring()},
+  ],"policytabs");
+};
+RENDER.policy_list=async function(){
+  const host=main();
   host.innerHTML=skelGrid(4)+skelCard();
   const {data,live}=await load(withTenant("/v1/policy/list"),DEMO_POLICIES);
   const pols=(data&&data.policies)||[];
@@ -3205,6 +3218,165 @@ function previewTrustDemo(pt){
   return n?Math.round(sum/n):0;
 }
 
+
+/* ════════════════════════ MATURITY PASS: LLM, scheduling, authoring, reports ════════════════════════ */
+
+// ── LLM / AI status (header chip + helpers) ──
+const AI_DEMO={available:true,provider:"anthropic",model:"claude-sonnet-4-6",concepts:312};
+let AI_STATUS=null;
+async function loadAIStatus(){
+  if(AI_STATUS)return AI_STATUS;
+  const {data}=await load(withTenant("/ontology/bindings"),AI_DEMO);
+  AI_STATUS=data&&("llm_available" in data)?{available:data.llm_available,model:data.active_model||data.model||"—",provider:data.provider||"—",concepts:data.concepts||0}:AI_DEMO;
+  return AI_STATUS;
+}
+async function renderAIChip(){
+  const host=document.getElementById("aiChip");if(!host)return;
+  const s=await loadAIStatus();
+  host.innerHTML=`<span class="dot" style="background:${s.available?'var(--pass)':'var(--dim)'}"></span> AI ${s.available?'on':'off'}${s.available?` · ${esc((s.model||'').replace('claude-','').replace('-20'+(s.model||'').split('-20')[1]||'',''))||s.model}`:''}`;
+  host.title=s.available?`LLM provider: ${s.provider} · model: ${s.model} · ${s.concepts} concepts in lexicon`:"No LLM configured — set ANTHROPIC_API_KEY to enable AI features";
+}
+
+// ── AI POLICY AUTHORING (draft → review → approve) ──
+const DEMO_DRAFTS=[
+  {id:"d1",control_id:"AU-11",telemetry_field:"log_retention_days",confidence:0.86,status:"draft",rego:'package complens.au_11\n\ndefault allow = false\nallow {\n  input.log_retention_days >= 365\n}'},
+  {id:"d2",control_id:"SC-13",telemetry_field:"fips_validated",confidence:0.72,status:"draft",rego:'package complens.sc_13\n\ndefault allow = false\nallow {\n  input.fips_validated == true\n}'},
+];
+RENDER.policy_authoring = async function(){
+  const host=main();
+  host.innerHTML=skelCard();
+  const ai=await loadAIStatus();
+  const {data}=await load(withTenant("/policy/drafts"),{drafts:DEMO_DRAFTS});
+  const drafts=(data&&data.drafts)||DEMO_DRAFTS;
+  host.innerHTML="";
+
+  const banner=el("div","callout");
+  banner.innerHTML=`<b>Draft policies with AI, then review and approve them.</b> Describe a control in plain language; the ${ai.available?`<span class="mono">${esc(ai.model)}</span> model`:"LLM (when configured)"} drafts a policy expression mapped to a telemetry field. Nothing goes live until you approve it — AI proposes, you ratify.${ai.available?"":` <span style="color:var(--warn)">Set ANTHROPIC_API_KEY on your deployment to enable drafting.</span>`}`;
+  host.appendChild(banner);
+
+  // draft input
+  const draftCard=el("div","card");
+  draftCard.innerHTML=`<h3>Draft a new policy</h3><div class="sub" style="margin-bottom:12px">Describe the control requirement in plain language</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id="draftCtrl" placeholder="Control ID (e.g. AU-11)" style="width:160px"/>
+      <input id="draftDesc" placeholder="e.g. audit logs must be retained for at least one year" style="flex:1;min-width:240px"/>
+      <button class="btn primary sm" id="draftBtn"${ai.available?"":" disabled"}>✦ Draft with AI</button>
+    </div><div id="draftOut" style="margin-top:12px"></div>`;
+  host.appendChild(draftCard);
+  draftCard.querySelector("#draftBtn").onclick=async()=>{
+    const ctrl=draftCard.querySelector("#draftCtrl").value.trim();
+    const desc=draftCard.querySelector("#draftDesc").value.trim();
+    const out=draftCard.querySelector("#draftOut");
+    if(!ctrl||!desc){out.innerHTML='<span style="color:var(--warn);font-size:12px">Enter a control ID and description.</span>';return;}
+    out.innerHTML='<span class="spin"></span> Drafting…';
+    if(STATE.mode==="demo"){await sleep(700);out.innerHTML=`<div style="font-size:12px;color:var(--pass)">✓ Draft created for ${esc(ctrl)} (demo). Connect your deployment with an LLM key to draft live.</div>`;return;}
+    try{const r=await apiPOST(withTenant("/policy/draft"),{control_id:ctrl,description:desc});toast("Draft created for "+r.control_id);RENDER.policy_authoring();}
+    catch(e){out.innerHTML=`<span style="color:var(--fail);font-size:12px">${esc(e.message||"draft failed")}</span>`;}
+  };
+
+  // pending drafts
+  const listCard=el("div","card");
+  listCard.innerHTML=`<h3>Pending drafts <span class="badge b-dim">${drafts.length}</span></h3><div class="sub" style="margin-bottom:12px">Review the AI-generated expression, then approve to promote it to an active policy</div>`;
+  if(!drafts.length){listCard.innerHTML+='<div class="empty">No drafts yet — author one above.</div>';}
+  drafts.forEach(d=>{
+    const row=el("div");row.style.cssText="border:1px solid var(--line);border-radius:var(--r2);padding:14px;margin-bottom:10px";
+    row.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div><span class="mono" style="color:var(--hi);font-weight:600">${esc(d.control_id)}</span> <span style="font-size:11px;color:var(--dim)">→ ${esc(d.telemetry_field||"")}</span></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="badge ${d.confidence>=0.8?"b-pass":d.confidence>=0.6?"b-warn":"b-fail"}">${Math.round((d.confidence||0)*100)}% confidence</span>
+        <button class="btn sm" data-approve="${d.id}">✓ Approve</button>
+      </div></div>
+      <pre style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11px;overflow:auto;margin:0;color:var(--mid)">${esc(d.rego||"")}</pre>`;
+    listCard.appendChild(row);
+  });
+  host.appendChild(listCard);
+  listCard.querySelectorAll("[data-approve]").forEach(b=>{
+    b.onclick=async()=>{const id=b.getAttribute("data-approve");b.disabled=true;b.textContent="approving…";
+      if(STATE.mode==="demo"){await sleep(500);toast("Draft approved (demo) — would become an active policy");b.textContent="✓ approved";return;}
+      try{await apiPOST(withTenant("/policy/"+id+"/approve"),{});toast("Policy approved & activated");RENDER.policy_authoring();}
+      catch(e){toast(e.message||"approve failed","err");b.disabled=false;b.textContent="✓ Approve";}
+    };
+  });
+};
+
+// ── CONNECTOR SCHEDULING (auto-sync deployment) ──
+const DEMO_SCHEDULES=[
+  {id:"s1",connector:"OKTA",cadence:"hourly",next_run:"in 24m",last_status:"ok",enabled:true},
+  {id:"s2",connector:"AWS",cadence:"every 6h",next_run:"in 3h",last_status:"ok",enabled:true},
+  {id:"s3",connector:"GITHUB",cadence:"daily",next_run:"in 9h",last_status:"ok",enabled:false},
+];
+RENDER.connector_schedules = async function(){
+  const host=main();
+  host.innerHTML=skelCard();
+  const {data}=await load(withTenant("/schedules"),{schedules:DEMO_SCHEDULES});
+  const scheds=(data&&data.schedules)||(Array.isArray(data)?data:DEMO_SCHEDULES);
+  host.innerHTML="";
+
+  const banner=el("div","callout");
+  banner.innerHTML=`<b>Automate connector syncs.</b> Schedule each connector to pull evidence on a cadence so your posture stays live without manual syncs. This is connector auto-deployment at the data layer — set it once, evidence refreshes itself.`;
+  host.appendChild(banner);
+
+  // new schedule
+  const addCard=el("div","card");
+  addCard.innerHTML=`<h3>Schedule a sync</h3><div class="sub" style="margin-bottom:12px">Pick a connector and how often it should pull evidence</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="schConn" style="width:180px"><option value="OKTA">Okta</option><option value="AWS">AWS</option><option value="GITHUB">GitHub</option><option value="CROWDSTRIKE">CrowdStrike</option><option value="AZURE">Azure</option><option value="QUALYS">Qualys</option></select>
+      <select id="schCad" style="width:160px"><option value="hourly">Hourly</option><option value="6h">Every 6 hours</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select>
+      <button class="btn primary sm" id="schAdd">+ Add schedule</button>
+    </div>`;
+  host.appendChild(addCard);
+  addCard.querySelector("#schAdd").onclick=async()=>{
+    const conn=addCard.querySelector("#schConn").value,cad=addCard.querySelector("#schCad").value;
+    if(STATE.mode==="demo"){toast(`Scheduled ${conn} · ${cad} (demo)`);return;}
+    try{await apiPOST(withTenant("/schedules"),{connector:conn,cadence:cad});toast("Schedule created for "+conn);RENDER.connector_schedules();}
+    catch(e){toast(e.message||"failed","err");}
+  };
+
+  // active schedules
+  const card=el("div","card");
+  card.innerHTML=`<h3>Active schedules <span class="badge b-dim">${scheds.length}</span></h3>`;
+  const wrap=el("div","scroll");
+  wrap.innerHTML=`<table><thead><tr><th>Connector</th><th>Cadence</th><th>Next run</th><th>Last</th><th>State</th><th></th></tr></thead><tbody>${
+    scheds.map(s=>`<tr><td class="mono" style="color:var(--hi)">${esc(s.connector)}</td><td>${esc(s.cadence)}</td><td style="color:var(--mid)">${esc(s.next_run||"—")}</td>
+      <td><span class="badge ${s.last_status==="ok"?"b-pass":"b-fail"}">${esc(s.last_status||"—")}</span></td>
+      <td><span class="badge ${s.enabled?"b-pass":"b-dim"}">${s.enabled?"enabled":"paused"}</span></td>
+      <td style="text-align:right"><button class="btn sm" data-run="${s.id}">▶ Run now</button></td></tr>`).join("")
+  }</tbody></table>`;
+  card.appendChild(wrap);host.appendChild(card);
+  card.querySelectorAll("[data-run]").forEach(b=>{
+    b.onclick=async()=>{const id=b.getAttribute("data-run");b.disabled=true;b.textContent="running…";
+      if(STATE.mode==="demo"){await sleep(600);toast("Sync triggered (demo)");b.disabled=false;b.textContent="▶ Run now";return;}
+      try{await apiPOST(withTenant("/schedules/"+id+"/run"),{});toast("Sync triggered");b.disabled=false;b.textContent="▶ Run now";}
+      catch(e){toast(e.message||"failed","err");b.disabled=false;b.textContent="▶ Run now";}
+    };
+  });
+};
+
+// ── REPORTS / EXPORT ──
+RENDER.reports = function(){
+  const host=main();host.innerHTML="";
+  const banner=el("div","callout");
+  banner.innerHTML=`<b>Export audit-ready evidence.</b> Generate compliance reports in the format your auditor or GRC stack needs — including <span class="mono">OSCAL</span>, the NIST machine-readable standard.`;
+  host.appendChild(banner);
+  const grid=el("div");grid.style.cssText="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px";
+  [["CSV","Findings & controls as a spreadsheet","/reports/csv","var(--pass)"],
+   ["PDF","Formatted compliance posture report","/reports/pdf","var(--fail)"],
+   ["OSCAL","NIST machine-readable assessment results","/reports/oscal","var(--hi)"]
+  ].forEach(([label,desc,path,col])=>{
+    const c=el("div","card");c.style.cssText="padding:20px";
+    c.innerHTML=`<div style="font-size:15px;font-weight:700;margin-bottom:4px;color:${col}">${label}</div>
+      <div style="font-size:12px;color:var(--mid);margin-bottom:14px;line-height:1.5">${desc}</div>
+      <button class="btn sm primary" data-export="${path}">↓ Export ${label}</button>`;
+    grid.appendChild(c);
+  });
+  host.appendChild(grid);
+  host.querySelectorAll("[data-export]").forEach(b=>{
+    b.onclick=()=>{const path=b.getAttribute("data-export");
+      if(STATE.mode==="demo"){toast("Export "+path+" (demo — connect your deployment to download)");return;}
+      window.open(CFG.base+withTenant(path),"_blank");toast("Generating report…");
+    };
+  });
+};
 
 boot();
 </script>
