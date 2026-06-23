@@ -377,15 +377,19 @@ const D = {
     {snapshot_at:new Date(Date.now()-1*864e5).toISOString(),compliance_score:79.4},
   ],
   connectors:[
-    {connector:"AWS",category:"cloud",maturity:"production",health:"healthy",assets:42,last_sync:new Date(Date.now()-2*36e5).toISOString(),auth:"iam_role"},
-    {connector:"Okta",category:"identity",maturity:"production",health:"healthy",assets:318,last_sync:new Date(Date.now()-1*36e5).toISOString(),auth:"api_token"},
-    {connector:"GitHub",category:"code",maturity:"production",health:"degraded",assets:64,last_sync:new Date(Date.now()-7*36e5).toISOString(),auth:"pat"},
-    {connector:"SSH/Linux",category:"on_prem",maturity:"production",health:"healthy",assets:11,last_sync:new Date(Date.now()-4*36e5).toISOString(),auth:"key"},
-    {connector:"Jira",category:"ticketing",maturity:"production",health:"healthy",assets:1280,last_sync:new Date(Date.now()-3*36e5).toISOString(),auth:"api_token"},
-    {connector:"Azure",category:"cloud",maturity:"beta",health:"not_connected",assets:0,last_sync:null,auth:"graph"},
-    {connector:"GCP",category:"cloud",maturity:"beta",health:"not_connected",assets:0,last_sync:null,auth:"sa_json"},
-    {connector:"CrowdStrike",category:"endpoint",maturity:"beta",health:"not_connected",assets:0,last_sync:null,auth:"oauth"},
-    {connector:"DEMO",category:"testing",maturity:"stable",health:"healthy",assets:8,last_sync:new Date().toISOString(),auth:"none"},
+    {key:"AWS_SECURITY_HUB",name:"AWS Security Hub",category:"cloud",vendor:"AWS",auth_method:"iam_keys",maturity:"production",mode:"connected",healthy:true,controls_covered:14,evidence_count:128,last_sync_at:new Date(Date.now()-2*36e5).toISOString()},
+    {key:"AWS_IAM",name:"AWS IAM",category:"cloud",vendor:"AWS",auth_method:"iam_keys",maturity:"production",mode:"connected",healthy:true,controls_covered:9,evidence_count:64,last_sync_at:new Date(Date.now()-2*36e5).toISOString()},
+    {key:"OKTA",name:"Okta",category:"identity",vendor:"Okta",auth_method:"api_token",maturity:"production",mode:"connected",healthy:true,controls_covered:11,evidence_count:318,last_sync_at:new Date(Date.now()-1*36e5).toISOString()},
+    {key:"GITHUB",name:"GitHub",category:"devops",vendor:"GitHub",auth_method:"pat_token",maturity:"production",mode:"error",healthy:false,controls_covered:8,evidence_count:0,last_sync_at:new Date(Date.now()-9*36e5).toISOString(),last_error:"token expired"},
+    {key:"JIRA",name:"Jira",category:"itsm",vendor:"Atlassian",auth_method:"api_token",maturity:"production",mode:"connected",healthy:true,controls_covered:6,evidence_count:42,last_sync_at:new Date(Date.now()-3*36e5).toISOString()},
+    {key:"CROWDSTRIKE",name:"CrowdStrike Falcon",category:"endpoint",vendor:"CrowdStrike",auth_method:"oauth_client_credentials",maturity:"production",mode:"connected",healthy:true,controls_covered:7,evidence_count:96,last_sync_at:new Date(Date.now()-5*36e5).toISOString()},
+    {key:"AZURE_DEFENDER",name:"Microsoft Defender for Cloud",category:"cloud",vendor:"Microsoft",auth_method:"oauth_client_credentials",maturity:"production",mode:"not_configured",healthy:null,controls_covered:0,evidence_count:0,last_sync_at:null},
+    {key:"GCP_SCC",name:"GCP Security Command Center",category:"cloud",vendor:"Google",auth_method:"service_account_json",maturity:"production",mode:"not_configured",healthy:null,controls_covered:0,evidence_count:0,last_sync_at:null},
+    {key:"SPLUNK",name:"Splunk",category:"security",vendor:"Splunk",auth_method:"api_token",maturity:"beta",mode:"not_configured",healthy:null,controls_covered:0,evidence_count:0,last_sync_at:null},
+    {key:"SNOWFLAKE",name:"Snowflake",category:"saas",vendor:"Snowflake",auth_method:"basic_auth",maturity:"beta",mode:"not_configured",healthy:null,controls_covered:0,evidence_count:0,last_sync_at:null},
+    {key:"SERVICENOW_GRC",name:"ServiceNow GRC",category:"grc",vendor:"ServiceNow",auth_method:"basic_auth",maturity:"production",mode:"demo",healthy:null,controls_covered:5,evidence_count:0,last_sync_at:null},
+    {key:"DEMO",name:"Demo (synthetic)",category:"endpoint",vendor:"Comp-Lens",auth_method:"none",maturity:"production",mode:"demo",healthy:true,controls_covered:6,evidence_count:8,last_sync_at:new Date().toISOString()},
+    {key:"AIGOV",name:"AI Governance Inventory",category:"grc",vendor:"Comp-Lens",auth_method:"none",maturity:"production",mode:"demo",healthy:true,controls_covered:4,evidence_count:5,last_sync_at:new Date(Date.now()-12*36e5).toISOString()},
   ],
   inventory:[
     {name:"Customer Churn Predictor",system_type:"ML model",risk_level:"high",owner:"Data Science",frameworks:["ISO42001","NIST_AI_RMF"],status:"in_review"},
@@ -669,6 +673,7 @@ function sevRank(s){return{critical:5,high:4,medium:3,low:2,info:1}[String(s||""
 
 /* ---------- CONTROLS ---------- */
 let CTL={fw:"ALL",q:""};
+let CONN={cat:"all",show:"all"};
 RENDER.controls = async function(){
   const m=main();
   m.innerHTML=viewHead("Control catalog","Every control, crosswalked to NIST, ISO 27001, SOC 2, CIS and AI frameworks. Filter by framework to score against one standard.",
@@ -786,36 +791,91 @@ RENDER.frameworks = async function(){
 /* ---------- CONNECTORS ---------- */
 RENDER.connectors = async function(){
   const m=main();
-  m.innerHTML=viewHead("Connectors","Automated evidence collection across cloud, identity, code, endpoint, ITSM and SaaS. Each connector normalizes its system into the same control fields.",
+  m.innerHTML=viewHead("Connectors","Automated evidence collection across cloud, identity, DevOps, ITSM, security, endpoint, SaaS and GRC. Each connector normalizes its system into the same control fields.",
     `<button class="btn" onclick="STATE.active='evidencehub';render()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><path d='M14 2v6h6'/></svg>Evidence</button>`,"evidence / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Polling connectors…</div>`;
-  const[cn]=await Promise.all([load("/connectors",D.connectors)]);
-  const rows=(cn.data||D.connectors).map(c=>({connector:c.connector||c.name||c.id,category:c.category||"other",
-    maturity:c.maturity||"beta",health:c.health||c.status||"not_connected",assets:c.assets||0,last_sync:c.last_sync||c.last_run,auth:c.auth||c.auth_method}));
-  const healthy=rows.filter(r=>r.health==="healthy").length;
-  const cats={};rows.forEach(r=>cats[r.category]=(cats[r.category]||0)+1);
-  const HM={healthy:"c-pass",degraded:"c-warn",not_connected:"c-dim",error:"c-fail"};
-  host.innerHTML=`
-  <div class="readouts">
-    <div class="ro"><div class="k">Connectors</div><div class="v num">${rows.length}</div><div class="s">${Object.keys(cats).length} categories</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Connected</div><div class="v num">${healthy}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Assets covered</div><div class="v num">${rows.reduce((a,r)=>a+r.assets,0)}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Production-grade</div><div class="v num">${rows.filter(r=>r.maturity==="production").length}</div></div>
-  </div>
-  <div class="panel">
-    <div class="panel-h"><h3>Evidence sources</h3><div class="sp"></div><button class="btn sm" onclick="toast('Sync triggered for connected sources')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button></div>
-    <div class="panel-b flush"><div class="tbl-scroll"><table>
-      <thead><tr><th>Connector</th><th>Category</th><th>Maturity</th><th>Assets</th><th>Auth</th><th>Health</th><th class="right">Last sync</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr>
-        <td><b>${esc(r.connector)}</b></td>
-        <td style="color:var(--body)">${esc(titlecase(r.category))}</td>
-        <td><span class="chip ${r.maturity==='production'?'c-pass':r.maturity==='stable'?'c-focus':'c-warn'}"><span class="d"></span>${esc(titlecase(r.maturity))}</span></td>
-        <td class="num">${r.assets||"—"}</td>
-        <td class="mono" style="font-size:11px;color:var(--steel)">${esc((r.auth||"—").replace(/_/g," "))}</td>
-        <td><span class="chip ${HM[r.health]||'c-dim'}"><span class="d"></span>${esc(titlecase(r.health))}</span></td>
-        <td class="right mono" style="font-size:11px;color:var(--steel)">${r.last_sync?ago(r.last_sync):"—"}</td></tr>`).join("")}</tbody>
-    </table></div></div>
-  </div>`;
+
+  // Richest source is /connectors/status (per-tenant health + sync). Fall back to
+  // /connectors/catalog (catalogue only), then the bare /connectors, then demo.
+  let rows=null, live=false;
+  if(STATE.mode!=="demo"){
+    try{ rows=await apiGET(withTenant("/connectors/status")); live=true; }
+    catch(e){
+      try{
+        const cat=await apiGET("/connectors/catalog");
+        let health={};
+        try{ (await apiGET("/connectors")).forEach(c=>{health[(c.source_system||"").toUpperCase()]=c.healthy;}); }catch(_){}
+        rows=cat.map(c=>({...c, mode: health[(c.registry_key||c.key||"").toUpperCase()]===true?"connected":(health[(c.registry_key||c.key||"").toUpperCase()]===false?"error":"not_configured"), healthy:health[(c.registry_key||c.key||"").toUpperCase()]}));
+        live=true;
+      }catch(e2){ rows=null; }
+    }
+  }
+  if(!rows){ rows=D.connectors; live=false; }
+
+  // Normalize to one shape regardless of which endpoint answered.
+  const norm=rows.map(c=>({
+    key:c.key||c.registry_key||c.source_system||c.name,
+    name:c.name||c.key||c.source_system||"—",
+    vendor:c.vendor||"",
+    category:c.category||"other",
+    maturity:c.maturity||"beta",
+    auth:(c.auth_method||c.auth||"").replace(/_/g," "),
+    mode:c.mode||(c.healthy===true?"connected":c.healthy===false?"error":"not_configured"),
+    controls:(c.controls_covered!=null?c.controls_covered:null),
+    evidence:(c.evidence_count!=null?c.evidence_count:(c.assets!=null?c.assets:0)),
+    last_sync:c.last_sync_at||c.last_sync||null,
+    error:c.last_error||null,
+  }));
+
+  const MODE={
+    connected:{cls:"c-pass",label:"Connected"},
+    demo:{cls:"c-focus",label:"Demo"},
+    error:{cls:"c-fail",label:"Error"},
+    not_configured:{cls:"c-dim",label:"Not configured"},
+    not_connected:{cls:"c-dim",label:"Not configured"},
+  };
+  const cats=[...new Set(norm.map(c=>c.category))].sort();
+  const connectedN=norm.filter(c=>c.mode==="connected").length;
+  const liveN=norm.filter(c=>c.mode==="connected"||c.mode==="demo").length;
+  const prodN=norm.filter(c=>c.maturity==="production").length;
+  const evidenceN=norm.reduce((a,c)=>a+(c.evidence||0),0);
+
+  function draw(){
+    let r=norm.slice();
+    if(CONN.cat!=="all")r=r.filter(c=>c.category===CONN.cat);
+    if(CONN.show==="active")r=r.filter(c=>c.mode==="connected"||c.mode==="demo");
+    r.sort((a,b)=>{const o={connected:0,demo:1,error:2,not_configured:3,not_connected:3};return (o[a.mode]-o[b.mode])||a.name.localeCompare(b.name);});
+    host.innerHTML=`
+    <div class="readouts">
+      <div class="ro"><div class="k">Catalogued${liveBadge(live)}</div><div class="v num">${norm.length}</div><div class="s">${cats.length} categories</div></div>
+      <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Connected</div><div class="v num">${connectedN}</div><div class="s">${liveN} active incl. demo</div></div>
+      <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Evidence collected</div><div class="v num">${evidenceN}</div></div>
+      <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Production-grade</div><div class="v num">${prodN}</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h">
+        <div class="seg" id="connCat"><button class="${CONN.cat==='all'?'on':''}" data-c="all">All</button>${cats.map(c=>`<button class="${CONN.cat===c?'on':''}" data-c="${esc(c)}">${esc(titlecase(c))}</button>`).join("")}</div>
+        <div class="sp"></div>
+        <div class="seg" id="connShow"><button class="${CONN.show==='all'?'on':''}" data-s="all">All</button><button class="${CONN.show==='active'?'on':''}" data-s="active">Active only</button></div>
+        <button class="btn sm" style="margin-left:10px" onclick="toast('Sync triggered for connected sources')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button>
+      </div>
+      <div class="panel-b flush"><div class="tbl-scroll"><table>
+        <thead><tr><th>Connector</th><th>Category</th><th>Maturity</th><th>Controls</th><th>Evidence</th><th>Auth</th><th>Status</th><th class="right">Last sync</th></tr></thead>
+        <tbody>${r.map(c=>{const md=MODE[c.mode]||MODE.not_configured;return `<tr>
+          <td><b>${esc(c.name)}</b>${c.vendor&&c.vendor.toLowerCase()!==c.name.toLowerCase()?`<div class="t2">${esc(c.vendor)}</div>`:""}</td>
+          <td style="color:var(--body)">${esc(titlecase(c.category))}</td>
+          <td><span class="chip ${c.maturity==='production'?'c-pass':'c-warn'}"><span class="d"></span>${esc(titlecase(c.maturity))}</span></td>
+          <td class="num">${c.controls!=null?c.controls:"—"}</td>
+          <td class="num">${c.evidence||"—"}</td>
+          <td class="mono" style="font-size:11px;color:var(--steel)">${esc(c.auth||"—")}</td>
+          <td><span class="chip ${md.cls}"><span class="d"></span>${md.label}</span>${c.error?`<div class="t2" style="color:var(--fail)">${esc(c.error)}</div>`:""}</td>
+          <td class="right mono" style="font-size:11px;color:var(--steel)">${c.last_sync?ago(c.last_sync):"—"}</td></tr>`;}).join("")||`<tr><td colspan="8">${emptyState("No connectors","Nothing matches this filter.")}</td></tr>`}</tbody>
+      </table></div></div>
+    </div>`;
+    host.querySelectorAll("#connCat button").forEach(b=>b.onclick=()=>{CONN.cat=b.dataset.c;draw();});
+    host.querySelectorAll("#connShow button").forEach(b=>b.onclick=()=>{CONN.show=b.dataset.s;draw();});
+  }
+  draw();
 };
 
 /* ---------- AI INVENTORY ---------- */
@@ -935,235 +995,7 @@ RENDER.reports = async function(){
   </div></div>`;
 };
 </script>
-<script>
-/* ---------- POLICIES (compliance as code) ---------- */
-RENDER.policy = async function(){
-  const m=main();
-  m.innerHTML=viewHead("Policies","Compliance encoded as OPA Rego. Each policy evaluates connector evidence into a pass or fail — version-controlled, testable, auditable.","","code / 01");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading policies…</div>`;
-  const[pl]=await Promise.all([load(withTenant("/policies"),D.policies)]);
-  const rows=pl.data||D.policies;
-  host.innerHTML=`
-  <div class="readouts">
-    <div class="ro"><div class="k">Policies</div><div class="v num">${rows.length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Published</div><div class="v num">${rows.filter(p=>p.status==="published").length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Draft</div><div class="v num">${rows.filter(p=>p.status==="draft").length}</div></div>
-    <div class="ro"><div class="k">Engine</div><div class="v num" style="font-size:20px;font-family:var(--mono)">OPA</div><div class="s">Rego policy-as-code</div></div>
-  </div>
-  <div class="panel"><div class="panel-h"><h3>Policy library</h3><div class="sp"></div><button class="btn sm" onclick="toast('Evaluation queued across connected sources')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9V3z'/></svg>Evaluate all</button></div>
-    <div class="panel-b flush"><div class="tbl-scroll"><table>
-      <thead><tr><th>Policy</th><th>Lang</th><th>Version</th><th>Coverage</th><th>Status</th><th class="right">Last eval</th></tr></thead>
-      <tbody>${rows.map(p=>`<tr>
-        <td><div class="id">${esc(p.id)}</div><div class="t2">${esc(p.title)}</div></td>
-        <td class="mono" style="font-size:11px;color:var(--steel)">${esc(p.lang)}</td>
-        <td class="mono" style="font-size:12px">v${esc(p.version)}</td>
-        <td>${(p.coverage||[]).map(c=>`<span class="chip c-out">${esc(c)}</span>`).join(" ")}</td>
-        <td>${p.status==='published'?chip('published','c-pass'):chip('draft','c-warn')}</td>
-        <td class="right mono" style="font-size:11px;color:var(--steel)">${p.last_eval?ago(p.last_eval):"never"}</td></tr>`).join("")}</tbody>
-    </table></div></div></div>`;
-};
 
-/* ---------- MIDDLEWARE (integrity pipeline) ---------- */
-RENDER.middleware = async function(){
-  const m=main();
-  m.innerHTML=viewHead("Integrity pipeline","How evidence moves from source to signed record: collected, normalized, hashed into a Merkle tree, then sealed. Tamper anywhere and the root no longer matches.","","code / 02");
-  const m2=el("div");m.appendChild(m2);
-  const stage=(n,t,d,st)=>`<div class="panel" style="margin:0;flex:1;min-width:170px">
-    <div class="panel-b" style="padding:14px">
-      <div class="flex" style="justify-content:space-between"><span class="mono" style="font-size:10px;color:var(--faint)">STAGE ${n}</span>${chip(st,st==='ok'?'c-pass':'c-focus')}</div>
-      <div style="font-weight:600;margin-top:8px">${esc(t)}</div><div class="t2" style="margin-top:4px">${esc(d)}</div>
-    </div></div>`;
-  m2.innerHTML=`
-  <div class="flex wrap" style="gap:10px;margin-bottom:16px">
-    ${stage("01","Collect","Connector pulls raw evidence, read-only","ok")}
-    <div style="color:var(--rule2);align-self:center">→</div>
-    ${stage("02","Normalize","Mapped into shared control schema","ok")}
-    <div style="color:var(--rule2);align-self:center">→</div>
-    ${stage("03","Hash","SHA-256 leaf per record","ok")}
-    <div style="color:var(--rule2);align-self:center">→</div>
-    ${stage("04","Seal","Merkle root signed & versioned","ok")}
-  </div>
-  <div class="grid g-2">
-    <div class="panel"><div class="panel-h"><h3>Integrity status</h3></div><div class="panel-b">
-      <div class="dl">
-        <dt>Merkle root</dt><dd class="mono" style="font-size:12px">b7e1c4…f02a · sealed ${ago(new Date(Date.now()-2*36e5).toISOString())}</dd>
-        <dt>Records</dt><dd>1,284 evidence leaves across 9 connectors</dd>
-        <dt>Verification</dt><dd>${chip('root matches','c-pass')} last checked ${ago(new Date(Date.now()-30*6e4).toISOString())}</dd>
-        <dt>Versioning</dt><dd>Alembic-tracked schema · migration head current</dd>
-      </div>
-      <div class="note mt">Any change to a sealed record recomputes a different root, so silent edits to evidence are detectable after the fact.</div>
-    </div></div>
-    <div class="panel"><div class="panel-h"><h3>Recent seals</h3></div><div class="panel-b">${barlist([
-      ["AWS",42,64,"var(--focus)"],["Okta",318,318,"var(--pass)"],["GitHub",64,64,"var(--warn)"],["Jira",1280,1280,"var(--pass)"],["SSH/Linux",11,64,"var(--focus)"]
-    ])}</div></div>
-  </div>`;
-};
-
-/* ---------- EVIDENCE HUB ---------- */
-RENDER.evidencehub = async function(){
-  const m=main();
-  m.innerHTML=viewHead("Evidence","Collected artifacts behind each control, each one hashed so an auditor can verify it hasn't changed since collection.","","evidence / 04");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading evidence…</div>`;
-  const[ev]=await Promise.all([load(withTenant("/evidence"),D.evidence)]);
-  const rows=ev.data||D.evidence;
-  host.innerHTML=`
-  <div class="readouts">
-    <div class="ro"><div class="k">Records</div><div class="v num">${rows.length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Verified</div><div class="v num">${rows.filter(r=>r.verified).length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Pending verify</div><div class="v num">${rows.filter(r=>!r.verified).length}</div></div>
-    <div class="ro"><div class="k">Sources</div><div class="v num">${new Set(rows.map(r=>r.source)).size}</div></div>
-  </div>
-  <div class="panel"><div class="panel-h"><h3>Evidence ledger</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
-    <thead><tr><th>ID</th><th>Control</th><th>Source</th><th>Hash (SHA-256)</th><th>Integrity</th><th class="right">Collected</th></tr></thead>
-    <tbody>${rows.map(r=>`<tr>
-      <td class="id" style="color:var(--steel)">${esc(r.id)}</td>
-      <td class="id">${esc(r.control)}</td>
-      <td class="mono" style="font-size:12px">${esc(r.source)}</td>
-      <td class="mono" style="font-size:12px;color:var(--body)">${esc(r.hash)}</td>
-      <td>${r.verified?chip('verified','c-pass'):chip('pending','c-warn')}</td>
-      <td class="right mono" style="font-size:11px;color:var(--steel)">${ago(r.collected_at)}</td></tr>`).join("")}</tbody>
-  </table></div></div></div>`;
-};
-
-/* ---------- THREAT INTEL ---------- */
-RENDER.threat = async function(){
-  const m=main();
-  m.innerHTML=viewHead("Threat intel","Known-exploited vulnerabilities cross-referenced against your assets, with CISA remediation due dates.","","intelligence / 03");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Pulling KEV feed…</div>`;
-  const[kv]=await Promise.all([load("/threat/kev",D.kev)]);
-  const rows=kv.data||D.kev;
-  const overdue=rows.filter(k=>new Date(k.due)<Date.now()).length;
-  host.innerHTML=`
-  <div class="readouts">
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>KEV matches</div><div class="v num">${rows.length}</div><div class="s">affecting your assets</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Past due</div><div class="v num">${overdue}</div></div>
-    <div class="ro"><div class="k">Max CVSS</div><div class="v num">${Math.max(...rows.map(k=>k.cvss)).toFixed(1)}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Actively exploited</div><div class="v num">${rows.filter(k=>k.exploited).length}</div></div>
-  </div>
-  <div class="panel"><div class="panel-h"><h3>Known-exploited vulnerabilities</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
-    <thead><tr><th>CVE</th><th>Name</th><th>CVSS</th><th>Affected</th><th>Exploited</th><th class="right">Remediate by</th></tr></thead>
-    <tbody>${rows.sort((a,b)=>new Date(a.due)-new Date(b.due)).map(k=>{const od=new Date(k.due)<Date.now();const c=k.cvss>=9?'c-fail':k.cvss>=7?'c-warn':'c-focus';return `<tr>
-      <td class="id" style="color:var(--focus)">${esc(k.cve)}</td>
-      <td>${esc(k.name)}</td>
-      <td><span class="chip ${c}"><span class="d"></span>${k.cvss.toFixed(1)}</span></td>
-      <td style="color:var(--body)">${esc(k.affected)}</td>
-      <td>${k.exploited?chip('yes','c-fail'):chip('no','c-dim')}</td>
-      <td class="right mono" style="font-size:11px;color:${od?'var(--fail)':'var(--steel)'}">${od?'overdue · ':''}${fmtDate(k.due)}</td></tr>`;}).join("")}</tbody>
-  </table></div></div></div>`;
-};
-
-/* ---------- RESPONSE (remediation) ---------- */
-RENDER.response = async function(){
-  const m=main();
-  m.innerHTML=viewHead("Response","Turn failing controls into ranked remediation work — ordered by the risk each fix retires per unit of effort.","","intelligence / 01");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Computing plan…</div>`;
-  const[fnd]=await Promise.all([load(withTenant("/findings?limit=200"),D.findings)]);
-  const open=(fnd.data||D.findings).filter(f=>["open","in_progress","fail"].includes(f.status));
-  const eff={critical:3,high:4,medium:2,low:1};const reduce={critical:9,high:7,medium:4,low:2};
-  const plan=open.map(f=>{const s=String(f.severity).toLowerCase();const e=eff[s]||3;const r=reduce[s]||3;return{...f,effort:e,impact:r,roi:(r/e)};}).sort((a,b)=>b.roi-a.roi);
-  host.innerHTML=`
-  <div class="readouts">
-    <div class="ro"><div class="k">Open items</div><div class="v num">${plan.length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Quick wins</div><div class="v num">${plan.filter(p=>p.roi>=3).length}</div><div class="s">high impact, low effort</div></div>
-    <div class="ro"><div class="k">Est. effort</div><div class="v num">${plan.reduce((a,p)=>a+p.effort,0)}</div><div class="s">story points</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Risk retired</div><div class="v num">${plan.reduce((a,p)=>a+p.impact,0)}</div></div>
-  </div>
-  <div class="panel"><div class="panel-h"><h3>Prioritized plan</h3><div class="sub" style="margin-left:auto">ordered by risk retired ÷ effort</div></div><div class="panel-b flush"><div class="tbl-scroll"><table>
-    <thead><tr><th>#</th><th>Remediation</th><th>Control</th><th>Severity</th><th>Effort</th><th>Risk retired</th><th>Priority</th></tr></thead>
-    <tbody>${plan.map((p,i)=>`<tr>
-      <td class="num" style="color:var(--faint)">${i+1}</td>
-      <td><div>${esc(p.title)}</div><div class="t2">${esc(p.source_system||"")}</div></td>
-      <td class="id">${esc(p.control_id)}</td>
-      <td>${sevChip(p.severity)}</td>
-      <td class="num">${p.effort}</td>
-      <td class="num">${p.impact}</td>
-      <td><span class="chip ${p.roi>=3?'c-pass':p.roi>=2?'c-warn':'c-dim'}"><span class="d"></span>${p.roi>=3?'do first':p.roi>=2?'next':'backlog'}</span></td></tr>`).join("")||`<tr><td colspan="7">${emptyState("Nothing to fix","No open failing controls.")}</td></tr>`}</tbody>
-  </table></div></div></div>`;
-};
-
-/* ---------- AUDITS ---------- */
-RENDER.audits = async function(){
-  const m=main();
-  m.innerHTML=viewHead("Audits","Engagements in flight, the evidence requests they generate, and where each one stands.","","posture / 05");
-  const m2=el("div");m.appendChild(m2);
-  const audits=[
-    {name:"SOC 2 Type II",auditor:"Prescient Assurance",window:"Apr–Sep",progress:72,requests:48,open:9,status:"in_progress"},
-    {name:"ISO 27001 Surveillance",auditor:"BSI",window:"Aug",progress:40,requests:31,open:18,status:"in_progress"},
-    {name:"HIPAA Readiness",auditor:"Internal",window:"Q3",progress:95,requests:22,open:1,status:"in_progress"},
-  ];
-  const waiv=D.waivers;
-  m2.innerHTML=`
-  <div class="grid g-3">${audits.map(a=>`<div class="panel"><div class="panel-b">
-    <div class="flex" style="justify-content:space-between"><b>${esc(a.name)}</b>${chip(a.status,'c-focus')}</div>
-    <div class="t2" style="margin-top:3px">${esc(a.auditor)} · ${esc(a.window)}</div>
-    <div style="margin-top:14px">${calBar("Evidence collected","",a.progress,a.progress>=80?'var(--pass)':'var(--warn)').replace('calrow','').replace(/<div class="top">[\s\S]*?<\/div>/,'')}</div>
-    <div class="flex" style="justify-content:space-between;margin-top:10px;font-size:12px"><span class="mono" style="color:var(--steel)">${a.requests} requests</span><span class="chip ${a.open>5?'c-warn':'c-pass'}"><span class="d"></span>${a.open} open</span></div>
-  </div></div>`).join("")}</div>
-  <div class="panel"><div class="panel-h"><div><h3>Exceptions &amp; waivers</h3><div class="sub">Accepted deviations with approver and expiry — kept out of the failing count while active</div></div></div>
-    <div class="panel-b flush"><div class="tbl-scroll"><table>
-      <thead><tr><th>Control</th><th>Reason</th><th>Approver</th><th>Status</th><th class="right">Expires</th></tr></thead>
-      <tbody>${waiv.map(w=>{const exp=new Date(w.expires_at)<Date.now();return `<tr>
-        <td class="id">${esc(w.control_id)}</td>
-        <td style="color:var(--body);max-width:420px">${esc(w.reason)}</td>
-        <td>${esc(w.approver||"—")}</td>
-        <td>${exp?chip('expired','c-dim'):chip('active','c-pass')}</td>
-        <td class="right mono" style="font-size:11px;color:${exp?'var(--fail)':'var(--steel)'}">${fmtDate(w.expires_at)}</td></tr>`;}).join("")}</tbody>
-    </table></div></div></div>`;
-};
-
-/* ---------- GRC PLATFORMS ---------- */
-RENDER.grcplatforms = function(){
-  const m=main();
-  m.innerHTML=viewHead("GRC platforms","Two-way sync with the GRC suites your auditors already use. Comp-Lens pushes evidence and pulls control mappings.","","evidence / 02");
-  const m2=el("div");m.appendChild(m2);
-  const plats=[
-    {n:"ServiceNow GRC",mode:"Bi-directional",health:"healthy",synced:"1,204 controls"},
-    {n:"Archer",mode:"Push evidence",health:"healthy",synced:"860 records"},
-    {n:"OneTrust",mode:"Pull mappings",health:"degraded",synced:"312 mappings"},
-    {n:"AuditBoard",mode:"Bi-directional",health:"not_connected",synced:"—"},
-  ];
-  const HM={healthy:"c-pass",degraded:"c-warn",not_connected:"c-dim"};
-  m2.innerHTML=`<div class="grid g-2">${plats.map(p=>`<div class="panel"><div class="panel-b">
-    <div class="flex" style="justify-content:space-between"><b style="font-size:14px">${esc(p.n)}</b><span class="chip ${HM[p.health]}"><span class="d"></span>${titlecase(p.health)}</span></div>
-    <div class="dl mt"><dt>Mode</dt><dd>${esc(p.mode)}</dd><dt>Synced</dt><dd class="mono" style="font-size:12px">${esc(p.synced)}</dd></div>
-    <div class="flex" style="margin-top:14px;gap:8px">${p.health==='not_connected'?'<button class="btn sm primary" onclick="toast(\'Connection wizard opens on your own instance\')">Connect</button>':'<button class="btn sm" onclick="toast(\'Sync triggered\')">Sync</button><button class="btn sm ghost">Mappings</button>'}</div>
-  </div></div>`).join("")}</div>`;
-};
-
-/* ---------- KNOWLEDGE GRAPH ---------- */
-RENDER.graph = function(){ ontologyGraph("Knowledge graph","How connectors, controls, evidence and frameworks relate. A failing control lights up everything downstream that depends on it.","evidence / 03",false); };
-RENDER.trustgraph = function(){ ontologyGraph("Trust graph","Vendors, the controls they touch, and the risks that flow through them into your environment.","risk / 03",true); };
-function ontologyGraph(title,desc,eyebrow,vendorMode){
-  const m=main();m.innerHTML=viewHead(title,desc,"",eyebrow);const m2=el("div");m.appendChild(m2);
-  const W=720,H=380;
-  const cols=vendorMode
-    ?[{x:120,label:"Vendors",color:"var(--focus)",nodes:["Cloudflare","Datadog","SmallTools","LegacyMailer"]},
-      {x:360,label:"Controls",color:"var(--steel)",nodes:["SC-7","AU-2","RA-5","AC-2"]},
-      {x:600,label:"Risks",color:"var(--fail)",nodes:["R-011","R-013","R-009"]}]
-    :[{x:120,label:"Connectors",color:"var(--focus)",nodes:["AWS","Okta","GitHub","Jira"]},
-      {x:360,label:"Controls",color:"var(--steel)",nodes:["SC-28","IA-2","SA-15","AU-9"]},
-      {x:600,label:"Frameworks",color:"var(--pass)",nodes:["SOC2","ISO27001","NIST"]}];
-  const pos={};cols.forEach(c=>{const gap=H/(c.nodes.length+1);c.nodes.forEach((n,i)=>pos[n]={x:c.x,y:gap*(i+1),color:c.color});});
-  const edges=vendorMode
-    ?[["Cloudflare","SC-7"],["Cloudflare","AU-2"],["Datadog","AU-2"],["SmallTools","AC-2"],["LegacyMailer","RA-5"],["SC-7","R-013"],["RA-5","R-013"],["AC-2","R-009"],["AU-2","R-011"]]
-    :[["AWS","SC-28"],["AWS","AU-9"],["Okta","IA-2"],["GitHub","SA-15"],["Jira","AU-9"],["SC-28","SOC2"],["SC-28","ISO27001"],["IA-2","SOC2"],["SA-15","NIST"],["AU-9","ISO27001"]];
-  const risky=vendorMode?new Set(["LegacyMailer","SmallTools","RA-5","AC-2","R-013","R-009","R-011"]):new Set(["GitHub","SA-15","SC-28"]);
-  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-height:420px">`;
-  cols.forEach(c=>svg+=`<text x="${c.x}" y="20" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" letter-spacing="1.5" fill="var(--faint)">${c.label.toUpperCase()}</text>`);
-  edges.forEach(([a,b])=>{const p=pos[a],q=pos[b];if(!p||!q)return;const bad=risky.has(a)&&risky.has(b);
-    svg+=`<path d="M${p.x+8} ${p.y} C${(p.x+q.x)/2} ${p.y},${(p.x+q.x)/2} ${q.y},${q.x-8} ${q.y}" fill="none" stroke="${bad?'var(--fail)':'var(--rule2)'}" stroke-width="${bad?1.6:1}" opacity="${bad?.8:.5}"/>`;});
-  Object.entries(pos).forEach(([n,p])=>{const bad=risky.has(n);
-    svg+=`<circle cx="${p.x}" cy="${p.y}" r="7" fill="var(--face)" stroke="${bad?'var(--fail)':p.color}" stroke-width="2"/>
-    <text x="${p.x}" y="${p.y-13}" text-anchor="middle" font-family="IBM Plex Mono" font-size="11" fill="var(--body)">${esc(n)}</text>`;});
-  svg+=`</svg>`;
-  m2.innerHTML=`<div class="panel"><div class="panel-b">${svg}
-    <div class="gauge-legend" style="justify-content:flex-start;margin-top:4px">
-      ${cols.map(c=>`<span class="gleg"><span class="sw" style="background:${c.color}"></span>${c.label}</span>`).join("")}
-      <span class="gleg"><span class="sw" style="background:var(--fail)"></span>At-risk path</span>
-    </div></div></div>
-    <div class="note">Trace any node to see what it touches. Red paths mark a chain where a failing item propagates ${vendorMode?'vendor risk into your controls':'an evidence gap into a framework'}.</div>`;
-}
-</script>
 <script>
 /* ---------- POLICIES (compliance as code) ---------- */
 RENDER.policy = async function(){
@@ -1362,37 +1194,152 @@ RENDER.grcplatforms = function(){
   <div class="note">Already invested in a GRC suite? Comp-Lens sits underneath it as the <b>evidence engine</b> — your team keeps working where they are while assessments run automatically.</div>`;
 };
 
-/* ---------- KNOWLEDGE GRAPH ---------- */
-RENDER.graph = function(){ graphView("Knowledge graph","How evidence, controls and frameworks connect. Trace any framework requirement back to the exact record that satisfies it.","evidence / 03",false); };
-RENDER.trustgraph = function(){ graphView("Trust graph","Vendors, the systems they touch, and the controls that depend on them — so a vendor's weakness surfaces as control risk.","risk / 03",true); };
-function graphView(title,desc,eyebrow,vendor){
-  const m=main();
-  m.innerHTML=viewHead(title,desc,"",eyebrow);
-  const m2=el("div");m.appendChild(m2);
-  const W=720,H=420;
-  const nodes=vendor?[
-    {x:130,y:120,r:22,c:"var(--focus)",l:"Cloudflare",t:"vendor"},{x:130,y:300,r:18,c:"var(--focus)",l:"Datadog",t:"vendor"},
-    {x:370,y:90,r:16,c:"var(--steel)",l:"Edge proxy",t:"system"},{x:370,y:210,r:16,c:"var(--steel)",l:"Logging",t:"system"},{x:370,y:330,r:16,c:"var(--steel)",l:"App tier",t:"system"},
-    {x:600,y:130,r:14,c:"var(--pass)",l:"SC-7",t:"control"},{x:600,y:230,r:14,c:"var(--warn)",l:"AU-9",t:"control"},{x:600,y:330,r:14,c:"var(--fail)",l:"SC-28",t:"control"},
-  ]:[
-    {x:120,y:210,r:22,c:"var(--focus)",l:"SOC 2",t:"framework"},
-    {x:360,y:90,r:16,c:"var(--steel)",l:"CC6.1",t:"requirement"},{x:360,y:210,r:16,c:"var(--steel)",l:"CC6.7",t:"requirement"},{x:360,y:330,r:16,c:"var(--steel)",l:"CC7.2",t:"requirement"},
-    {x:590,y:70,r:13,c:"var(--pass)",l:"IA-2",t:"control"},{x:590,y:160,r:13,c:"var(--fail)",l:"SC-28",t:"control"},{x:590,y:250,r:13,c:"var(--pass)",l:"AU-2",t:"control"},{x:590,y:350,r:13,c:"var(--warn)",l:"AU-9",t:"control"},
+/* ---------- KNOWLEDGE / TRUST GRAPH (2D + 3D) ---------- */
+let GMODE="2d";
+RENDER.graph = function(){ graphView("Knowledge graph","How evidence, controls and frameworks connect. Trace any framework requirement back to the exact record that satisfies it. Switch to 3D and drag to orbit the ontology.","evidence / 03",false); };
+RENDER.trustgraph = function(){ graphView("Trust graph","Vendors, the systems they touch, and the controls that depend on them — so a vendor's weakness surfaces as control risk. Switch to 3D and drag to orbit.","risk / 03",true); };
+
+function cssvar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#888";}
+
+function graphModel(vendor){
+  // tier: 0 = source (framework/vendor), 1 = middle, 2 = controls
+  const nodes = vendor ? [
+    {id:"cf",label:"Cloudflare",tier:0,type:"vendor",col:"--focus"},
+    {id:"dd",label:"Datadog",tier:0,type:"vendor",col:"--focus"},
+    {id:"edge",label:"Edge proxy",tier:1,type:"system",col:"--steel"},
+    {id:"log",label:"Logging",tier:1,type:"system",col:"--steel"},
+    {id:"app",label:"App tier",tier:1,type:"system",col:"--steel"},
+    {id:"sc7",label:"SC-7",tier:2,type:"control",col:"--pass"},
+    {id:"au9",label:"AU-9",tier:2,type:"control",col:"--warn"},
+    {id:"sc28",label:"SC-28",tier:2,type:"control",col:"--fail"},
+  ] : [
+    {id:"soc2",label:"SOC 2",tier:0,type:"framework",col:"--focus"},
+    {id:"cc61",label:"CC6.1",tier:1,type:"requirement",col:"--steel"},
+    {id:"cc67",label:"CC6.7",tier:1,type:"requirement",col:"--steel"},
+    {id:"cc72",label:"CC7.2",tier:1,type:"requirement",col:"--steel"},
+    {id:"ia2",label:"IA-2",tier:2,type:"control",col:"--pass"},
+    {id:"sc28",label:"SC-28",tier:2,type:"control",col:"--fail"},
+    {id:"au2",label:"AU-2",tier:2,type:"control",col:"--pass"},
+    {id:"au9",label:"AU-9",tier:2,type:"control",col:"--warn"},
   ];
-  const edges=vendor?[[0,2],[0,3],[1,3],[0,4],[2,5],[3,6],[4,7]]:[[0,1],[0,2],[0,3],[1,4],[2,5],[3,6],[3,7]];
-  const line=(a,b)=>{const n1=nodes[a],n2=nodes[b];const risk=n2.c==="var(--fail)"||n2.c==="var(--warn)";return `<line x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" stroke="${risk?'var(--fail)':'var(--rule2)'}" stroke-width="${risk?1.6:1}" stroke-dasharray="${risk?'4 3':'none'}" opacity="${risk?.7:.5}"/>`;};
-  const dot=n=>`<g><circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="var(--face)" stroke="${n.c}" stroke-width="2"/><circle cx="${n.x}" cy="${n.y}" r="${n.r-7}" fill="${n.c}" opacity="0.16"/>
-    <text x="${n.x}" y="${n.y-n.r-7}" text-anchor="middle" font-family="IBM Plex Mono" font-size="11" fill="var(--ink)">${esc(n.l)}</text>
-    <text x="${n.x}" y="${n.y+n.r+15}" text-anchor="middle" font-family="IBM Plex Mono" font-size="8.5" letter-spacing="1" fill="var(--faint)">${esc(n.t.toUpperCase())}</text></g>`;
-  const legend=vendor?[["Vendor","var(--focus)"],["System","var(--steel)"],["Control · ok","var(--pass)"],["Control · at risk","var(--fail)"]]:[["Framework","var(--focus)"],["Requirement","var(--steel)"],["Control · pass","var(--pass)"],["Control · fail","var(--fail)"]];
-  m2.innerHTML=`<div class="panel"><div class="panel-h"><h3>${esc(title)}</h3><div class="sp"></div>${legend.map(l=>`<span class="gleg"><span class="sw" style="background:${l[1]}"></span>${l[0]}</span>`).join("&nbsp;&nbsp;")}</div>
-  <div class="panel-b" style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:600px;max-width:760px;margin:0 auto;display:block">
-    ${edges.map(e=>line(e[0],e[1])).join("")}${nodes.map(dot).join("")}
-  </svg></div></div>
-  <div class="note">Dashed red edges trace a path from a failing control back through the requirement and ${vendor?"vendor":"framework"} it affects — that's the chain an auditor follows, made visible.</div>`;
+  const edges = vendor ? [
+    ["cf","edge"],["cf","log"],["dd","log"],["cf","app"],
+    ["edge","sc7"],["log","au9"],["app","sc28"],
+  ] : [
+    ["soc2","cc61"],["soc2","cc67"],["soc2","cc72"],
+    ["cc61","ia2"],["cc67","sc28"],["cc72","au2"],["cc72","au9"],
+  ];
+  const byId=Object.fromEntries(nodes.map(n=>[n.id,n]));
+  // assign 3D coords: tier along X; ring in Y-Z plane within tier
+  const tiers={0:[],1:[],2:[]};nodes.forEach(n=>tiers[n.tier].push(n));
+  Object.entries(tiers).forEach(([tt,arr])=>{
+    const t=+tt, n=arr.length, R=n>1?1.7:0;
+    arr.forEach((nd,i)=>{const a=(i/n)*Math.PI*2 + (t*0.6);
+      nd.x=(t-1)*2.3; nd.y=R*Math.cos(a); nd.z=R*Math.sin(a);});
+  });
+  const risky=id=>{const c=byId[id].col;return c==="--fail"||c==="--warn";};
+  edges.forEach(e=>e.push(risky(e[1])||risky(e[0])));
+  return {nodes,edges,byId};
 }
-</script>
-<script>
+function graphLegend(vendor){
+  const L=vendor?[["Vendor","--focus"],["System","--steel"],["Control · ok","--pass"],["Control · at risk","--fail"]]
+                :[["Framework","--focus"],["Requirement","--steel"],["Control · pass","--pass"],["Control · fail","--fail"]];
+  return L.map(l=>`<span class="gleg"><span class="sw" style="background:var(${l[1]})"></span>${l[0]}</span>`).join("&nbsp;&nbsp;");
+}
+
+function graphView(title,desc,eyebrow,vendor){
+  if(window._gstop){window._gstop();window._gstop=null;}
+  const m=main();
+  m.innerHTML=viewHead(title,desc,
+    `<div class="seg" id="gmode"><button data-m="2d" class="${GMODE==='2d'?'on':''}">2D</button><button data-m="3d" class="${GMODE==='3d'?'on':''}">3D</button></div>`,eyebrow);
+  const m2=el("div");m.appendChild(m2);
+  const model=graphModel(vendor);
+  const panel=el("div","panel");
+  panel.innerHTML=`<div class="panel-h"><h3>${esc(title)}</h3><div class="sp"></div>${graphLegend(vendor)}</div>
+    <div class="panel-b" id="gbody" style="padding:${GMODE==='3d'?'0':'16px'}"></div>`;
+  m2.appendChild(panel);
+  m2.insertAdjacentHTML("beforeend",
+    `<div class="note">${GMODE==='3d'?'Drag to orbit · release to auto-rotate. ':''}Dashed red edges trace a path from a failing control back through the ${vendor?'system and vendor':'requirement and framework'} it affects — the chain an auditor follows, made visible.</div>`);
+  if(GMODE==="2d") drawGraph2D($("#gbody"),model,vendor);
+  else drawGraph3D($("#gbody"),model);
+  m.querySelectorAll("#gmode button").forEach(b=>b.onclick=()=>{GMODE=b.dataset.m;render();});
+}
+
+function drawGraph2D(host,model,vendor){
+  const W=760,H=420,cx=W/2,cy=H/2,SX=150,SY=64;
+  const px=n=>cx+n.x*SX, py=n=>cy+n.y*SY*1.15;
+  const node=n=>{const c=`var(${n.col})`;const r=n.tier===0?22:n.tier===1?16:13;const x=px(n),y=py(n);
+    return `<g><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="var(--face)" stroke="${c}" stroke-width="2"/>
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r-7}" fill="${c}" opacity="0.16"/>
+      <text x="${x.toFixed(1)}" y="${(y-r-7).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono" font-size="11" fill="var(--ink)">${esc(n.label)}</text>
+      <text x="${x.toFixed(1)}" y="${(y+r+15).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono" font-size="8.5" letter-spacing="1" fill="var(--faint)">${esc(n.type.toUpperCase())}</text></g>`;};
+  const edge=e=>{const a=model.byId[e[0]],b=model.byId[e[1]],risk=e[2];
+    return `<line x1="${px(a).toFixed(1)}" y1="${py(a).toFixed(1)}" x2="${px(b).toFixed(1)}" y2="${py(b).toFixed(1)}" stroke="${risk?'var(--fail)':'var(--rule2)'}" stroke-width="${risk?1.6:1}" stroke-dasharray="${risk?'4 3':'none'}" opacity="${risk?.7:.5}"/>`;};
+  host.innerHTML=`<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:620px;max-width:780px;margin:0 auto;display:block">
+    ${model.edges.map(edge).join("")}${model.nodes.map(node).join("")}</svg></div>`;
+}
+
+function drawGraph3D(host,model){
+  host.innerHTML=`<canvas id="gcanvas" style="width:100%;height:460px;display:block;cursor:grab;touch-action:none"></canvas>`;
+  const cv=$("#gcanvas"),ctx=cv.getContext("2d");
+  let yaw=0.5, pitch=-0.35, dragging=false, lx=0, ly=0, vyaw=0.0035, idle=true;
+  function size(){const dpr=Math.min(2,window.devicePixelRatio||1);const w=cv.clientWidth,h=cv.clientHeight;
+    cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);return{w,h};}
+  let dim=size();
+  const onResize=()=>{dim=size();};
+  window.addEventListener("resize",onResize);
+  function rot(p){
+    // yaw around Y, then pitch around X
+    let x=p.x,y=p.y,z=p.z;
+    let cz=Math.cos(yaw),sz=Math.sin(yaw); let x1=x*cz+z*sz, z1=-x*sz+z*cz;
+    let cx2=Math.cos(pitch),sx2=Math.sin(pitch); let y1=y*cx2-z1*sx2, z2=y*sx2+z1*cx2;
+    return{x:x1,y:y1,z:z2};
+  }
+  function frame(){
+    const {w,h}=dim, cx=w/2, cy=h/2, UNIT=Math.min(w,h)/5.4, f=6;
+    const col={ink:cssvar("--ink"),face:cssvar("--face"),rule:cssvar("--rule2"),fail:cssvar("--fail"),
+      faint:cssvar("--faint")};
+    ctx.clearRect(0,0,w,h);
+    if(idle){yaw+=vyaw;}
+    const P=model.nodes.map(n=>{const r=rot(n);const scale=f/(f-r.z);return{n,rx:r.x,ry:r.y,rz:r.z,
+      sx:cx+r.x*scale*UNIT, sy:cy-r.y*scale*UNIT, scale};});
+    const pid=Object.fromEntries(P.map(p=>[p.n.id,p]));
+    // edges first
+    model.edges.forEach(e=>{const a=pid[e[0]],b=pid[e[1]],risk=e[2];
+      const depth=(a.scale+b.scale)/2;
+      ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);
+      ctx.strokeStyle=risk?col.fail:col.rule; ctx.globalAlpha=clamp(0.18+(depth-0.7)*0.7,0.1,0.85);
+      ctx.lineWidth=risk?1.8:1; if(risk)ctx.setLineDash([5,4]);else ctx.setLineDash([]);
+      ctx.stroke();});
+    ctx.setLineDash([]);ctx.globalAlpha=1;
+    // nodes far→near
+    P.sort((a,b)=>a.rz-b.rz).forEach(p=>{
+      const c=cssvar(p.n.col); const base=p.n.tier===0?14:p.n.tier===1?10:8.5;
+      const r=base*p.scale; const a=clamp(0.45+(p.scale-0.7)*0.9,0.4,1);
+      ctx.globalAlpha=a;
+      ctx.beginPath();ctx.arc(p.sx,p.sy,r,0,7);ctx.fillStyle=col.face;ctx.fill();
+      ctx.lineWidth=2;ctx.strokeStyle=c;ctx.stroke();
+      ctx.globalAlpha=a*0.18;ctx.beginPath();ctx.arc(p.sx,p.sy,Math.max(1,r-5),0,7);ctx.fillStyle=c;ctx.fill();
+      ctx.globalAlpha=a;
+      ctx.fillStyle=col.ink;ctx.font="600 "+(11*Math.max(.8,p.scale)).toFixed(0)+"px 'IBM Plex Mono',monospace";
+      ctx.textAlign="center";ctx.fillText(p.n.label,p.sx,p.sy-r-6);
+      ctx.globalAlpha=a*0.7;ctx.fillStyle=col.faint;ctx.font="8px 'IBM Plex Mono',monospace";
+      ctx.fillText(p.n.type.toUpperCase(),p.sx,p.sy+r+12);
+    });
+    ctx.globalAlpha=1;
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=requestAnimationFrame(frame);
+  function down(e){dragging=true;idle=false;cv.style.cursor="grabbing";const t=e.touches?e.touches[0]:e;lx=t.clientX;ly=t.clientY;}
+  function move(e){if(!dragging)return;const t=e.touches?e.touches[0]:e;
+    yaw+=(t.clientX-lx)*0.01;pitch=clamp(pitch+(t.clientY-ly)*0.01,-1.3,1.3);lx=t.clientX;ly=t.clientY;e.preventDefault();}
+  function up(){dragging=false;cv.style.cursor="grab";setTimeout(()=>{if(!dragging)idle=true;},1500);}
+  cv.addEventListener("mousedown",down);window.addEventListener("mousemove",move);window.addEventListener("mouseup",up);
+  cv.addEventListener("touchstart",down,{passive:false});cv.addEventListener("touchmove",move,{passive:false});cv.addEventListener("touchend",up);
+  window._gstop=function(){cancelAnimationFrame(raf);window.removeEventListener("resize",onResize);
+    window.removeEventListener("mousemove",move);window.removeEventListener("mouseup",up);};
+}
+
 /* ===================== NAV ===================== */
 const ICON={
   overview:'<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>',
@@ -1437,6 +1384,7 @@ function buildNav(){
 }
 /* ===================== ROUTER ===================== */
 function render(){
+  if(window._gstop){window._gstop();window._gstop=null;}
   buildNav();
   $("#crumb").innerHTML=`comp-lens / <b>${esc(LABELS[STATE.active]||STATE.active)}</b>`;
   const fn=RENDER[STATE.active];
