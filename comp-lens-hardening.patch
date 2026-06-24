@@ -1,0 +1,271 @@
+diff --git a/app/services/integration.py b/app/services/integration.py
+index 7c12cbd..0e5c239 100644
+--- a/app/services/integration.py
++++ b/app/services/integration.py
+@@ -36,6 +36,13 @@ _VULN_CONTROLS = {"RA-5", "SI-2", "SI-3", "SC-7", "CA-7", "RA-3"}
+ POLICY_SOURCE = "policy-as-code"
+ AIGOV_CATEGORY = "ai_governance"
+ 
++# Stable, collision-free idempotency markers embedded in a risk's description.
++# We key dedup/escalation on these rather than on mutable titles or cumulative state.
++def _ai_link(system_id: str) -> str:
++    return f"[ai-system:{system_id}]"
++
++_KEV_ESCALATED_TAG = "[kev-escalated]"
++
+ 
+ # ── 1. POLICY ENGINE → FINDINGS ──────────────────────────────────────
+ def evaluate_policies_to_findings(db: Session, tenant_id: str,
+@@ -117,14 +124,16 @@ def ai_system_to_risk(db: Session, tenant_id: str, system_id: str) -> Dict[str,
+     likelihood = 4 if risk["residual_risk"] >= 50 else 2
+ 
+     svc = RiskService(db)
+-    # idempotent: don't duplicate the risk for the same system
++    # idempotent: key on the system_id marker, not a mutable title suffix (which
++    # collides across similar names and breaks on rename).
++    link = _ai_link(system_id)
+     existing = [r for r in svc.list(tenant_id)
+-                if r.get("category") == AIGOV_CATEGORY and (r.get("title") or "").endswith(sys.name)]
++                if r.get("category") == AIGOV_CATEGORY and link in (r.get("description") or "")]
+     title = f"AI privacy risk: {sys.name}"
+     desc = (f"AI system '{sys.name}' ({sensitivity} data, EU AI Act tier '{sys.risk_tier}') "
+             f"has residual privacy risk {risk['residual_risk']} ({band}) after "
+             f"{len(pets)} privacy-enhancing technolog{'y' if len(pets)==1 else 'ies'}. "
+-            f"{risk['explanation']}")
++            f"{risk['explanation']} {link}")
+     if existing:
+         return {"linked": True, "risk_id": existing[0]["id"],
+                 "residual_band": band, "note": "risk already exists for this system (idempotent)"}
+@@ -166,11 +175,18 @@ def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
+     escalated = []
+     for r in risks:
+         ctrl = (r.get("linked_control") or "").split("(")[0].strip()
+-        if ctrl in _VULN_CONTROLS and r.get("impact", 3) < 5:
+-            new_impact = min(5, r.get("impact", 3) + 1)
+-            svc.update(tenant_id, r["id"], RiskPatch(impact=new_impact))
+-            escalated.append({"risk_id": r["id"], "control": ctrl,
+-                              "impact": f"{r.get('impact')}→{new_impact}"})
++        if ctrl not in _VULN_CONTROLS or r.get("impact", 3) >= 5:
++            continue
++        # IDEMPOTENT: escalate a given risk at most once. Re-running the pipeline
++        # must not keep ratcheting impact upward. The tag in the description is the
++        # durable record that this risk was already KEV-escalated.
++        if _KEV_ESCALATED_TAG in (r.get("description") or ""):
++            continue
++        new_impact = min(5, r.get("impact", 3) + 1)
++        new_desc = ((r.get("description") or "") + f" {_KEV_ESCALATED_TAG}").strip()
++        svc.update(tenant_id, r["id"], RiskPatch(impact=new_impact, description=new_desc))
++        escalated.append({"risk_id": r["id"], "control": ctrl,
++                          "impact": f"{r.get('impact')}→{new_impact}"})
+     return {"escalated": len(escalated), "details": escalated,
+             "exploitation_pressure": pressure["exploitation_pressure"],
+             "actively_exploited": pressure["actively_exploited"],
+@@ -181,11 +197,29 @@ def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
+ def run_unified_pipeline(db: Session, tenant_id: str,
+                          evidence_by_control: Optional[Dict[str, Dict[str, Any]]] = None
+                          ) -> Dict[str, Any]:
+-    """One call that runs every cross-feature flow and reports what connected."""
++    """One call that runs every cross-feature flow and reports what connected.
++
++    Each flow is fault-isolated: a failure in one does NOT abort the others or leave
++    a silent partial state. A failing flow is rolled back and reported in `errors`,
++    while the flows that succeeded keep their committed results.
++    """
+     out: Dict[str, Any] = {}
++    errors: Dict[str, str] = {}
++
++    def _safe(name: str, fn) -> None:
++        try:
++            out[name] = fn()
++        except Exception as exc:  # noqa: BLE001 - isolate per-flow, never abort the pipeline
++            db.rollback()  # discard the failed flow's uncommitted work
++            errors[name] = f"{type(exc).__name__}: {exc}"
++
+     if evidence_by_control:
+-        out["policy_to_findings"] = evaluate_policies_to_findings(db, tenant_id, evidence_by_control)
+-    out["ai_to_risk"] = sync_all_ai_risks(db, tenant_id)
+-    out["threat_escalation"] = escalate_risks_from_threat(db, tenant_id)
+-    return {"tenant_id": tenant_id, "ran": list(out.keys()), "results": out,
+-            "note": "policy decisions, AI-governance, and threat intel are now wired into the findings + risk register"}
++        _safe("policy_to_findings",
++              lambda: evaluate_policies_to_findings(db, tenant_id, evidence_by_control))
++    _safe("ai_to_risk", lambda: sync_all_ai_risks(db, tenant_id))
++    _safe("threat_escalation", lambda: escalate_risks_from_threat(db, tenant_id))
++
++    return {"tenant_id": tenant_id, "ran": list(out.keys()),
++            "errors": errors, "ok": not errors, "results": out,
++            "note": "policy decisions, AI-governance, and threat intel are wired into "
++                    "findings + risk register (each flow fault-isolated)"}
+diff --git a/app/static/dashboard.html b/app/static/dashboard.html
+index ae183ab..17a2b40 100644
+--- a/app/static/dashboard.html
++++ b/app/static/dashboard.html
+@@ -1195,7 +1195,7 @@ DETAIL.policies=function(p){
+   openDrawer({eyebrow:"policy · "+p.id,title:esc(p.title),sub:"Maps to "+esc(p.id)+" · v"+esc(p.version),
+     badges:statusChip(p.status)+`<span class="chip c-out">${esc(p.lang)}</span>`,
+     body:
+-      dsec("Definition",`<div class="codeblk">${code.replace(/\b(package|default|allow|if|import)\b/g,'<span class="kw">$1</span>').replace(/(== true)/g,'<span class="st">$1</span>')}</div>`)+
++      dsec("Definition",`<div class="codeblk">${esc(code).replace(/\b(package|default|allow|if|import)\b/g,'<span class="kw">$1</span>').replace(/(== true)/g,'<span class="st">$1</span>')}</div>`)+
+       dsec("Coverage & evaluation",kvlist([["Evaluated on",(p.coverage||[]).join(", ")||"—"],["Version",p.version],["Status",titlecase(p.status)],["Last evaluated",p.last_eval?ago(p.last_eval):"never"]])),
+     actions:`<button class="btn sm primary" onclick="toast('Policy evaluation queued');closeDrawer()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Evaluate now</button><div style="flex:1"></div>${closeBtn}`});
+ };
+diff --git a/tests/test_integration_hardening.py b/tests/test_integration_hardening.py
+new file mode 100644
+index 0000000..4d63660
+--- /dev/null
++++ b/tests/test_integration_hardening.py
+@@ -0,0 +1,154 @@
++"""Regression tests for the audit hardening fixes in app/services/integration.py.
++
++These are DB-free: they patch the service/threat dependencies so each fix is
++asserted in isolation.
++
++  R1  escalate_risks_from_threat is idempotent (no cumulative impact inflation)
++  R2  run_unified_pipeline is fault-isolated (one flow failing doesn't abort/partial)
++  R4  ai-risk dedup keys on system_id marker, not a title suffix (no collisions)
++"""
++import sys
++from types import SimpleNamespace
++
++import app.services.integration as integ
++from app.grc_tprm_models import RiskPatch
++
++
++# ----------------------------------------------------------------------------
++# R1 — idempotent threat escalation
++# ----------------------------------------------------------------------------
++class _FakeRiskSvc:
++    """Minimal in-memory RiskService; shared store survives across instances."""
++    store = []
++
++    def __init__(self, db=None):
++        pass
++
++    def list(self, tenant_id):
++        # return copies, like real serialization, so callers can't mutate the store directly
++        return [dict(r) for r in self.store]
++
++    def update(self, tenant_id, risk_id, patch: RiskPatch):
++        for r in self.store:
++            if r["id"] == risk_id:
++                if patch.impact is not None:
++                    r["impact"] = patch.impact
++                if patch.description is not None:
++                    r["description"] = patch.description
++                return dict(r)
++        return None
++
++
++def _patch_threat(monkeypatch, active=2):
++    import app.services.threat_intel as ti
++    monkeypatch.setattr(ti, "threat_pressure",
++                        lambda: {"actively_exploited": active,
++                                 "exploitation_pressure": "high"})
++
++
++def _patch_risksvc(monkeypatch, store):
++    import app.services.grc_tprm as grc
++    _FakeRiskSvc.store = store
++    monkeypatch.setattr(grc, "RiskService", _FakeRiskSvc)
++
++
++def test_R1_escalation_is_idempotent(monkeypatch):
++    _patch_threat(monkeypatch, active=2)
++    store = [{"id": "r1", "linked_control": "RA-5", "impact": 3,
++              "description": "", "category": "vuln"}]
++    _patch_risksvc(monkeypatch, store)
++
++    first = integ.escalate_risks_from_threat(db=None, tenant_id="t")
++    assert first["escalated"] == 1
++    assert store[0]["impact"] == 4                      # raised once
++    assert "[kev-escalated]" in store[0]["description"]  # durable marker set
++
++    # Re-running the pipeline must NOT keep ratcheting impact upward.
++    second = integ.escalate_risks_from_threat(db=None, tenant_id="t")
++    assert second["escalated"] == 0
++    assert store[0]["impact"] == 4                      # unchanged on second run
++
++    third = integ.escalate_risks_from_threat(db=None, tenant_id="t")
++    assert store[0]["impact"] == 4                      # still 4, never 5/6/...
++
++
++def test_R1_caps_at_five_and_skips_non_vuln(monkeypatch):
++    _patch_threat(monkeypatch, active=1)
++    store = [
++        {"id": "hi", "linked_control": "SI-2", "impact": 5, "description": "", "category": "v"},  # already max
++        {"id": "nv", "linked_control": "AC-2", "impact": 3, "description": "", "category": "x"},  # not a vuln control
++    ]
++    _patch_risksvc(monkeypatch, store)
++    res = integ.escalate_risks_from_threat(db=None, tenant_id="t")
++    assert res["escalated"] == 0
++    assert store[0]["impact"] == 5 and store[1]["impact"] == 3
++
++
++# ----------------------------------------------------------------------------
++# R2 — fault-isolated orchestrator
++# ----------------------------------------------------------------------------
++class _FakeDB:
++    def __init__(self):
++        self.rollbacks = 0
++
++    def rollback(self):
++        self.rollbacks += 1
++
++
++def test_R2_pipeline_isolates_failures(monkeypatch):
++    monkeypatch.setattr(integ, "evaluate_policies_to_findings",
++                        lambda db, t, ev: {"findings_created": 1})
++
++    def boom(db, t):
++        raise RuntimeError("ai-gov exploded")
++    monkeypatch.setattr(integ, "sync_all_ai_risks", boom)
++    monkeypatch.setattr(integ, "escalate_risks_from_threat",
++                        lambda db, t: {"escalated": 0})
++
++    db = _FakeDB()
++    out = integ.run_unified_pipeline(db, "t", evidence_by_control={"AC-2-7": {}})
++
++    # the failing flow is reported, not raised...
++    assert "ai_to_risk" in out["errors"]
++    assert "RuntimeError" in out["errors"]["ai_to_risk"]
++    assert out["ok"] is False
++    # ...its uncommitted work was rolled back...
++    assert db.rollbacks == 1
++    # ...and the flows on either side still ran and kept their results.
++    assert out["results"]["policy_to_findings"]["findings_created"] == 1
++    assert out["results"]["threat_escalation"]["escalated"] == 0
++
++
++def test_R2_all_succeed_no_errors(monkeypatch):
++    monkeypatch.setattr(integ, "evaluate_policies_to_findings", lambda db, t, ev: {"ok": 1})
++    monkeypatch.setattr(integ, "sync_all_ai_risks", lambda db, t: {"ok": 1})
++    monkeypatch.setattr(integ, "escalate_risks_from_threat", lambda db, t: {"ok": 1})
++    db = _FakeDB()
++    out = integ.run_unified_pipeline(db, "t", evidence_by_control={"X": {}})
++    assert out["ok"] is True and out["errors"] == {} and db.rollbacks == 0
++
++
++# ----------------------------------------------------------------------------
++# R4 — dedup keys on system_id marker, not a title suffix
++# ----------------------------------------------------------------------------
++def test_R4_dedup_marker_is_collision_free():
++    link_a = integ._ai_link("sys-AAA")
++    link_b = integ._ai_link("sys-BBB")
++    assert link_a != link_b
++
++    # Two systems whose NAMES collide under the old endswith() check:
++    #   "Model A"  vs  "Premium Model A"  -> title.endswith("Model A") true for both.
++    # The marker dedup must treat them as distinct.
++    risks = [
++        {"category": integ.AIGOV_CATEGORY, "title": "AI privacy risk: Premium Model A",
++         "description": f"... {integ._ai_link('sys-AAA')}"},
++    ]
++    # querying for system BBB must NOT match the Premium-Model-A risk
++    matches_bbb = [r for r in risks
++                   if r.get("category") == integ.AIGOV_CATEGORY
++                   and integ._ai_link("sys-BBB") in (r.get("description") or "")]
++    assert matches_bbb == []
++    # querying for AAA matches exactly
++    matches_aaa = [r for r in risks
++                   if integ._ai_link("sys-AAA") in (r.get("description") or "")]
++    assert len(matches_aaa) == 1
