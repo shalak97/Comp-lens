@@ -188,11 +188,6 @@ class EvidenceService:
             self.db.add(EvidenceConceptHit(tenant_id=tenant_id, doc_id=doc.doc_id,
                         concept_id=h["concept_id"], quote=h["quote"],
                         confidence=h["confidence"], method=h["method"]))
-        try:
-            from app.services.evidence_sign import sign as _sign
-            doc.signature, doc.signed_at = _sign(doc.content_hash, tenant_id, doc.doc_id)
-        except Exception:
-            pass
         self.db.commit(); self.db.refresh(doc)
         return {"doc_id": doc.doc_id, "name": doc.name, "method": method,
                 "concepts_found": len(hits), "char_count": doc.char_count,
