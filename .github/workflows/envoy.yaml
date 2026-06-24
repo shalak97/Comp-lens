@@ -1,0 +1,104 @@
+# =============================================================================
+# Envoy = Policy Enforcement Point (PEP)
+# Terminates HTTPS, calls OPA (PDP) over gRPC ext_authz for every request, then
+# proxies to the legacy upstream. The legacy app is never modified and only ever
+# accepts traffic from this proxy (enforce that with a host firewall, see README).
+#
+# SHADOW-FIRST posture:
+#   * failure_mode_allow: true  -> if the PDP is unreachable we do NOT disrupt the
+#     legacy app (fail-open). The dashboard flags fail-open systems as a risk.
+#     To pilot fail-closed for a specific rollout, set it to false.
+#   * The shadow/enforce decision itself lives in the Rego policy (per-system),
+#     not here, so a single system can be promoted to enforce without touching
+#     this file.
+# =============================================================================
+admin:
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
+
+static_resources:
+  listeners:
+    - name: https_listener
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8443 }
+      filter_chains:
+        - transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain: { filename: /etc/envoy/certs/cert.pem }
+                    private_key: { filename: /etc/envoy/certs/key.pem }
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_https
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format:
+                          ts: "%START_TIME%"
+                          method: "%REQ(:METHOD)%"
+                          path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+                          host: "%REQ(:AUTHORITY)%"
+                          # x-complens-* are injected by OPA so you can SEE the
+                          # would-be verdict ride along even in shadow mode.
+                          complens_mode: "%REQ(X-COMPLENS-MODE)%"
+                          complens_would_block: "%REQ(X-COMPLENS-WOULD-BLOCK)%"
+                          complens_reason: "%REQ(X-COMPLENS-REASON)%"
+                          response_code: "%RESPONSE_CODE%"
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: legacy_app
+                      domains: ["*"]
+                      routes:
+                        - match: { prefix: "/" }
+                          route: { cluster: upstream }
+                http_filters:
+                  - name: envoy.filters.http.ext_authz
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                      transport_api_version: V3
+                      failure_mode_allow: true          # SHADOW-FIRST fail-open (see header)
+                      grpc_service:
+                        envoy_grpc: { cluster_name: opa }
+                        timeout: 0.25s
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+    # OPA ext_authz gRPC endpoint (HTTP/2). In Kubernetes run OPA as a sidecar and
+    # point this at 127.0.0.1 / a Unix domain socket for sub-millisecond latency.
+    - name: opa
+      connect_timeout: 1s
+      type: STRICT_DNS
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      load_assignment:
+        cluster_name: opa
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: opa, port_value: 9191 }
+
+    # The legacy application. It must ONLY accept traffic from this proxy.
+    - name: upstream
+      connect_timeout: 1s
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: upstream
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: upstream, port_value: 8080 }

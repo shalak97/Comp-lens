@@ -1,0 +1,46 @@
+# =============================================================================
+# OPA = Policy Decision Point (PDP), running the Envoy ext_authz gRPC plugin.
+# It pulls the signed policy bundle from the control plane and streams every
+# decision back as evidence. It holds no policy locally and no decision history
+# locally — the control plane is the source of truth and the ledger.
+# =============================================================================
+services:
+  complens:
+    # Base URL of the SaaS control plane. Bundles and decision logs hang off it.
+    url: http://control-plane:8500/enforcement
+    # In production, authenticate every PDP to the control plane, e.g.:
+    # credentials:
+    #   bearer:
+    #     token_path: /run/secrets/complens_pdp_token
+
+bundles:
+  complens:
+    service: complens
+    resource: bundles/complens.tar.gz
+    polling:
+      min_delay_seconds: 10
+      max_delay_seconds: 20          # a mode flip in the control plane lands within ~20s
+
+decision_logs:
+  service: complens
+  reporting:
+    min_delay_seconds: 5
+    max_delay_seconds: 10
+    upload_size_limit_bytes: 1048576
+  # console: true                    # uncomment to also tee decisions to stderr
+
+status:
+  service: complens
+  # also reports bundle activation / revision status back to the control plane
+
+plugins:
+  envoy_ext_authz_grpc:
+    addr: ":9191"
+    path: envoy/authz/allow          # entrypoint Envoy queries (matches main.rego)
+    dry-run: false                   # per-system shadow lives in policy; this is the
+                                     # GLOBAL kill-switch — set true to force-allow ALL
+    enable-reflection: true
+
+labels:
+  app: complens-pdp
+  system: data-plane-mvp             # identifies this PEP/PDP node in the dashboard

@@ -1,0 +1,47 @@
+# Comp-Lens shadow-enforcement reference stack.
+#   control-plane  (SaaS half)   : bundle server + decision-log sink + dashboard APIs
+#   opa            (PDP)         : pulls bundle, decides, streams decisions back
+#   envoy          (PEP)         : terminates HTTPS, calls OPA, proxies to upstream
+#   upstream       (legacy app)  : the static system we protect without touching
+#
+# Quick start:
+#   ./data-plane/certs/gen-certs.sh
+#   docker compose up --build
+#   curl -sk https://localhost:8443/invoices            # no token -> would_block (still 200 in shadow)
+#   TOKEN=$(python3 tools/make_token.py finance); curl -sk -H "Authorization: Bearer $TOKEN" https://localhost:8443/invoices
+# Then open the dashboard Enforcement view pointed at http://localhost:8500
+services:
+  control-plane:
+    build: ./control-plane
+    ports: ["8500:8500"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8500/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  upstream:
+    build: ./data-plane/upstream
+    expose: ["8080"]
+
+  opa:
+    image: openpolicyagent/opa:0.70.0-envoy
+    depends_on:
+      control-plane: { condition: service_healthy }
+    command:
+      - "run"
+      - "--server"
+      - "--config-file=/config/opa-config.yaml"
+      - "--addr=0.0.0.0:8181"
+      - "--diagnostic-addr=0.0.0.0:8282"
+    volumes:
+      - ./data-plane/opa-config.yaml:/config/opa-config.yaml:ro
+    expose: ["9191", "8181"]
+
+  envoy:
+    image: envoyproxy/envoy:v1.31-latest
+    depends_on: [opa, upstream]
+    ports: ["8443:8443", "9901:9901"]
+    volumes:
+      - ./data-plane/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ./data-plane/certs:/etc/envoy/certs:ro
