@@ -1,0 +1,450 @@
+diff --git a/app/connectors/framework.py b/app/connectors/framework.py
+index 001920d..54a97dd 100644
+--- a/app/connectors/framework.py
++++ b/app/connectors/framework.py
+@@ -17,6 +17,7 @@ returned, logged, or stored. Live collection retries once before failing over.
+ """
+ from __future__ import annotations
+ 
++import contextlib
+ import json
+ import os
+ from datetime import timezone
+@@ -29,6 +30,7 @@ from sqlalchemy.orm import Session
+ from app.connectors import catalog as cat
+ from app.connectors.evidence_profiles import demo_evidence
+ from app.connectors import safety as _safety
++from app.config import get_settings
+ from app.models import ConnectorEvidenceItem, ConnectorSyncState, utc_now
+ 
+ _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+@@ -222,3 +224,164 @@ def evidence_for(db: Session, key: str, tenant_id: str = "default") -> List[Dict
+              "controls": r.controls,
+              "collected_at": r.collected_at.isoformat() if r.collected_at else None}
+             for r in rows]
++
++
++# ─────────────────────────────────────────────────────────────────────────────
++# Connector INSTANCES — many configured connections per connector type.
++# Credentials come from the instance's own config (not global env). For the live
++# path we overlay that config onto the environment for the duration of the call,
++# so existing env/settings-reading collectors work per-instance. The demo path
++# works with zero credentials. Evidence is scoped to instance_id so instances of
++# the same type never overwrite each other.
++# ─────────────────────────────────────────────────────────────────────────────
++def _inst_env_state(c: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
++    names = c.get("env_vars", [])
++    set_names = [n for n in names if config.get(n)]
++    return {"required": names, "set": set_names,
++            "missing": [n for n in names if not config.get(n)],
++            "complete": bool(names) and len(set_names) == len(names)}
++
++
++@contextlib.contextmanager
++def _config_overlay(config: Dict[str, Any]):
++    """Temporarily expose an instance's config to live collectors — true per-instance
++    isolation. Connectors read credentials two ways, so we cover both:
++      1. os.environ, for anything reading env directly;
++      2. the cached Settings singleton — most connectors do ``settings.<field>``,
++         so we refresh the singleton's overlaid fields in place (and restore them),
++         which avoids editing every connector while giving real isolation.
++    Env-var names map to settings fields by lowercasing (AWS_REGION -> aws_region).
++    """
++    from app.config import settings as _live_settings
++    saved_env: Dict[str, Optional[str]] = {}
++    saved_attr: Dict[str, Any] = {}
++    try:
++        for k, v in (config or {}).items():
++            saved_env[k] = os.environ.get(k)
++            if v not in (None, ""):
++                os.environ[k] = str(v)
++        try:
++            get_settings.cache_clear()  # fresh get_settings() reads the overlay
++        except Exception:  # noqa: BLE001
++            pass
++        for k, v in (config or {}).items():
++            attr = k.lower()
++            if hasattr(_live_settings, attr):
++                saved_attr[attr] = getattr(_live_settings, attr)
++                try:
++                    object.__setattr__(_live_settings, attr, v)
++                except Exception:  # noqa: BLE001
++                    pass
++        yield
++    finally:
++        for k, old in saved_env.items():
++            if old is None:
++                os.environ.pop(k, None)
++            else:
++                os.environ[k] = old
++        for attr, old in saved_attr.items():
++            try:
++                object.__setattr__(_live_settings, attr, old)
++            except Exception:  # noqa: BLE001
++                pass
++        try:
++            get_settings.cache_clear()
++        except Exception:  # noqa: BLE001
++            pass
++
++
++def instance_mode(c: Dict[str, Any], config: Dict[str, Any]) -> str:
++    """Display mode for an instance badge: connected | demo | not_configured."""
++    env = _inst_env_state(c, config)
++    if not env["complete"]:
++        return "not_configured" if env["required"] else "demo"
++    if not _safety.live_allowed(c["key"], c.get("auth_method"))["allowed"]:
++        return "demo"
++    return "connected"
++
++
++def test_instance(c: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
++    env = _inst_env_state(c, config)
++    if not env["complete"]:
++        miss = ", ".join(env["missing"][:4]) or "credentials"
++        return {"key": c["key"], "ok": True, "mode": "demo",
++                "detail": f"demo mode (set {miss} for live)"}
++    gate = _safety.live_allowed(c["key"], c.get("auth_method"))
++    if not gate["allowed"]:
++        return {"key": c["key"], "ok": True, "mode": "demo",
++                "detail": f"demo (guardrail: {gate['reason']})"}
++    with _config_overlay(config):
++        return test_connection(c)
++
++
++def sync_instance(db: Session, c: Dict[str, Any], instance_id: str,
++                  config: Dict[str, Any], tenant_id: str = "default",
++                  force_demo: bool = False) -> Dict[str, Any]:
++    mode, items, error = "demo", None, None
++    if not force_demo and _inst_env_state(c, config)["complete"]:
++        try:
++            with _config_overlay(config):
++                live = _try_live_collect(c)
++            if live is not None:
++                mode, items = "live", live
++        except Exception as exc:  # noqa: BLE001
++            error = f"live collection failed: {type(exc).__name__}"
++    if items is None:
++        items = demo_evidence(c)
++    norm = _normalize(c, items, mode)
++
++    # scope evidence to THIS instance (not the whole connector type)
++    db.execute(delete(ConnectorEvidenceItem).where(
++        ConnectorEvidenceItem.instance_id == instance_id))
++    for n in norm:
++        db.add(ConnectorEvidenceItem(
++            tenant_id=tenant_id, connector_key=c["key"], instance_id=instance_id,
++            category=n["category"], evidence_type=n["evidence_type"], title=n["title"],
++            status=n["status"], mode=n["mode"], signals=n["signals"], controls=n["controls"]))
++    db.commit()
++    return {"key": c["key"], "instance_id": instance_id, "mode": mode,
++            "evidence_count": len(norm),
++            "status": "ok" if not error else "degraded", "error": error}
++
++
++def evidence_for_instance(db: Session, instance_id: str,
++                          tenant_id: str = "default") -> List[Dict[str, Any]]:
++    rows = db.execute(select(ConnectorEvidenceItem).where(
++        ConnectorEvidenceItem.instance_id == instance_id,
++        ConnectorEvidenceItem.tenant_id == tenant_id).order_by(
++        ConnectorEvidenceItem.collected_at.desc())).scalars().all()
++    return [{"evidence_type": r.evidence_type, "title": r.title, "status": r.status,
++             "mode": r.mode, "signals": r.signals, "controls": r.controls,
++             "collected_at": r.collected_at.isoformat() if r.collected_at else None}
++            for r in rows]
++
++
++def aggregate_control_status(db: Session, tenant_id: str = "default") -> Dict[str, Dict[str, Any]]:
++    """Roll collected connector evidence up by control id.
++
++    Connectors already evaluate their telemetry into pass/fail per item; this
++    aggregates those across every instance so posture can reflect what was
++    actually observed. A control is FAIL if ANY covering item failed.
++    Returns {control_id: {status, fail, pass, items, sources[]}}.
++    """
++    rows = db.execute(select(ConnectorEvidenceItem).where(
++        ConnectorEvidenceItem.tenant_id == tenant_id)).scalars().all()
++    out: Dict[str, Dict[str, Any]] = {}
++    for r in rows:
++        for cd in (r.controls or []):
++            cid = cd.get("control_id") if isinstance(cd, dict) else cd
++            if not cid:
++                continue
++            agg = out.setdefault(cid, {"status": "pass", "fail": 0, "pass": 0,
++                                       "items": 0, "sources": set()})
++            agg["items"] += 1
++            agg["sources"].add(r.connector_key)
++            st = str(r.status).lower()
++            if st == "fail":
++                agg["fail"] += 1
++                agg["status"] = "fail"
++            elif st == "pass":
++                agg["pass"] += 1
++    for _cid, a in out.items():
++        a["sources"] = sorted(a["sources"])
++    return out
+diff --git a/app/main.py b/app/main.py
+index 2f8db12..545099b 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -152,6 +152,157 @@ def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
+     return [cfw.status_one(db, c, tenant_id) for c in ccat.all_connectors()]
+ 
+ 
++# ── Connector INSTANCES (multi-app / multi-tenant connections) ──
++# Registered BEFORE /connectors/{name} so "instances" isn't captured as a name.
++from pydantic import BaseModel as _InstBase
++
++
++class _InstanceCreate(_InstBase):
++    connector_key: str
++    label: str = ""
++    config: dict = {}
++    tenant_id: str = "default"
++    enabled: bool = True
++
++
++class _InstancePatch(_InstBase):
++    label: "str | None" = None
++    enabled: "bool | None" = None
++    config: "dict | None" = None
++    tenant_id: str = "default"
++
++
++class _InstSyncRequest(_InstBase):
++    tenant_id: str = "default"
++    force_demo: bool = False
++
++
++@app.post("/connectors/assess", tags=["connectors"])
++def assess_connectors_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> dict:
++    """Roll collected connector evidence up into control posture findings.
++
++    Syncing connectors fills the evidence store; this projects that evidence into
++    findings so it actually moves your compliance posture. Idempotent.
++    """
++    authorize_tenant(p, tenant_id)
++    from app.services import integration as _integ
++    return _integ.assess_connector_evidence(db, tenant_id)
++
++
++@app.get("/connectors/instances", tags=["connectors"])
++def list_instances(tenant_id: str = "default", connector_key: "str | None" = None,
++                   db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).list(tenant_id, connector_key)
++
++
++@app.post("/connectors/instances", tags=["connectors"])
++def create_instance(body: _InstanceCreate, db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.connectors import catalog as ccat
++    if not ccat.get(body.connector_key):
++        raise HTTPException(404, f"unknown connector type '{body.connector_key}'")
++    from app.services.secrets import secrets_configured
++    if body.config and not secrets_configured() and settings.is_production:
++        raise HTTPException(400, "COMP_LENS_SECRET_KEY must be set to store connector "
++                                 "credentials in production")
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).create(body.tenant_id, body.connector_key,
++                                               body.label, body.config, body.enabled)
++
++
++@app.get("/connectors/instances/{instance_id}", tags=["connectors"])
++def get_instance(instance_id: str, tenant_id: str = "default",
++                 db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    inst = ConnectorInstanceService(db).get_public(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    return inst
++
++
++@app.patch("/connectors/instances/{instance_id}", tags=["connectors"])
++def update_instance(instance_id: str, body: _InstancePatch,
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    out = ConnectorInstanceService(db).update(instance_id, body.tenant_id,
++                                              label=body.label, enabled=body.enabled,
++                                              config=body.config)
++    if not out:
++        raise HTTPException(404, "unknown connector instance")
++    return out
++
++
++@app.delete("/connectors/instances/{instance_id}", tags=["connectors"])
++def delete_instance(instance_id: str, tenant_id: str = "default",
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    if not ConnectorInstanceService(db).delete(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return {"deleted": True, "id": instance_id}
++
++
++@app.post("/connectors/instances/{instance_id}/test", tags=["connectors"])
++def test_instance_ep(instance_id: str, tenant_id: str = "default",
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    return cfw.test_instance(c, svc.config_of(inst))
++
++
++@app.post("/connectors/instances/{instance_id}/sync", tags=["connectors"])
++def sync_instance_ep(instance_id: str, req: "_InstSyncRequest | None" = None,
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    req = req or _InstSyncRequest()
++    authorize_tenant(p, req.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, req.tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    res = cfw.sync_instance(db, c, instance_id, svc.config_of(inst),
++                            req.tenant_id, req.force_demo)
++    svc.record_sync(inst, status=res["status"], mode=res["mode"],
++                    evidence_count=res["evidence_count"], error=res.get("error"))
++    return res
++
++
++@app.get("/connectors/instances/{instance_id}/evidence", tags=["connectors"])
++def instance_evidence_ep(instance_id: str, tenant_id: str = "default",
++                         db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import framework as cfw
++    if not ConnectorInstanceService(db).get(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return cfw.evidence_for_instance(db, instance_id, tenant_id)
++
++
+ @app.get("/connectors/{name}", tags=["connectors"])
+ def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+diff --git a/app/services/integration.py b/app/services/integration.py
+index 7c12cbd..d9a7690 100644
+--- a/app/services/integration.py
++++ b/app/services/integration.py
+@@ -34,6 +34,8 @@ _SEV_MAP = {"critical": Severity.CRITICAL, "high": Severity.HIGH,
+ _VULN_CONTROLS = {"RA-5", "SI-2", "SI-3", "SC-7", "CA-7", "RA-3"}
+ 
+ POLICY_SOURCE = "policy-as-code"
++CONNECTOR_SOURCE = "connector-evidence"
++_KEV_MARKER = "[kev-escalated]"
+ AIGOV_CATEGORY = "ai_governance"
+ 
+ 
+@@ -166,9 +168,18 @@ def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
+     escalated = []
+     for r in risks:
+         ctrl = (r.get("linked_control") or "").split("(")[0].strip()
+-        if ctrl in _VULN_CONTROLS and r.get("impact", 3) < 5:
++        if ctrl not in _VULN_CONTROLS:
++            continue
++        # idempotent: a risk already escalated by a previous run carries the marker,
++        # so re-running the pipeline never inflates impact a second time.
++        desc = r.get("description") or ""
++        if _KEV_MARKER in desc:
++            continue
++        if r.get("impact", 3) < 5:
+             new_impact = min(5, r.get("impact", 3) + 1)
+-            svc.update(tenant_id, r["id"], RiskPatch(impact=new_impact))
++            new_desc = (desc + " " + _KEV_MARKER).strip()
++            svc.update(tenant_id, r["id"],
++                       RiskPatch(impact=new_impact, description=new_desc))
+             escalated.append({"risk_id": r["id"], "control": ctrl,
+                               "impact": f"{r.get('impact')}→{new_impact}"})
+     return {"escalated": len(escalated), "details": escalated,
+@@ -177,6 +188,61 @@ def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
+             "note": "risks on actively-exploited vuln controls had their impact raised"}
+ 
+ 
++# ── CONNECTOR EVIDENCE → POSTURE (findings) ──────────────────────────
++def assess_connector_evidence(db: Session, tenant_id: str) -> Dict[str, Any]:
++    """Project collected connector evidence into control posture findings.
++
++    This closes the loop the product promises: syncing a connector now actually
++    moves your posture. Connectors already evaluate telemetry into pass/fail per
++    item; we roll that up by control and persist one idempotent finding per
++    (control, connector-evidence) — so it flows into blast radius, remediation,
++    and the compliance score exactly like any other finding.
++    """
++    from app.connectors.framework import aggregate_control_status
++    status_by_control = aggregate_control_status(db, tenant_id)
++    run_id = "conn_" + uuid.uuid4().hex[:12]
++    created, updated, failing = 0, 0, []
++    for cid, agg in status_by_control.items():
++        cstatus = ControlStatus.FAIL if agg["status"] == "fail" else ControlStatus.PASS
++        sev = Severity.HIGH if cstatus == ControlStatus.FAIL else Severity.INFO
++        srcs = ", ".join(agg["sources"]) or "connectors"
++        reason = (f"{agg['fail']} of {agg['items']} evidence item(s) failing from {srcs}"
++                  if cstatus == ControlStatus.FAIL
++                  else f"{agg['items']} evidence item(s) passing from {srcs}")
++        if cstatus == ControlStatus.FAIL:
++            failing.append(cid)
++        # idempotent across re-runs: match ANY prior connector finding for this
++        # control (PASS findings are stored RESOLVED, so don't filter on lifecycle)
++        existing = db.execute(
++            select(Finding).where(Finding.tenant_id == tenant_id,
++                                  Finding.control_id == cid,
++                                  Finding.source_system == CONNECTOR_SOURCE)
++            .order_by(Finding.updated_at.desc())).scalars().first()
++        if existing:
++            existing.status = cstatus
++            existing.severity = sev
++            existing.description = reason
++            existing.remediation = {"sources": agg["sources"], "items": agg["items"]}
++            existing.updated_at = datetime.now(timezone.utc)
++            if cstatus == ControlStatus.PASS:
++                existing.lifecycle = Lifecycle.RESOLVED
++            updated += 1
++        else:
++            db.add(Finding(
++                finding_id=str(uuid.uuid4()), tenant_id=tenant_id, run_id=run_id,
++                framework="ALL", control_id=cid, source_system=CONNECTOR_SOURCE,
++                status=cstatus, severity=sev,
++                lifecycle=Lifecycle.OPEN if cstatus == ControlStatus.FAIL else Lifecycle.RESOLVED,
++                description=reason,
++                remediation={"sources": agg["sources"], "items": agg["items"]}))
++            created += 1
++    db.commit()
++    return {"run_id": run_id, "controls_assessed": len(status_by_control),
++            "findings_created": created, "findings_updated": updated,
++            "failing_controls": failing,
++            "note": "connector evidence is now reflected in findings + posture"}
++
++
+ # ── UNIFIED: run the whole integrated pipeline ───────────────────────
+ def run_unified_pipeline(db: Session, tenant_id: str,
+                          evidence_by_control: Optional[Dict[str, Dict[str, Any]]] = None
+@@ -187,5 +253,6 @@ def run_unified_pipeline(db: Session, tenant_id: str,
+         out["policy_to_findings"] = evaluate_policies_to_findings(db, tenant_id, evidence_by_control)
+     out["ai_to_risk"] = sync_all_ai_risks(db, tenant_id)
+     out["threat_escalation"] = escalate_risks_from_threat(db, tenant_id)
++    out["connector_to_posture"] = assess_connector_evidence(db, tenant_id)
+     return {"tenant_id": tenant_id, "ran": list(out.keys()), "results": out,
+             "note": "policy decisions, AI-governance, and threat intel are now wired into the findings + risk register"}
