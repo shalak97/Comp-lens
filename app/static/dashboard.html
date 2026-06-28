@@ -743,7 +743,7 @@ RENDER.overview = async function(){
   const openFindings=findings.filter(f=>["open","in_progress","fail"].includes(f.status));
   const crit=openFindings.filter(f=>["critical","high"].includes(String(f.severity).toLowerCase()));
   const attn=openFindings.sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,7);CACHE.findings=attn;
-  const fwData=(fw.data||D.frameworks);
+  const fwData=normFrameworks(fw.data||D.frameworks);
 
   host.innerHTML=`
   <div class="readouts">
@@ -874,33 +874,49 @@ RENDER.findings = async function(){
 };
 
 /* ---------- FRAMEWORKS ---------- */
+/* /catalog/frameworks returns {framework,label,control_count,families[]}; the
+   readiness views expect {id,name,controls,ready,mapped}. Normalize both shapes
+   so the comprehensive catalog (NIST + ISO 27001 + SOC 2) renders in live mode. */
+function normFrameworks(rows){
+  return (rows||[]).map(f=>{
+    if(f && f.control_count!=null && f.ready==null){
+      return {id:f.framework, name:f.label||f.framework, controls:f.control_count,
+              familyCount:(f.families||[]).length, ready:null, mapped:null, _cat:true};
+    }
+    return f;
+  });
+}
 RENDER.frameworks = async function(){
   const m=main();
   m.innerHTML=viewHead("Frameworks","Audit-readiness per standard. One control's evidence can satisfy many frameworks — that overlap is where the savings are.","","posture / 04");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading frameworks…</div>`;
   const[fw]=await Promise.all([load("/catalog/frameworks",D.frameworks)]);
-  const rows=fw.data||D.frameworks;
-  const avg=rows.reduce((a,f)=>a+(f.ready||0),0)/Math.max(1,rows.length);
-  const ready=rows.filter(f=>(f.ready||0)>=80).length;CACHE.frameworks=rows;
+  const rows=normFrameworks(fw.data||D.frameworks);CACHE.frameworks=rows;
+  const assessed=rows.filter(f=>f.ready!=null);
+  const avg=assessed.length?assessed.reduce((a,f)=>a+f.ready,0)/assessed.length:null;
+  const ready=rows.filter(f=>(f.ready||0)>=80).length;
+  const totalControls=rows.reduce((a,f)=>a+(f.controls||0),0);
+  const rdg=r=>r>=80?'var(--pass)':r>=60?'var(--warn)':'var(--fail)';
   host.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k">Frameworks tracked</div><div class="v num">${rows.length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Average readiness</div><div class="v num">${avg.toFixed(1)}<small>%</small></div></div>
+    <div class="ro"><div class="k">Catalogued controls</div><div class="v num">${totalControls}</div><div class="s">across all frameworks</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Average readiness</div><div class="v num">${avg!=null?avg.toFixed(1)+'<small>%</small>':'—'}</div></div>
     <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Audit-ready</div><div class="v num">${ready}</div><div class="s">≥ 80% readiness</div></div>
-    <div class="ro"><div class="k">Controls mapped</div><div class="v num">${rows.reduce((a,f)=>a+(f.mapped||0),0)}</div></div>
   </div>
+  <div class="note">Click any framework to browse its full control catalog. NIST SP 800-53 Rev 5, ISO/IEC 27001:2022 Annex A, and AICPA SOC 2 are catalogued in full.</div>
   <div class="grid g-2">
     <div class="panel"><div class="panel-h"><h3>Readiness by framework</h3></div><div class="panel-b">
-      ${rows.map(f=>{const r=f.ready||0;const c=r>=80?'var(--pass)':r>=60?'var(--warn)':'var(--fail)';return calBar(f.name||f.id,(f.controls?f.controls+" controls":""),r,c);}).join("")}
+      ${rows.map(f=>{const r=f.ready;return r!=null?calBar(f.name||f.id,(f.controls?f.controls+" controls":""),r,rdg(r)):calBar(f.name||f.id,(f.controls?f.controls+" controls":""),0,'var(--line)');}).join("")}
     </div></div>
-    <div class="panel"><div class="panel-h"><h3>Coverage map</h3><div class="sub" style="margin-left:auto">controls mapped / total</div></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <div class="panel"><div class="panel-h"><h3>Coverage map</h3><div class="sub" style="margin-left:auto">controls in catalog</div></div><div class="panel-b flush"><div class="tbl-scroll"><table>
       <thead><tr><th>Framework</th><th>Controls</th><th>Mapped</th><th>Readiness</th><th></th></tr></thead>
-      <tbody data-ent="frameworks">${rows.map(f=>{const r=f.ready||0;const c=r>=80?'c-pass':r>=60?'c-warn':'c-fail';return `<tr>
+      <tbody data-ent="frameworks">${rows.map(f=>{const r=f.ready;const c=r==null?'c-out':r>=80?'c-pass':r>=60?'c-warn':'c-fail';return `<tr>
         <td><b>${esc(f.name||f.id)}</b><div class="t2 mono">${esc(f.id)}</div></td>
         <td class="num">${f.controls||"—"}</td>
         <td class="num">${f.mapped!=null?f.mapped:"—"}</td>
-        <td class="num" style="font-weight:600">${r.toFixed(1)}%</td>
-        <td><span class="chip ${c}"><span class="d"></span>${r>=80?'Ready':r>=60?'In progress':'Gaps'}</span></td></tr>`;}).join("")}</tbody>
+        <td class="num" style="font-weight:600">${r!=null?r.toFixed(1)+'%':'—'}</td>
+        <td><span class="chip ${c}"><span class="d"></span>${r==null?'Catalogued':r>=80?'Ready':r>=60?'In progress':'Gaps'}</span></td></tr>`;}).join("")}</tbody>
     </table></div></div></div>
   </div>`;
 };
@@ -1246,18 +1262,67 @@ DETAIL.inventory=function(s){
       dsec("Why this class",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${{unacceptable:"Prohibited or near-prohibited use under the EU AI Act — requires escalation and likely retirement.",high:"High-risk category: needs documented risk management, human oversight, and conformity evidence.",limited:"Transparency obligations apply — users must be told they're interacting with AI.",minimal:"Minimal-risk; standard governance and inventory tracking suffice."}[String(s.risk_level).toLowerCase()]||"Classification pending review."}</div>`),
     actions:`<button class="btn sm primary" onclick="toast('Conformity assessment opened');closeDrawer()">Assess</button><div style="flex:1"></div>${closeBtn}`});
 };
-DETAIL.frameworks=function(f){
-  const ctrls=(CACHE.controls||(STATE.demo?D.controls:[]));
-  const inFw=ctrls.filter(c=>c.frameworks&&c.frameworks[f.id]);
-  const pass=inFw.filter(c=>c.status==="pass").length,fail=inFw.filter(c=>c.status==="fail").length;
-  const r=f.ready||0;
-  openDrawer({eyebrow:"framework · "+f.id,title:esc(f.name||f.id),sub:(f.controls||"—")+" controls in scope",
-    badges:`<span class="chip ${r>=80?'c-pass':r>=60?'c-warn':'c-fail'}"><span class="d"></span>${r.toFixed(1)}% ready</span>`,
-    body:
-      dsec("Readiness",calBar(f.name||f.id,(f.mapped!=null?f.mapped+"/"+f.controls+" mapped":""),r,r>=80?'var(--pass)':r>=60?'var(--warn)':'var(--fail)'))+
-      dsec("Mapped controls in catalog ("+inFw.length+")",inFw.length?inFw.map(c=>drow(`${statusChip(c.status||"pending")}<span class="id" style="flex:1">${esc(c.control_id)}</span><span style="color:var(--steel);font-size:11px">${esc(c.title)}</span>`)).join(""):`<div style="font-size:12.5px;color:var(--steel)">No catalog controls mapped to this framework yet.</div>`)+
-      (inFw.length?dsec("Result",kvlist([["Passing",pass],["Failing",fail],["Other",inFw.length-pass-fail]])):""),
-    actions:`<button class="btn sm primary" onclick="toast('Readiness report exported');closeDrawer()">Export readiness</button><div style="flex:1"></div>${closeBtn}`});
+/* compact demo catalog so the browser works offline; live fetches the full set */
+D.catalogControls={
+  SOC2:[
+    {id:"CC1.1",title:"Commitment to integrity and ethical values",family:"Control Environment"},
+    {id:"CC2.1",title:"Use of relevant, quality information",family:"Communication and Information"},
+    {id:"CC3.2",title:"Risk identification and analysis",family:"Risk Assessment"},
+    {id:"CC6.1",title:"Logical access security",family:"Logical and Physical Access Controls"},
+    {id:"CC6.2",title:"User registration and authorization",family:"Logical and Physical Access Controls"},
+    {id:"CC6.6",title:"Boundary protection from external threats",family:"Logical and Physical Access Controls"},
+    {id:"CC7.2",title:"Monitoring for anomalies",family:"System Operations"},
+    {id:"CC7.4",title:"Incident response",family:"System Operations"},
+    {id:"CC8.1",title:"Change authorization and implementation",family:"Change Management"},
+    {id:"A1.2",title:"Environmental protections and backup",family:"Availability"},
+    {id:"C1.1",title:"Identification of confidential information",family:"Confidentiality"},
+    {id:"P1.1",title:"Privacy notice",family:"Privacy"},
+  ],
+  ISO27001:[
+    {id:"A.5.1",title:"Policies for information security",family:"Organizational controls"},
+    {id:"A.5.15",title:"Access control",family:"Organizational controls"},
+    {id:"A.6.3",title:"Information security awareness, education and training",family:"People controls"},
+    {id:"A.7.2",title:"Physical entry",family:"Physical controls"},
+    {id:"A.8.8",title:"Management of technical vulnerabilities",family:"Technological controls"},
+    {id:"A.8.24",title:"Use of cryptography",family:"Technological controls"},
+  ],
+  NIST:[
+    {id:"AC-2",title:"Account Management",family:"Access Control"},
+    {id:"AU-2",title:"Event Logging",family:"Audit and Accountability"},
+    {id:"CM-3",title:"Configuration Change Control",family:"Configuration Management"},
+    {id:"RA-5",title:"Vulnerability Monitoring and Scanning",family:"Risk Assessment"},
+    {id:"SC-28",title:"Protection of Information at Rest",family:"System and Communications Protection"},
+    {id:"SI-2",title:"Flaw Remediation",family:"System and Information Integrity"},
+  ],
+};
+/* Browse a framework's FULL control catalog (families -> controls). */
+DETAIL.frameworks=async function(f){
+  const fwid=f.id, r=f.ready;
+  openDrawer({eyebrow:"framework · "+esc(fwid),title:esc(f.name||fwid),
+    sub:(f.controls!=null?f.controls+" controls in catalog":"control catalog"),
+    badges:(r!=null?`<span class="chip ${r>=80?'c-pass':r>=60?'c-warn':'c-fail'}"><span class="d"></span>${r.toFixed(1)}% ready</span>`:`<span class="chip c-out"><span class="d"></span>Catalogued</span>`),
+    body:`<div class="loading"><span class="spin"></span> Loading ${esc(f.name||fwid)} catalog…</div>`,
+    actions:`<div style="flex:1"></div>${closeBtn}`});
+  let ctrls=[];
+  try{
+    if(STATE.demo){ ctrls=(D.catalogControls&&D.catalogControls[fwid])||[]; }
+    else { ctrls=await apiGET("/catalog?framework="+encodeURIComponent(fwid)); }
+  }catch(e){ ctrls=[]; }
+  const fams={};
+  ctrls.forEach(function(c){ const k=c.family||c.family_id||"—"; if(!fams[k])fams[k]=[]; fams[k].push(c); });
+  const famNames=Object.keys(fams).sort();
+  let body;
+  if(!ctrls.length){
+    body=`<div style="font-size:12.5px;color:var(--steel);line-height:1.5">${STATE.demo?'Connect to your instance (live mode) to browse the full control catalog for this framework.':'No catalog controls returned for this framework.'}</div>`;
+  } else {
+    body=dsec(`Catalog · ${ctrls.length} controls · ${famNames.length} families`,
+      famNames.map(function(fn){return `<div style="margin-bottom:13px">
+        <div class="mono" style="font-size:10px;letter-spacing:.1em;color:var(--faint);margin-bottom:6px">${esc(fn).toUpperCase()} · ${fams[fn].length}</div>
+        ${fams[fn].map(function(c){return drow(`<span class="id" style="min-width:80px">${esc(c.id)}</span><span style="color:var(--steel);font-size:11.5px;flex:1">${esc(c.title||"")}</span>${c.automated?'<span class="chip c-pass" style="margin-left:6px"><span class="d"></span>auto</span>':''}`);}).join("")}
+      </div>`;}).join(""));
+  }
+  const bodyEl=document.querySelector("#drawer .drawer-b");
+  if(bodyEl) bodyEl.innerHTML=body;
 };
 DETAIL.evidence=function(e){
   openDrawer({eyebrow:"evidence · "+e.id,title:esc(e.id),sub:"Collected from "+esc(e.source),
