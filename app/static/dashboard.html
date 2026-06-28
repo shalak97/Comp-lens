@@ -1535,10 +1535,12 @@ DETAIL.instances=function(i){
 RENDER.policy = async function(){
   const m=main();
   m.innerHTML=viewHead("Policies","Controls expressed as code. Each policy is versioned, evaluated against connected systems, and produces pass/fail evidence automatically.",
+    `<input type="file" id="pdfPolicyInput" accept="application/pdf,.pdf" style="display:none" onchange="insertPolicyPdf(this)">`+
+    `<button class="btn" onclick="document.getElementById('pdfPolicyInput').click()" title="Insert a policy document (PDF)"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M9 13h6M9 17h6'/></svg>Insert PDF</button>`+
     `<button class="btn primary" onclick="toast('Policy editor opens in your IDE via the CLI')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New policy</button>`,"compliance-as-code / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading policies…</div>`;
   const[pol]=await Promise.all([load(withTenant("/policies"),D.policies)]);
-  const rows=pol.data||D.policies;CACHE.policies=rows;
+  const rows=[...PDF_POLICIES, ...(pol.data||D.policies)];CACHE.policies=rows;
   host.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k">Policies</div><div class="v num">${rows.length}</div></div>
@@ -1559,6 +1561,30 @@ RENDER.policy = async function(){
       <td class="right mono" style="font-size:11px;color:var(--steel)">${p.last_eval?ago(p.last_eval):"never"}</td></tr>`).join("")}</tbody>
   </table></div></div></div>`;
 };
+
+/* PDF policies inserted this session (persist across re-renders; merged into the
+   live library above). Wiring a POST /policies/import endpoint would persist them
+   server-side and run extraction. */
+var PDF_POLICIES=[];
+function insertPolicyPdf(input){
+  var f=input&&input.files&&input.files[0]; if(input)input.value="";
+  if(!f)return;
+  if(f.type!=="application/pdf" && !/\.pdf$/i.test(f.name)){toast("Please choose a PDF file","warn");return;}
+  var title=f.name.replace(/\.pdf$/i,"").replace(/[_-]+/g," ").trim();
+  PDF_POLICIES.unshift({
+    id:"PDF · "+f.name,
+    title:title||f.name,
+    lang:"PDF",
+    version:"0.1-draft",
+    coverage:["uploaded"],
+    status:"draft",
+    last_eval:null,
+    source:"pdf",
+    size_kb:Math.max(1,Math.round(f.size/1024))
+  });
+  toast('Inserted "'+f.name+'" as a draft policy','pass');
+  render();
+}
 
 /* ---------- MIDDLEWARE (evidence pipeline) ---------- */
 RENDER.middleware = function(){
