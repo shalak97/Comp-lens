@@ -1,0 +1,270 @@
+diff --git a/app/main.py b/app/main.py
+index 2f8db12..dbeab1e 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -152,6 +152,157 @@ def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
+     return [cfw.status_one(db, c, tenant_id) for c in ccat.all_connectors()]
+ 
+ 
++# ── Connector INSTANCES (multi-app / multi-tenant connections) ──
++# Registered BEFORE /connectors/{name} so "instances" isn't captured as a name.
++from pydantic import BaseModel as _InstBase
++
++
++class _InstanceCreate(_InstBase):
++    connector_key: str
++    label: str = ""
++    config: dict = {}
++    tenant_id: str = "default"
++    enabled: bool = True
++
++
++class _InstancePatch(_InstBase):
++    label: "str | None" = None
++    enabled: "bool | None" = None
++    config: "dict | None" = None
++    tenant_id: str = "default"
++
++
++class _InstSyncRequest(_InstBase):
++    tenant_id: str = "default"
++    force_demo: bool = False
++
++
++@app.post("/connectors/assess", tags=["connectors"])
++def assess_connectors_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> dict:
++    """Roll collected connector evidence up into control posture findings.
++
++    Syncing connectors fills the evidence store; this projects that evidence into
++    findings so it actually moves your compliance posture. Idempotent.
++    """
++    authorize_tenant(p, tenant_id)
++    from app.services import integration as _integ
++    return _integ.assess_connector_evidence(db, tenant_id)
++
++
++@app.get("/connectors/instances", tags=["connectors"])
++def list_instances(tenant_id: str = "default", connector_key: "str | None" = None,
++                   db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).list(tenant_id, connector_key)
++
++
++@app.post("/connectors/instances", tags=["connectors"])
++def create_instance(body: _InstanceCreate, db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.connectors import catalog as ccat
++    if not ccat.get(body.connector_key):
++        raise HTTPException(404, f"unknown connector type '{body.connector_key}'")
++    from app.services.secrets import secrets_configured
++    if body.config and not secrets_configured() and settings.is_production:
++        raise HTTPException(400, "COMP_LENS_SECRET_KEY must be set to store connector "
++                                 "credentials in production")
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).create(body.tenant_id, body.connector_key,
++                                               body.label, body.config, body.enabled)
++
++
++@app.get("/connectors/instances/{instance_id}", tags=["connectors"])
++def get_instance(instance_id: str, tenant_id: str = "default",
++                 db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    inst = ConnectorInstanceService(db).get_public(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    return inst
++
++
++@app.patch("/connectors/instances/{instance_id}", tags=["connectors"])
++def update_instance(instance_id: str, body: _InstancePatch,
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    out = ConnectorInstanceService(db).update(instance_id, body.tenant_id,
++                                              label=body.label, enabled=body.enabled,
++                                              config=body.config)
++    if not out:
++        raise HTTPException(404, "unknown connector instance")
++    return out
++
++
++@app.delete("/connectors/instances/{instance_id}", tags=["connectors"])
++def delete_instance(instance_id: str, tenant_id: str = "default",
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    if not ConnectorInstanceService(db).delete(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return {"deleted": True, "id": instance_id}
++
++
++@app.post("/connectors/instances/{instance_id}/test", tags=["connectors"])
++def test_instance_ep(instance_id: str, tenant_id: str = "default",
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    return cfw.test_instance(c, svc.config_of(inst))
++
++
++@app.post("/connectors/instances/{instance_id}/sync", tags=["connectors"])
++def sync_instance_ep(instance_id: str, req: "_InstSyncRequest | None" = None,
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    req = req or _InstSyncRequest()
++    authorize_tenant(p, req.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, req.tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    res = cfw.sync_instance(db, c, instance_id, svc.config_of(inst),
++                            req.tenant_id, req.force_demo)
++    svc.record_sync(inst, status=res["status"], mode=res["mode"],
++                    evidence_count=res["evidence_count"], error=res.get("error"))
++    return res
++
++
++@app.get("/connectors/instances/{instance_id}/evidence", tags=["connectors"])
++def instance_evidence_ep(instance_id: str, tenant_id: str = "default",
++                         db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import framework as cfw
++    if not ConnectorInstanceService(db).get(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return cfw.evidence_for_instance(db, instance_id, tenant_id)
++
++
+ @app.get("/connectors/{name}", tags=["connectors"])
+ def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+@@ -421,13 +572,53 @@ def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
+     return {"id": s.id, "name": s.name, "risk_tier": s.risk_tier}
+ 
+ 
++def _ai_system_row(s) -> dict:
++    return {"id": s.id, "name": s.name, "owner": s.owner, "risk_tier": s.risk_tier,
++            "impact_assessment": s.impact_assessment, "data_governance": s.data_governance,
++            "human_oversight": s.human_oversight, "transparency_notice": s.transparency_notice,
++            "eval_report": s.eval_report, "logging_enabled": s.logging_enabled,
++            "accuracy_tested": s.accuracy_tested,
++            "registered_at": s.registered_at.isoformat() if s.registered_at else None}
++
++
++def _pets_by_system(db: Session, tenant_id: str) -> dict:
++    rows = db.execute(select(_PET).where(_PET.tenant_id == tenant_id)).scalars().all()
++    out: dict = {}
++    for r in rows:
++        out.setdefault(r.system_id, []).append(
++            {"pet": r.pet, "params": _json.loads(r.params_json or "{}"), "_sens": r.data_sensitivity})
++    return out
++
++
+ @app.get("/ai-systems")
+ def list_ai_systems(tenant_id: str = "default", db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> list[dict]:
++    """Each AI system as a self-describing governance record: EU AI Act tier,
++    obligation coverage (met/gaps/%), residual privacy risk from its PETs, and
++    the AI frameworks it is governed under."""
+     authorize_tenant(p, tenant_id)
+     from app.models import AISystem
+     rows = db.execute(select(AISystem).where(AISystem.tenant_id == tenant_id)).scalars().all()
+-    return [{"id": s.id, "name": s.name, "owner": s.owner, "risk_tier": s.risk_tier} for s in rows]
++    pets = _pets_by_system(db, tenant_id)
++    out = []
++    for s in rows:
++        ps = pets.get(s.id, [])
++        sens = ps[0]["_sens"] if ps else "pii"
++        out.append(_aigov.system_governance(_ai_system_row(s), ps, sens))
++    return out
++
++
++@app.get("/ai-systems/{system_id}")
++def get_ai_system(system_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
++                  p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.models import AISystem
++    s = db.get(AISystem, system_id)
++    if not s or s.tenant_id != tenant_id:
++        raise HTTPException(404, "unknown AI system")
++    ps = _pets_by_system(db, tenant_id).get(system_id, [])
++    sens = ps[0]["_sens"] if ps else "pii"
++    return _aigov.system_governance(_ai_system_row(s), ps, sens)
+ 
+ 
+ # ── Merkle transparency log ──
+diff --git a/app/services/ai_governance.py b/app/services/ai_governance.py
+index 6426f8e..85a82b8 100644
+--- a/app/services/ai_governance.py
++++ b/app/services/ai_governance.py
+@@ -205,3 +205,48 @@ def _num(v: Any, default: Optional[float] = None) -> Optional[float]:
+         return float(v)
+     except (TypeError, ValueError):
+         return default
++
++
++# ── per-system governance posture (fuses AI-Act obligations + privacy risk) ──
++_TIER_FRAMEWORKS = {
++    "prohibited": ["EU_AI_ACT", "NIST_AI_RMF", "ISO42001"],
++    "high": ["EU_AI_ACT", "NIST_AI_RMF", "ISO42001"],
++    "limited": ["EU_AI_ACT", "ISO42001"],
++    "minimal": ["ISO42001"],
++}
++_ATTRS = ("impact_assessment", "data_governance", "human_oversight",
++          "transparency_notice", "eval_report", "logging_enabled", "accuracy_tested")
++
++
++def system_governance(system: Dict[str, Any], pets: Optional[List[Dict[str, Any]]] = None,
++                      data_sensitivity: str = "pii") -> Dict[str, Any]:
++    """One self-describing record per AI system: EU AI Act tier + obligation
++    coverage (met/gaps/%), the residual privacy risk from its PETs, and the AI
++    frameworks it is governed under. This is what the inventory should expose."""
++    attrs = {k: bool(system.get(k)) for k in _ATTRS}
++    obl = ai_act_obligations(system.get("risk_tier", "limited"), attrs)
++    applicable = [o for o in obl["obligations"] if o in obl["coverage"]]
++    tier = obl["tier"]
++    out = {
++        "id": system.get("id"), "name": system.get("name"), "owner": system.get("owner"),
++        "risk_tier": tier, "tier_label": obl["tier_label"],
++        "attributes": attrs,
++        "obligations": obl["obligations"],
++        "coverage": obl["coverage"],
++        "gaps": obl["gaps"],
++        "obligations_total": len(applicable),
++        "obligations_met": len(applicable) - len(obl["gaps"]),
++        "compliance_pct": obl["compliance_pct"],
++        "frameworks": _TIER_FRAMEWORKS.get(tier, ["ISO42001"]),
++        "registered_at": system.get("registered_at"),
++        "pets": [], "data_sensitivity": None,
++        "residual_risk": None, "residual_band": None, "privacy_explanation": None,
++        "status": ("flagged" if (tier in ("high", "prohibited") and obl["gaps"])
++                   else "approved" if obl["compliance_pct"] >= 100 else "in_review"),
++    }
++    if pets:
++        risk = compute_privacy_risk(data_sensitivity, pets)
++        out.update(residual_risk=risk["residual_risk"], residual_band=risk["residual_band"],
++                   data_sensitivity=data_sensitivity, pets=[p.get("pet") for p in pets],
++                   privacy_explanation=risk["explanation"])
++    return out
