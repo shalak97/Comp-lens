@@ -466,6 +466,36 @@ const D = {
     {name:"Fraud Scoring Engine",system_type:"ML model",risk_level:"unacceptable",owner:"Risk",frameworks:["EU_AI_ACT"],status:"flagged"},
     {name:"Doc Summarizer",system_type:"GenAI",risk_level:"minimal",owner:"Legal Ops",frameworks:["ISO42001"],status:"approved"},
   ],
+  aisystems:[
+    {id:"ai-1",name:"Customer Churn Predictor",owner:"Data Science",risk_tier:"high",tier_label:"High-risk",
+     compliance_pct:83,obligations_met:5,obligations_total:6,gaps:["Human oversight"],
+     coverage:{"Risk management system":true,"Data governance":true,"Human oversight":false,"Accuracy & robustness testing":true,"Logging & traceability":true,"Transparency to users":true},
+     obligations:["Conformity assessment","Risk management system","Data governance","Technical documentation","Human oversight","Accuracy & robustness testing","Logging & traceability","Transparency to users"],
+     residual_risk:34,residual_band:"medium",data_sensitivity:"pii",pets:["differential_privacy"],privacy_explanation:"Inherent risk 60 (from pii data) reduced 43% by 1 privacy technology → residual 34 (medium).",
+     frameworks:["EU_AI_ACT","NIST_AI_RMF","ISO42001"],status:"flagged"},
+    {id:"ai-2",name:"Support Chatbot (LLM)",owner:"Customer Success",risk_tier:"limited",tier_label:"Limited-risk",
+     compliance_pct:100,obligations_met:1,obligations_total:1,gaps:[],
+     coverage:{"Transparency to users":true},obligations:["Transparency to users","Inform users they interact with AI"],
+     residual_risk:18,residual_band:"low",data_sensitivity:"internal",pets:["data_minimization"],privacy_explanation:"Inherent risk 20 (from internal data) reduced 10% by 1 privacy technology → residual 18 (low).",
+     frameworks:["EU_AI_ACT","ISO42001"],status:"approved"},
+    {id:"ai-3",name:"Resume Screener",owner:"HR Tech",risk_tier:"high",tier_label:"High-risk",
+     compliance_pct:50,obligations_met:3,obligations_total:6,gaps:["Human oversight","Accuracy & robustness testing","Transparency to users"],
+     coverage:{"Risk management system":true,"Data governance":true,"Human oversight":false,"Accuracy & robustness testing":false,"Logging & traceability":true,"Transparency to users":false},
+     obligations:["Conformity assessment","Risk management system","Data governance","Technical documentation","Human oversight","Accuracy & robustness testing","Logging & traceability","Transparency to users"],
+     residual_risk:60,residual_band:"high",data_sensitivity:"pii",pets:[],privacy_explanation:null,
+     frameworks:["EU_AI_ACT","NIST_AI_RMF","ISO42001"],status:"flagged"},
+    {id:"ai-4",name:"Fraud Scoring Engine",owner:"Risk",risk_tier:"high",tier_label:"High-risk",
+     compliance_pct:100,obligations_met:6,obligations_total:6,gaps:[],
+     coverage:{"Risk management system":true,"Data governance":true,"Human oversight":true,"Accuracy & robustness testing":true,"Logging & traceability":true,"Transparency to users":true},
+     obligations:["Conformity assessment","Risk management system","Data governance","Technical documentation","Human oversight","Accuracy & robustness testing","Logging & traceability","Transparency to users"],
+     residual_risk:12,residual_band:"low",data_sensitivity:"financial",pets:["homomorphic_encryption","k_anonymity"],privacy_explanation:"Inherent risk 75 (from financial data) reduced 84% by 2 privacy technologies → residual 12 (low).",
+     frameworks:["EU_AI_ACT","NIST_AI_RMF","ISO42001"],status:"approved"},
+    {id:"ai-5",name:"Doc Summarizer",owner:"Legal Ops",risk_tier:"minimal",tier_label:"Minimal-risk",
+     compliance_pct:100,obligations_met:0,obligations_total:0,gaps:[],
+     coverage:{},obligations:["Voluntary codes of conduct"],
+     residual_risk:null,residual_band:null,data_sensitivity:null,pets:[],privacy_explanation:null,
+     frameworks:["ISO42001"],status:"approved"},
+  ],
   risks:[
     {id:"R-014",title:"Single-region data residency exposure",category:"Availability",owner:"Platform",likelihood:3,impact:4,status:"open",treatment:"mitigate"},
     {id:"R-013",title:"Unpatched critical CVE in payments path",category:"Vulnerability",owner:"AppSec",likelihood:4,impact:5,status:"open",treatment:"mitigate"},
@@ -1038,32 +1068,42 @@ RENDER.connectors = async function(){
 };
 
 /* ---------- AI INVENTORY ---------- */
+/* AI-Act tier + privacy-risk chips */
+function tierChip(tier,label){const m={high:'c-fail',prohibited:'c-fail',limited:'c-warn',minimal:'c-pass'};return `<span class="chip ${m[tier]||'c-out'}"><span class="d"></span>${esc(label||tier||'—')}</span>`;}
+function bandChip(band,val){const m={low:'c-pass',medium:'c-warn',high:'c-fail',critical:'c-fail'};return `<span class="chip ${m[band]||'c-out'}"><span class="d"></span>${esc(band)}${val!=null?' · '+val:''}</span>`;}
+
 RENDER.inventory = async function(){
   const m=main();
-  m.innerHTML=viewHead("AI inventory","Every model and AI system in production, classified by risk under ISO 42001, NIST AI RMF and the EU AI Act.","","intelligence / 02");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading inventory…</div>`;
-  const[inv]=await Promise.all([load(withTenant("/inventory"),D.inventory)]);
-  const rows=inv.data||D.inventory;
-  const byRisk={};rows.forEach(r=>byRisk[r.risk_level]=(byRisk[r.risk_level]||0)+1);CACHE.inventory=rows;
+  m.innerHTML=viewHead("AI inventory","Your organisation's AI systems, each classified by EU AI Act risk tier with its governance obligations, residual privacy risk, and the AI frameworks it answers to.","","intelligence / 02");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading AI systems…</div>`;
+  const[inv]=await Promise.all([load(withTenant("/ai-systems"),D.aisystems)]);
+  const rows=inv.data||D.aisystems;CACHE.inventory=rows;
+  const highRisk=rows.filter(r=>["high","prohibited"].includes(r.risk_tier)).length;
+  const gaps=rows.reduce((a,r)=>a+((r.gaps||[]).length),0);
+  const avg=rows.length?rows.reduce((a,r)=>a+(r.compliance_pct||0),0)/rows.length:0;
   host.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k">AI systems</div><div class="v num">${rows.length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>High / unacceptable</div><div class="v num">${(byRisk.high||0)+(byRisk.unacceptable||0)}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Flagged for review</div><div class="v num">${rows.filter(r=>r.status==="flagged").length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Approved</div><div class="v num">${rows.filter(r=>r.status==="approved").length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>High-risk / prohibited</div><div class="v num">${highRisk}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Open obligation gaps</div><div class="v num">${gaps}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Avg AI-Act readiness</div><div class="v num">${avg.toFixed(0)}<small>%</small></div></div>
   </div>
+  <div class="note">Each system is scored against its EU AI Act obligations and its residual privacy risk (inherent data risk reduced by privacy-enhancing technologies). Click a row for the full breakdown.</div>
   <div class="panel"><div class="panel-h"><h3>System register</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
-    <thead><tr><th>System</th><th>Type</th><th>Owner</th><th>Risk class</th><th>Frameworks</th><th>Status</th></tr></thead>
-    <tbody data-ent="inventory">${rows.map(r=>`<tr>
+    <thead><tr><th>System</th><th>EU AI Act tier</th><th>Owner</th><th>Obligations</th><th>Residual privacy risk</th><th>Frameworks</th><th>Status</th></tr></thead>
+    <tbody data-ent="inventory">${rows.map(r=>{
+      const oblPct=r.compliance_pct!=null?r.compliance_pct:0;
+      const oc=oblPct>=100?'var(--pass)':oblPct>=60?'var(--warn)':'var(--fail)';
+      return `<tr>
       <td><b>${esc(r.name)}</b></td>
-      <td class="mono" style="font-size:12px">${esc(r.system_type)}</td>
+      <td>${tierChip(r.risk_tier,r.tier_label)}</td>
       <td style="color:var(--body)">${esc(r.owner||"—")}</td>
-      <td>${sevChip(r.risk_level)}</td>
+      <td style="min-width:140px"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:5px;border-radius:3px;background:var(--field);overflow:hidden"><div style="height:100%;width:${oblPct}%;background:${oc}"></div></div><span class="mono" style="font-size:11px;color:var(--steel)">${r.obligations_met!=null?r.obligations_met+"/"+r.obligations_total:oblPct+"%"}</span></div></td>
+      <td>${r.residual_band?bandChip(r.residual_band,r.residual_risk):'<span style="color:var(--faint)">no PETs</span>'}</td>
       <td>${(r.frameworks||[]).map(f=>`<span class="chip c-out">${esc(f)}</span>`).join(" ")||'<span style="color:var(--faint)">—</span>'}</td>
-      <td>${statusChip(r.status||"pending")}</td></tr>`).join("")}</tbody>
+      <td>${statusChip(r.status||"pending")}</td></tr>`;}).join("")}</tbody>
   </table></div></div></div>`;
 };
-
 /* ---------- RISK REGISTER ---------- */
 RENDER.risks = async function(){
   const m=main();
@@ -1254,13 +1294,19 @@ DETAIL.vendors=function(v){
       (od?dsec("Action needed",`<div class="note" style="margin:0;border-left-color:var(--fail)">This vendor's review is <b>past due</b>. Request a current assurance report before renewing.</div>`):""),
     actions:`<button class="btn sm primary" onclick="toast('Assurance report requested from ${esc(v.name)}');closeDrawer()">Request report</button><button class="btn sm" onclick="toast('Marked reviewed');closeDrawer()">Mark reviewed</button><div style="flex:1"></div>${closeBtn}`});
 };
-DETAIL.inventory=function(s){
-  openDrawer({eyebrow:"ai system · "+s.name,title:esc(s.name),sub:esc(s.system_type),
-    badges:sevChip(s.risk_level)+statusChip(s.status||"pending"),
+DETAIL.inventory=function(r){
+  const cov=r.coverage||{}, obls=r.obligations||[];
+  const pct=r.compliance_pct||0;
+  openDrawer({eyebrow:"AI system · "+(r.risk_tier||""),title:esc(r.name),sub:(r.owner?esc(r.owner)+" · ":"")+(r.tier_label||r.risk_tier||""),
+    badges:tierChip(r.risk_tier,r.tier_label)+(r.residual_band?" "+bandChip(r.residual_band,r.residual_risk):""),
     body:
-      dsec("Classification",kvlist([["System type",s.system_type],["Owner",s.owner||"—"],["Risk class",titlecase(s.risk_level)],["Governing frameworks",(s.frameworks||[]).join(", ")||"—"]]))+
-      dsec("Why this class",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${{unacceptable:"Prohibited or near-prohibited use under the EU AI Act — requires escalation and likely retirement.",high:"High-risk category: needs documented risk management, human oversight, and conformity evidence.",limited:"Transparency obligations apply — users must be told they're interacting with AI.",minimal:"Minimal-risk; standard governance and inventory tracking suffice."}[String(s.risk_level).toLowerCase()]||"Classification pending review."}</div>`),
-    actions:`<button class="btn sm primary" onclick="toast('Conformity assessment opened');closeDrawer()">Assess</button><div style="flex:1"></div>${closeBtn}`});
+      dsec("EU AI Act readiness",calBar("Obligations met",(r.obligations_met!=null?r.obligations_met+"/"+r.obligations_total+" tracked":""),pct,pct>=100?'var(--pass)':pct>=60?'var(--warn)':'var(--fail)'))+
+      dsec("Obligations ("+obls.length+")",obls.map(o=>{const applicable=(o in cov);const met=cov[o]===true;return drow(`<span style="width:18px;font-weight:700;color:${applicable?(met?'var(--pass)':'var(--fail)'):'var(--faint)'}">${applicable?(met?'\u2713':'\u2717'):'\u00b7'}</span><span style="flex:1;font-size:12.5px;color:var(--body)">${esc(o)}</span>${applicable?'':'<span style="font-size:10px;color:var(--faint)">attested</span>'}`);}).join(""))+
+      (r.residual_band
+        ?dsec("Residual privacy risk",kvlist([["Data sensitivity",r.data_sensitivity||"\u2014"],["Residual risk",r.residual_risk!=null?r.residual_risk+" / 100":"\u2014"],["Band",r.residual_band],["PETs applied",(r.pets||[]).join(", ")||"none"]])+(r.privacy_explanation?`<div class="note" style="margin-top:8px">${esc(r.privacy_explanation)}</div>`:""))
+        :dsec("Residual privacy risk",`<div style="font-size:12.5px;color:var(--steel);line-height:1.5">No privacy-enhancing technologies registered. Attach PETs (differential privacy, k-anonymity, \u2026) to reduce inherent data risk.</div>`))+
+      dsec("Governed under",(r.frameworks||[]).map(f=>`<span class="chip c-out" style="margin:2px">${esc(f)}</span>`).join(" ")||"\u2014"),
+    actions:`<button class="btn sm primary" onclick="toast('Promoted to risk register');closeDrawer()">Promote to risk</button><div style="flex:1"></div>${closeBtn}`});
 };
 /* compact demo catalog so the browser works offline; live fetches the full set */
 D.catalogControls={
