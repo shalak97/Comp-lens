@@ -982,6 +982,7 @@ RENDER.connectors = async function(){
     try{ instances=await apiGET(withTenant("/connectors/instances")); }catch(e){ instances=[]; }
     try{ window.__CATALOG=await apiGET("/connectors/catalog"); }catch(e){ window.__CATALOG=D.catalog; }
   }
+  instances=[...loadLocalConns(), ...instances];
   CACHE.instances=instances;
 
   // Normalize to one shape regardless of which endpoint answered.
@@ -1034,7 +1035,7 @@ RENDER.connectors = async function(){
       <div class="panel-b flush"><div class="tbl-scroll"><table>
         <thead><tr><th>Connection</th><th>Type</th><th>Status</th><th>Evidence</th><th class="right">Last sync</th></tr></thead>
         <tbody data-ent="instances">${instances.map(i=>`<tr>
-          <td><b>${esc(i.label)}</b></td>
+          <td><b>${esc(i.label)}</b>${i.local?` <span class="chip c-dim" style="font-size:9px"><span class="d"></span>LOCAL</span>`:""}</td>
           <td class="mono" style="font-size:11px;color:var(--steel)">${esc(i.connector_key)}</td>
           <td>${instModeBadge(i)}${i.last_error?`<div class="t2" style="color:var(--fail)">${esc(i.last_error)}</div>`:""}</td>
           <td class="num">${i.evidence_count||0}</td>
@@ -1581,20 +1582,40 @@ function isSecretField(n){return /TOKEN|SECRET|PASSWORD|PASS|_KEY\b|KEY$/i.test(
 function withTenantBody(b){return Object.assign({tenant_id:CFG.tenant},b||{});}
 function withTenantQS(){return "?tenant_id="+encodeURIComponent(CFG.tenant);}
 
+/* ── Local credential vault: connector credentials kept ONLY in this browser ──
+   (localStorage). They are sent to the server transiently to run a sync/test and
+   are never persisted server-side. */
+const LOCAL_CONN_KEY="cl-local-connections";
+function loadLocalConns(){try{return JSON.parse(localStorage.getItem(LOCAL_CONN_KEY)||"[]");}catch(e){return [];}}
+function saveLocalConns(a){try{localStorage.setItem(LOCAL_CONN_KEY,JSON.stringify(a||[]));}catch(e){}}
+function localConnById(id){return loadLocalConns().find(x=>x.id===id);}
+function upsertLocalConn(c){const a=loadLocalConns();const i=a.findIndex(x=>x.id===c.id);if(i>=0)a[i]=c;else a.unshift(c);saveLocalConns(a);}
+function genLocalId(){return "local-"+Math.random().toString(36).slice(2,10);}
+let AC_STORE="local";
+function setAcStore(v){AC_STORE=v;const seg=$("#acStore");if(seg)[...seg.children].forEach(b=>b.classList.toggle("on",b.dataset.store===v));const n=$("#acStoreNote");if(n)n.innerHTML=v==="local"?"Credentials are saved <b>only in this browser</b> and sent to the server only to run a sync \u2014 never stored there.":"Credentials are encrypted at rest (Fernet) and stored on the server for scheduled syncs.";}
+
 function openAddConnection(preKey){
   const cat=_cat(),s=$("#settings");
   const opts=cat.map(c=>`<option value="${esc(c.key)}">${esc(c.name)}${c.vendor&&c.vendor!==c.name?" · "+esc(c.vendor):""}</option>`).join("");
   s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Add connection</h3><div class="x" onclick="closeSettings()">✕</div></div>
   <div class="dialog-b">
-    <div class="note">Connect an account of any system. You can add <b>multiple</b> connections per type — several AWS accounts, several Okta orgs, etc. Credentials are encrypted at rest and never shown again.</div>
+    <div class="note">Connect an account of any system. You can add <b>multiple</b> connections per type — several AWS accounts, several Okta orgs, etc. Choose below whether credentials stay in this browser or are stored on the server.</div>
     <div class="fld"><label>Connector type</label><select id="acType" onchange="acFields()">${opts}</select></div>
     <div class="fld"><label>Label</label><input id="acLabel" placeholder="e.g. AWS — Production"/></div>
+    <div class="fld"><label>Where to store credentials</label>
+      <div class="seg" id="acStore">
+        <button type="button" class="on" data-store="local" onclick="setAcStore('local')">This browser only</button>
+        <button type="button" data-store="server" onclick="setAcStore('server')">Server (encrypted)</button>
+      </div>
+      <div id="acStoreNote" class="note" style="margin-top:8px">Credentials are saved <b>only in this browser</b> and sent to the server only to run a sync \u2014 never stored there.</div>
+    </div>
     <div id="acFields"></div>
   </div>
   <div class="dialog-f"><div style="flex:1"></div>
     <button class="btn" onclick="closeSettings()">Cancel</button>
     <button class="btn primary" onclick="submitAddConnection()">Add connection</button>
   </div></div>`;
+  AC_STORE="local";
   s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
   if(preKey){const sel=$("#acType");if(sel)sel.value=preKey;}
   acFields();
@@ -1607,6 +1628,11 @@ async function submitAddConnection(){
   const c=_cat().find(x=>x.key===$("#acType").value)||{env_vars:[]};
   const key=$("#acType").value, label=$("#acLabel").value.trim()||c.name, config={};
   (c.env_vars||[]).forEach(v=>{const el=$("#ac_"+v);if(el&&el.value.trim())config[v]=el.value.trim();});
+  if(AC_STORE==="local"){
+    upsertLocalConn({id:genLocalId(),connector_key:key,label,config,config_keys_set:Object.keys(config),
+      enabled:true,last_status:"never",last_mode:"demo",evidence_count:0,last_sync_at:null,last_error:null,local:true});
+    closeSettings();toast("Connection saved in this browser \u2014 "+label,"pass");render();return;
+  }
   if(STATE.demo){
     D.instances.push({id:"demo-"+Date.now(),connector_key:key,label,enabled:true,config_keys_set:Object.keys(config),last_status:"never",last_mode:"demo",evidence_count:0,last_sync_at:null,last_error:null});
     closeSettings();toast("Connection added (demo)","pass");render();return;
@@ -1615,17 +1641,33 @@ async function submitAddConnection(){
   catch(e){toast("Could not add connection: "+(e.message||e),"warn");}
 }
 async function instSync(id,label){
+  if(String(id).startsWith("local-")){
+    const conn=localConnById(id); if(!conn){toast("Local connection not found","warn");return;}
+    try{
+      const r=await apiPOST("/connectors/instances/ephemeral/sync",withTenantBody({connector_key:conn.connector_key,config:conn.config||{},instance_id:id}));
+      conn.last_status=r.status||"ok";conn.last_mode=r.mode;conn.evidence_count=r.evidence_count;conn.last_sync_at=new Date().toISOString();conn.last_error=r.error||null;upsertLocalConn(conn);
+      toast("Synced \u2014 "+r.evidence_count+" evidence items ("+r.mode+")","pass");closeDrawer();render();
+    }catch(e){toast("Sync failed: "+(e.message||e),"warn");}
+    return;
+  }
   if(STATE.demo){const i=D.instances.find(x=>x.id===id);if(i){i.last_status="ok";i.last_mode="demo";i.evidence_count=4;i.last_sync_at=new Date().toISOString();}toast("Synced (demo) — "+(label||""),"pass");closeDrawer();render();return;}
   try{const r=await apiPOST("/connectors/instances/"+encodeURIComponent(id)+"/sync",withTenantBody({}));toast("Synced — "+r.evidence_count+" evidence items ("+r.mode+")","pass");closeDrawer();render();}
   catch(e){toast("Sync failed: "+(e.message||e),"warn");}
 }
 async function instTest(id){
+  if(String(id).startsWith("local-")){
+    const conn=localConnById(id); if(!conn){toast("Local connection not found","warn");return;}
+    try{const r=await apiPOST("/connectors/instances/ephemeral/test",withTenantBody({connector_key:conn.connector_key,config:conn.config||{}}));toast((r.ok?"\u2713 ":"\u2717 ")+r.detail,r.ok?"pass":"warn");}
+    catch(e){toast("Test failed: "+(e.message||e),"warn");}
+    return;
+  }
   if(STATE.demo){toast("Test OK (demo mode)","pass");return;}
   try{const r=await apiPOST("/connectors/instances/"+encodeURIComponent(id)+"/test",withTenantBody({}));toast((r.ok?"✓ ":"✗ ")+r.detail,r.ok?"pass":"warn");}
   catch(e){toast("Test failed: "+(e.message||e),"warn");}
 }
 async function instDelete(id,label){
   if(!confirm("Remove connection "+(label||"")+"? Collected evidence stays, but it stops syncing."))return;
+  if(String(id).startsWith("local-")){saveLocalConns(loadLocalConns().filter(x=>x.id!==id));toast("Connection removed from this browser");closeDrawer();render();return;}
   if(STATE.demo){D.instances=D.instances.filter(x=>x.id!==id);toast("Connection removed (demo)");closeDrawer();render();return;}
   try{await api("/connectors/instances/"+encodeURIComponent(id)+withTenantQS(),{method:"DELETE"});toast("Connection removed");closeDrawer();render();}
   catch(e){toast("Delete failed: "+(e.message||e),"warn");}
@@ -1633,10 +1675,10 @@ async function instDelete(id,label){
 DETAIL.instances=function(i){
   const c=_cat().find(x=>x.key===i.connector_key)||{name:i.connector_key,env_vars:[]};
   const missing=(c.env_vars||[]).filter(v=>!(i.config_keys_set||[]).includes(v));
-  openDrawer({eyebrow:"connection · "+i.connector_key,title:esc(i.label),sub:esc(c.name||i.connector_key),badges:instModeBadge(i),
+  openDrawer({eyebrow:"connection · "+i.connector_key,title:esc(i.label),sub:esc(c.name||i.connector_key),badges:instModeBadge(i)+(i.local?' <span class="chip c-dim"><span class="d"></span>local</span>':""),
     body:
       dsec("Status",kvlist([["State",i.last_status==="never"?"Never synced":titlecase(i.last_status)],["Mode",titlecase(i.last_mode||"demo")],["Evidence collected",String(i.evidence_count||0)],["Last sync",i.last_sync_at?ago(i.last_sync_at):"—"],["Error",i.last_error||"—"]]))+
-      dsec("Credentials",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Configured: ${(i.config_keys_set||[]).map(k=>`<span class="chip c-dim" style="margin:2px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"none"}</div>`+(missing.length?`<div class="note" style="margin-top:8px">Missing for live: ${missing.map(esc).join(", ")} — runs in demo until set.</div>`:"")+`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored encrypted (Fernet); values are never displayed.</div>`)+
+      dsec("Credentials",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Configured: ${(i.config_keys_set||[]).map(k=>`<span class="chip c-dim" style="margin:2px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"none"}</div>`+(missing.length?`<div class="note" style="margin-top:8px">Missing for live: ${missing.map(esc).join(", ")} — runs in demo until set.</div>`:"")+(i.local?`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored <b>only in this browser</b> (local storage). Sent to the server only to run a sync \u2014 never saved there.</div>`:`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored encrypted (Fernet) on the server; values are never displayed.</div>`))+
       dsec("Coverage",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Feeds normalized evidence into the same control fields as every other source — so multiple accounts of one type each contribute independently.</div>`),
     actions:`<button class="btn sm primary" onclick="instSync('${esc(i.id)}','${esc(i.label)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button> <button class="btn sm" onclick="instTest('${esc(i.id)}')">Test</button><div style="flex:1"></div><button class="btn sm" onclick="instDelete('${esc(i.id)}','${esc(i.label)}')">Remove</button>${closeBtn}`});
 };
