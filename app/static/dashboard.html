@@ -329,6 +329,23 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
   .cols,.g-2,.g-3{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001s!important;transition-duration:.001s!important}}
+
+/* ---------- privacy & consent ---------- */
+.consent{position:fixed;left:16px;right:16px;bottom:16px;z-index:130;max-width:660px;margin:0 auto;background:var(--face);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 44px rgba(0,0,0,.18);padding:16px 18px;display:none;font-size:13px;color:var(--body);line-height:1.5}
+.consent.on{display:block;animation:cup .25s ease}
+@keyframes cup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.consent h4{margin:0 0 6px;font-size:13.5px;font-weight:700}
+.consent .crow{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;align-items:center}
+.clink{color:var(--focus);cursor:pointer;font-weight:600;font-size:12px}
+.clink:hover{text-decoration:underline}
+.tgl{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.tgl:last-child{border-bottom:none}
+.tgl .tx{flex:1}.tgl .tt{font-weight:600;font-size:13px}.tgl .td{font-size:11.5px;color:var(--steel);margin-top:2px;line-height:1.45}
+.sw{width:38px;height:22px;border-radius:11px;background:var(--line);position:relative;cursor:pointer;flex:none;transition:.15s;border:none;padding:0}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.sw.on{background:var(--pass)}.sw.on::after{left:18px}
+.sw.lock{opacity:.55;cursor:not-allowed}
+.icbtn.priv svg{width:17px;height:17px}
 </style>
 </head>
 <body>
@@ -359,12 +376,14 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
       <div class="sp"></div>
       <button class="kbtn" onclick="openCmd()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span>Search</span><kbd>⌘K</kbd></button>
       <button class="dswitch" id="demoswitch" onclick="toggleDemo()" aria-pressed="false" title="Show a sample dataset instead of live data">Demo<span class="dot"></span></button>
+      <button class="icbtn priv" id="privbtn" onclick="openPrivacy()" title="Privacy & data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
       <button class="icbtn" id="themebtn" onclick="toggleTheme()" title="Toggle theme"></button>
     </header>
     <div id="databanner" class="databanner"></div>
     <main id="main"><div class="loading"><span class="spin"></span> Calibrating…</div></main>
   </div>
 </div>
+<div id="consent" class="consent" role="dialog" aria-label="Privacy choices" aria-live="polite"></div>
 <div class="scrim" id="settings"></div>
 <div class="dscrim" id="dscrim" onclick="closeDrawer()"></div>
 <div class="drawer" id="drawer"></div>
@@ -570,7 +589,7 @@ function refreshConn(){
   else if(STATE.mode==="offline")setConn("offline","Offline","API unreachable");
   else                           setConn("connecting","Connecting…","checking endpoint");
 }
-function persistDemo(){try{localStorage.setItem("cl-demo",STATE.demo?"1":"0");}catch(e){}}
+function persistDemo(){if(!consentAllows("preferences"))return;try{localStorage.setItem("cl-demo",STATE.demo?"1":"0");}catch(e){}}
 function updateDemoSwitch(){const el=$("#demoswitch");if(el){el.classList.toggle("on",STATE.demo);el.setAttribute("aria-pressed",STATE.demo?"true":"false");}}
 function retryConn(){detectMode().then(()=>{renderDataBanner();render();});}
 /* THE segmentation: demo is shown ONLY when explicitly enabled. Toggling it on
@@ -625,7 +644,7 @@ function emptyLike(x){return Array.isArray(x)?[]:(x&&typeof x==="object"?{}:null
 const SUN='<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1.5 12h3M19.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>';
 const MOON='<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>';
 function applyTheme(t){document.documentElement.setAttribute("data-theme",t);$("#themebtn").innerHTML=t==="dark"?SUN:MOON;}
-function toggleTheme(){const cur=document.documentElement.getAttribute("data-theme");const nx=cur==="dark"?"light":"dark";applyTheme(nx);try{localStorage.setItem("cl-theme",nx);}catch(e){}}
+function toggleTheme(){const cur=document.documentElement.getAttribute("data-theme");const nx=cur==="dark"?"light":"dark";applyTheme(nx);if(consentAllows("preferences")){try{localStorage.setItem("cl-theme",nx);}catch(e){}}}
 
 /* ===================== SETTINGS ===================== */
 function openSettings(){
@@ -648,6 +667,97 @@ function openSettings(){
 }
 function closeSettings(){$("#settings").classList.remove("on");}
 function useDemo(){closeSettings();toggleDemo(true);}
+
+/* ===================== PRIVACY & CONSENT GUARDRAILS ===================== */
+const CONSENT_KEY="cl-consent", CONSENT_VERSION=1;
+const STORAGE_MANIFEST=[
+  {key:"cl-consent",cat:"essential",label:"Consent record",desc:"Remembers your privacy choices so we don't ask on every visit."},
+  {key:"cl-local-connections",cat:"essential",label:"Local connector credentials",desc:"Connector API keys you chose to keep in this browser only. Sent to the server only to run a sync, never stored there."},
+  {key:"cl-demo",cat:"preferences",label:"Demo-mode preference",desc:"Whether you're viewing sample data or your live environment."},
+  {key:"cl-theme",cat:"preferences",label:"Theme preference",desc:"Light or dark appearance."},
+];
+function loadConsent(){try{return JSON.parse(localStorage.getItem(CONSENT_KEY)||"null");}catch(e){return null;}}
+function saveConsent(prefs){try{localStorage.setItem(CONSENT_KEY,JSON.stringify({v:CONSENT_VERSION,ts:new Date().toISOString(),prefs}));}catch(e){}}
+function hasConsent(){const c=loadConsent();return !!(c&&c.v===CONSENT_VERSION);}
+function consentAllows(cat){if(cat==="essential")return true;const c=loadConsent();return !!(c&&c.prefs&&c.prefs[cat]);}
+function dntOn(){return navigator.doNotTrack=="1"||window.doNotTrack=="1"||navigator.msDoNotTrack=="1";}
+function maybeShowConsent(){if(!hasConsent())showConsentBanner();}
+function showConsentBanner(){
+  const b=$("#consent"); if(!b)return;
+  b.innerHTML=`<h4>Your privacy on this device</h4>
+    <div>Comp-Lens keeps a little data <b>in your browser</b> to work — your theme and demo preference, and any connector credentials you chose to keep local. There's no advertising or third-party tracking. ${dntOn()?'We detected <b>Do Not Track</b>, so optional storage stays off unless you turn it on.':''}</div>
+    <div class="crow">
+      <button class="btn primary sm" onclick="consentAcceptAll()">Accept all</button>
+      <button class="btn sm" onclick="consentEssentialOnly()">Essential only</button>
+      <button class="btn sm" onclick="openConsentPrefs()">Manage</button>
+      <div style="flex:1"></div>
+      <span class="clink" onclick="openPrivacyNotice()">Privacy notice</span>
+    </div>`;
+  b.classList.add("on");
+}
+function hideConsent(){const b=$("#consent");if(b)b.classList.remove("on");}
+function consentAcceptAll(){saveConsent({essential:true,preferences:true,analytics:true});hideConsent();persistDemo();toast("Privacy preferences saved","pass");}
+function consentEssentialOnly(){saveConsent({essential:true,preferences:false,analytics:false});hideConsent();purgeDisallowed();toast("Saved — essential only","pass");}
+function purgeDisallowed(){STORAGE_MANIFEST.forEach(m=>{if(m.cat!=="essential"&&!consentAllows(m.cat)){try{localStorage.removeItem(m.key);}catch(e){}}});}
+function openConsentPrefs(){
+  const c=loadConsent(), p=(c&&c.prefs)||{preferences:!dntOn(),analytics:false};
+  const s=$("#settings");
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy preferences</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  <div class="dialog-b">
+    <div class="note">Choose what Comp-Lens may keep in this browser. There is no third-party or advertising tracking. Changes apply immediately.</div>
+    <div class="tgl"><div class="tx"><div class="tt">Strictly necessary</div><div class="td">Your consent record and any connector credentials you chose to store locally. Always on.</div></div><button class="sw on lock" disabled aria-disabled="true"></button></div>
+    <div class="tgl"><div class="tx"><div class="tt">Preferences</div><div class="td">Remember your theme and demo-mode choice across visits.</div></div><button class="sw ${p.preferences?'on':''}" id="cp_preferences" onclick="this.classList.toggle('on')" aria-label="Preferences"></button></div>
+    <div class="tgl"><div class="tx"><div class="tt">Analytics</div><div class="td">None today. Reserved for anonymous, aggregate usage metrics — stays off unless you opt in.</div></div><button class="sw ${p.analytics?'on':''}" id="cp_analytics" onclick="this.classList.toggle('on')" aria-label="Analytics"></button></div>
+  </div>
+  <div class="dialog-f"><span class="clink" onclick="openPrivacyNotice()">Privacy notice</span><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="saveConsentPrefs()">Save preferences</button></div></div>`;
+  s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+function saveConsentPrefs(){
+  const prefs={essential:true,preferences:$("#cp_preferences").classList.contains("on"),analytics:$("#cp_analytics").classList.contains("on")};
+  saveConsent(prefs);hideConsent();
+  if(prefs.preferences)persistDemo(); else purgeDisallowed();
+  closeSettings();toast("Privacy preferences saved","pass");
+}
+function openPrivacy(){
+  const s=$("#settings");
+  const rows=STORAGE_MANIFEST.map(m=>{
+    let present=false,size=0; try{const v=localStorage.getItem(m.key); if(v!=null){present=true;size=v.length;}}catch(e){}
+    return `<div class="tgl"><div class="tx"><div class="tt">${esc(m.label)} <span class="chip c-dim" style="font-size:9px"><span class="d"></span>${m.cat}</span></div><div class="td">${esc(m.desc)}</div></div><div class="mono" style="font-size:11px;color:var(--steel);text-align:right;min-width:48px">${present?size+" B":"—"}</div></div>`;
+  }).join("");
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy &amp; data</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  <div class="dialog-b">
+    <div class="note">Everything Comp-Lens keeps about you on this device. None of it is shared with third parties.</div>
+    ${rows}
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
+      <button class="btn sm" onclick="openConsentPrefs()">Manage preferences</button>
+      <button class="btn sm" onclick="openPrivacyNotice()">Privacy notice</button>
+      <div style="flex:1"></div>
+      <button class="btn sm" style="color:var(--fail);border-color:var(--fail)" onclick="clearLocalData()">Clear all local data</button>
+    </div>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn primary" onclick="closeSettings()">Done</button></div></div>`;
+  s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+function clearLocalData(){
+  const n=(typeof loadLocalConns==="function"?loadLocalConns().length:0);
+  if(!confirm("Clear all Comp-Lens data stored in this browser?"+(n?` This permanently removes ${n} local connector credential${n===1?'':'s'}.`:"")+" This cannot be undone."))return;
+  try{Object.keys(localStorage).filter(k=>k.indexOf("cl-")===0).forEach(k=>localStorage.removeItem(k));}catch(e){}
+  toast("All local data cleared — reloading","pass");closeSettings();
+  setTimeout(()=>location.reload(),500);
+}
+function openPrivacyNotice(){
+  const s=$("#settings");
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy notice</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  <div class="dialog-b" style="font-size:13px;line-height:1.6;color:var(--body)">
+    <p style="margin:0 0 10px"><b>What we store on your device.</b> Comp-Lens keeps a small amount of data in your browser's local storage: your theme and demo-mode preferences, a record of your privacy choices, and — only if you opt in — connector credentials you choose to keep local.</p>
+    <p style="margin:0 0 10px"><b>Connector credentials.</b> When you mark a connection "this browser only," its API keys live solely in your browser. They are sent to the server only when you run a sync or test, used in memory, and never written to server storage.</p>
+    <p style="margin:0 0 10px"><b>No third-party tracking.</b> Comp-Lens uses no advertising or cross-site tracking cookies, and honours the browser's Do Not Track signal for optional storage.</p>
+    <p style="margin:0 0 10px"><b>Server-side data.</b> Evidence and compliance findings you generate are processed under your tenant. Credentials you choose to store on the server are encrypted at rest.</p>
+    <p style="margin:0"><b>Your controls.</b> Review what's stored, change consent, or erase all local data anytime from <span class="clink" onclick="openPrivacy()">Privacy &amp; data</span>.</p>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn primary" onclick="closeSettings()">Close</button></div></div>`;
+  s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
+}
 async function saveSettings(){
   CFG.base=$("#cfgBase").value.trim()||DEFAULT_BASE;
   CFG.key=$("#cfgKey").value.trim();
@@ -2159,6 +2269,7 @@ document.addEventListener("keydown",e=>{
   detectMode().then(()=>{
     renderDataBanner();
     render();
+    maybeShowConsent();
     if(STATE.demo)toast("Demo data on — sample dataset, not live data","warn");
     else if(STATE.mode==="offline")toast("Can't reach the API — views are empty (demo is off)","warn");
   });
