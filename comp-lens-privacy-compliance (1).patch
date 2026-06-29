@@ -1,0 +1,1029 @@
+diff --git a/alembic/versions/c1d2e3f4a5b6_privacy_compliance.py b/alembic/versions/c1d2e3f4a5b6_privacy_compliance.py
+new file mode 100644
+index 0000000..e5f8133
+--- /dev/null
++++ b/alembic/versions/c1d2e3f4a5b6_privacy_compliance.py
+@@ -0,0 +1,89 @@
++"""privacy & compliance: consent ledger, DSAR, ROPA, retention, audit log
++
++Revision ID: c1d2e3f4a5b6
++Revises: b1c2d3e4f5a6
++"""
++from alembic import op
++import sqlalchemy as sa
++
++revision = "c1d2e3f4a5b6"
++down_revision = "b1c2d3e4f5a6"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table(
++        "consent_records",
++        sa.Column("id", sa.String(36), primary_key=True),
++        sa.Column("tenant_id", sa.String(128), index=True, server_default="default"),
++        sa.Column("subject", sa.String(256), index=True, server_default=""),
++        sa.Column("purpose", sa.String(64), server_default="cookies"),
++        sa.Column("categories", sa.JSON()),
++        sa.Column("granted", sa.Boolean(), server_default=sa.true()),
++        sa.Column("version", sa.Integer(), server_default="1"),
++        sa.Column("source", sa.String(32), server_default="banner"),
++        sa.Column("ip", sa.String(64), nullable=True),
++        sa.Column("user_agent", sa.String(256), nullable=True),
++        sa.Column("created_at", sa.DateTime(timezone=True)),
++    )
++    op.create_table(
++        "data_subject_requests",
++        sa.Column("id", sa.String(36), primary_key=True),
++        sa.Column("tenant_id", sa.String(128), index=True, server_default="default"),
++        sa.Column("subject_email", sa.String(256), index=True, server_default=""),
++        sa.Column("request_type", sa.String(24), server_default="access"),
++        sa.Column("status", sa.String(24), server_default="received"),
++        sa.Column("details", sa.Text(), nullable=True),
++        sa.Column("notes", sa.Text(), nullable=True),
++        sa.Column("received_at", sa.DateTime(timezone=True)),
++        sa.Column("due_at", sa.DateTime(timezone=True), nullable=True),
++        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
++    )
++    op.create_table(
++        "processing_activities",
++        sa.Column("id", sa.String(36), primary_key=True),
++        sa.Column("tenant_id", sa.String(128), index=True, server_default="default"),
++        sa.Column("name", sa.String(256), server_default=""),
++        sa.Column("purpose", sa.Text(), nullable=True),
++        sa.Column("legal_basis", sa.String(48), server_default="legitimate_interests"),
++        sa.Column("data_categories", sa.JSON()),
++        sa.Column("data_subjects", sa.JSON()),
++        sa.Column("recipients", sa.JSON()),
++        sa.Column("retention", sa.String(128), server_default=""),
++        sa.Column("cross_border", sa.Boolean(), server_default=sa.false()),
++        sa.Column("safeguards", sa.String(256), server_default=""),
++        sa.Column("role", sa.String(16), server_default="controller"),
++        sa.Column("owner", sa.String(128), server_default=""),
++        sa.Column("updated_at", sa.DateTime(timezone=True)),
++    )
++    op.create_table(
++        "retention_policies",
++        sa.Column("id", sa.String(36), primary_key=True),
++        sa.Column("tenant_id", sa.String(128), index=True, server_default="default"),
++        sa.Column("data_category", sa.String(128), index=True, server_default=""),
++        sa.Column("retention_days", sa.Integer(), server_default="365"),
++        sa.Column("action", sa.String(24), server_default="delete"),
++        sa.Column("basis", sa.String(256), server_default=""),
++        sa.Column("enabled", sa.Boolean(), server_default=sa.true()),
++        sa.Column("updated_at", sa.DateTime(timezone=True)),
++    )
++    op.create_table(
++        "audit_events",
++        sa.Column("id", sa.String(36), primary_key=True),
++        sa.Column("tenant_id", sa.String(128), index=True, server_default="default"),
++        sa.Column("actor", sa.String(128), server_default="system"),
++        sa.Column("action", sa.String(64), index=True, server_default=""),
++        sa.Column("entity_type", sa.String(64), server_default=""),
++        sa.Column("entity_id", sa.String(128), server_default=""),
++        sa.Column("summary", sa.String(256), server_default=""),
++        sa.Column("meta", sa.JSON()),
++        sa.Column("ip", sa.String(64), nullable=True),
++        sa.Column("created_at", sa.DateTime(timezone=True), index=True),
++    )
++
++
++def downgrade() -> None:
++    for t in ("audit_events", "retention_policies", "processing_activities",
++              "data_subject_requests", "consent_records"):
++        op.drop_table(t)
+diff --git a/app/main.py b/app/main.py
+index 2f8db12..755891f 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -9,7 +9,7 @@ from __future__ import annotations
+ import logging
+ from contextlib import asynccontextmanager
+ 
+-from fastapi import Depends, FastAPI, HTTPException, Query
++from fastapi import Depends, FastAPI, HTTPException, Query, Request
+ from fastapi.middleware.cors import CORSMiddleware
+ from fastapi.responses import Response
+ from sqlalchemy import select
+@@ -152,6 +152,204 @@ def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
+     return [cfw.status_one(db, c, tenant_id) for c in ccat.all_connectors()]
+ 
+ 
++# ── Connector INSTANCES (multi-app / multi-tenant connections) ──
++# Registered BEFORE /connectors/{name} so "instances" isn't captured as a name.
++from pydantic import BaseModel as _InstBase
++
++
++class _InstanceCreate(_InstBase):
++    connector_key: str
++    label: str = ""
++    config: dict = {}
++    tenant_id: str = "default"
++    enabled: bool = True
++
++
++class _InstancePatch(_InstBase):
++    label: "str | None" = None
++    enabled: "bool | None" = None
++    config: "dict | None" = None
++    tenant_id: str = "default"
++
++
++class _InstSyncRequest(_InstBase):
++    tenant_id: str = "default"
++    force_demo: bool = False
++
++
++class _EphemeralTest(_InstBase):
++    connector_key: str
++    config: dict = {}
++    tenant_id: str = "default"
++
++
++class _EphemeralSync(_InstBase):
++    connector_key: str
++    config: dict = {}
++    instance_id: str = ""           # caller-supplied local id, e.g. "local-ab12cd34"
++    tenant_id: str = "default"
++    force_demo: bool = False
++
++
++@app.post("/connectors/assess", tags=["connectors"])
++def assess_connectors_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> dict:
++    """Roll collected connector evidence up into control posture findings.
++
++    Syncing connectors fills the evidence store; this projects that evidence into
++    findings so it actually moves your compliance posture. Idempotent.
++    """
++    authorize_tenant(p, tenant_id)
++    from app.services import integration as _integ
++    return _integ.assess_connector_evidence(db, tenant_id)
++
++
++@app.get("/connectors/instances", tags=["connectors"])
++def list_instances(tenant_id: str = "default", connector_key: "str | None" = None,
++                   db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).list(tenant_id, connector_key)
++
++
++@app.post("/connectors/instances", tags=["connectors"])
++def create_instance(body: _InstanceCreate, db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.connectors import catalog as ccat
++    if not ccat.get(body.connector_key):
++        raise HTTPException(404, f"unknown connector type '{body.connector_key}'")
++    from app.services.secrets import secrets_configured
++    if body.config and not secrets_configured() and settings.is_production:
++        raise HTTPException(400, "COMP_LENS_SECRET_KEY must be set to store connector "
++                                 "credentials in production")
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).create(body.tenant_id, body.connector_key,
++                                               body.label, body.config, body.enabled)
++
++
++@app.get("/connectors/instances/{instance_id}", tags=["connectors"])
++def get_instance(instance_id: str, tenant_id: str = "default",
++                 db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    inst = ConnectorInstanceService(db).get_public(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    return inst
++
++
++@app.patch("/connectors/instances/{instance_id}", tags=["connectors"])
++def update_instance(instance_id: str, body: _InstancePatch,
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    out = ConnectorInstanceService(db).update(instance_id, body.tenant_id,
++                                              label=body.label, enabled=body.enabled,
++                                              config=body.config)
++    if not out:
++        raise HTTPException(404, "unknown connector instance")
++    return out
++
++
++@app.delete("/connectors/instances/{instance_id}", tags=["connectors"])
++def delete_instance(instance_id: str, tenant_id: str = "default",
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    if not ConnectorInstanceService(db).delete(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return {"deleted": True, "id": instance_id}
++
++
++@app.post("/connectors/instances/ephemeral/test", tags=["connectors"])
++def ephemeral_test_ep(req: _EphemeralTest,
++                      p: Principal = Depends(require_principal)) -> dict:
++    """Test a connection using browser-held (local) credentials. The supplied
++    config is used in memory only and is NEVER written to the database."""
++    authorize_tenant(p, req.tenant_id)
++    from app.connectors import catalog as ccat, framework as cfw
++    c = ccat.get(req.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{req.connector_key}'")
++    return cfw.test_instance(c, req.config or {})
++
++
++@app.post("/connectors/instances/ephemeral/sync", tags=["connectors"])
++def ephemeral_sync_ep(req: _EphemeralSync, db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> dict:
++    """Sync using browser-held (local) credentials. Credentials are used in
++    memory only and are NEVER persisted; the derived evidence (which contains no
++    secrets) is stored under the caller-supplied local instance id so it still
++    aggregates into the compliance posture."""
++    authorize_tenant(p, req.tenant_id)
++    from uuid import uuid4
++    from app.connectors import catalog as ccat, framework as cfw
++    c = ccat.get(req.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{req.connector_key}'")
++    iid = req.instance_id if req.instance_id.startswith("local-") else "local-" + (req.instance_id or uuid4().hex[:8])
++    res = cfw.sync_instance(db, c, iid, req.config or {}, req.tenant_id, req.force_demo)
++    res["instance_id"] = iid
++    res["evidence"] = cfw.evidence_for_instance(db, iid, req.tenant_id)
++    return res
++
++
++@app.post("/connectors/instances/{instance_id}/test", tags=["connectors"])
++def test_instance_ep(instance_id: str, tenant_id: str = "default",
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    return cfw.test_instance(c, svc.config_of(inst))
++
++
++@app.post("/connectors/instances/{instance_id}/sync", tags=["connectors"])
++def sync_instance_ep(instance_id: str, req: "_InstSyncRequest | None" = None,
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    req = req or _InstSyncRequest()
++    authorize_tenant(p, req.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, req.tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    res = cfw.sync_instance(db, c, instance_id, svc.config_of(inst),
++                            req.tenant_id, req.force_demo)
++    svc.record_sync(inst, status=res["status"], mode=res["mode"],
++                    evidence_count=res["evidence_count"], error=res.get("error"))
++    return res
++
++
++@app.get("/connectors/instances/{instance_id}/evidence", tags=["connectors"])
++def instance_evidence_ep(instance_id: str, tenant_id: str = "default",
++                         db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import framework as cfw
++    if not ConnectorInstanceService(db).get(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return cfw.evidence_for_instance(db, instance_id, tenant_id)
++
++
+ @app.get("/connectors/{name}", tags=["connectors"])
+ def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+@@ -421,13 +619,53 @@ def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
+     return {"id": s.id, "name": s.name, "risk_tier": s.risk_tier}
+ 
+ 
++def _ai_system_row(s) -> dict:
++    return {"id": s.id, "name": s.name, "owner": s.owner, "risk_tier": s.risk_tier,
++            "impact_assessment": s.impact_assessment, "data_governance": s.data_governance,
++            "human_oversight": s.human_oversight, "transparency_notice": s.transparency_notice,
++            "eval_report": s.eval_report, "logging_enabled": s.logging_enabled,
++            "accuracy_tested": s.accuracy_tested,
++            "registered_at": s.registered_at.isoformat() if s.registered_at else None}
++
++
++def _pets_by_system(db: Session, tenant_id: str) -> dict:
++    rows = db.execute(select(_PET).where(_PET.tenant_id == tenant_id)).scalars().all()
++    out: dict = {}
++    for r in rows:
++        out.setdefault(r.system_id, []).append(
++            {"pet": r.pet, "params": _json.loads(r.params_json or "{}"), "_sens": r.data_sensitivity})
++    return out
++
++
+ @app.get("/ai-systems")
+ def list_ai_systems(tenant_id: str = "default", db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> list[dict]:
++    """Each AI system as a self-describing governance record: EU AI Act tier,
++    obligation coverage (met/gaps/%), residual privacy risk from its PETs, and
++    the AI frameworks it is governed under."""
+     authorize_tenant(p, tenant_id)
+     from app.models import AISystem
+     rows = db.execute(select(AISystem).where(AISystem.tenant_id == tenant_id)).scalars().all()
+-    return [{"id": s.id, "name": s.name, "owner": s.owner, "risk_tier": s.risk_tier} for s in rows]
++    pets = _pets_by_system(db, tenant_id)
++    out = []
++    for s in rows:
++        ps = pets.get(s.id, [])
++        sens = ps[0]["_sens"] if ps else "pii"
++        out.append(_aigov.system_governance(_ai_system_row(s), ps, sens))
++    return out
++
++
++@app.get("/ai-systems/{system_id}")
++def get_ai_system(system_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
++                  p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.models import AISystem
++    s = db.get(AISystem, system_id)
++    if not s or s.tenant_id != tenant_id:
++        raise HTTPException(404, "unknown AI system")
++    ps = _pets_by_system(db, tenant_id).get(system_id, [])
++    sens = ps[0]["_sens"] if ps else "pii"
++    return _aigov.system_governance(_ai_system_row(s), ps, sens)
+ 
+ 
+ # ── Merkle transparency log ──
+@@ -771,6 +1009,181 @@ def control_crosswalk(control_id: str, framework: str = "NIST_800_53",
+             "mapped": mapped_controls(control_id, framework)}
+ 
+ 
++# ======================= PRIVACY & COMPLIANCE =======================
++from app.services import privacy as _priv  # noqa: E402
++
++
++class _ConsentReq(_InstBase):
++    subject: str = "anonymous"
++    categories: dict = {}
++    purpose: str = "cookies"
++    granted: bool = True
++    source: str = "banner"
++    tenant_id: str = "default"
++
++
++class _DsarReq(_InstBase):
++    subject_email: str
++    request_type: str = "access"
++    details: str = ""
++    tenant_id: str = "default"
++
++
++class _DsarPatch(_InstBase):
++    status: str | None = None
++    notes: str | None = None
++    tenant_id: str = "default"
++
++
++class _RopaReq(_InstBase):
++    name: str = ""
++    purpose: str = ""
++    legal_basis: str = "legitimate_interests"
++    data_categories: list = []
++    data_subjects: list = []
++    recipients: list = []
++    retention: str = ""
++    cross_border: bool = False
++    safeguards: str = ""
++    role: str = "controller"
++    owner: str = ""
++    tenant_id: str = "default"
++
++
++class _RetentionReq(_InstBase):
++    data_category: str = ""
++    retention_days: int = 365
++    action: str = "delete"
++    basis: str = ""
++    enabled: bool = True
++    tenant_id: str = "default"
++
++
++def _client_ip(request: Request) -> str | None:
++    return request.client.host if request and request.client else None
++
++
++@app.post("/privacy/consent", tags=["privacy"])
++def record_consent_ep(req: _ConsentReq, request: Request, db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.record_consent(db, req.tenant_id, req.subject, req.categories,
++                                purpose=req.purpose, granted=req.granted, source=req.source,
++                                ip=_client_ip(request), user_agent=request.headers.get("user-agent"))
++
++
++@app.get("/privacy/consent", tags=["privacy"])
++def list_consent_ep(subject: str | None = None, tenant_id: str = "default",
++                    db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_consent(db, tenant_id, subject=subject)
++
++
++@app.post("/privacy/dsar", tags=["privacy"])
++def create_dsar_ep(req: _DsarReq, request: Request, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.create_dsar(db, req.tenant_id, req.subject_email, req.request_type,
++                             req.details, ip=_client_ip(request))
++
++
++@app.get("/privacy/dsar", tags=["privacy"])
++def list_dsar_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_dsar(db, tenant_id)
++
++
++@app.patch("/privacy/dsar/{dsar_id}", tags=["privacy"])
++def update_dsar_ep(dsar_id: str, req: _DsarPatch, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    out = _priv.update_dsar(db, req.tenant_id, dsar_id, status=req.status, notes=req.notes)
++    if out is None:
++        raise HTTPException(404, "unknown request")
++    return out
++
++
++@app.get("/privacy/ropa", tags=["privacy"])
++def list_ropa_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_ropa(db, tenant_id)
++
++
++@app.post("/privacy/ropa", tags=["privacy"])
++def create_ropa_ep(req: _RopaReq, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.create_ropa(db, req.tenant_id, req.model_dump())
++
++
++@app.patch("/privacy/ropa/{ropa_id}", tags=["privacy"])
++def update_ropa_ep(ropa_id: str, req: _RopaReq, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    out = _priv.update_ropa(db, req.tenant_id, ropa_id, req.model_dump(exclude_unset=True))
++    if out is None:
++        raise HTTPException(404, "unknown activity")
++    return out
++
++
++@app.delete("/privacy/ropa/{ropa_id}", tags=["privacy"])
++def delete_ropa_ep(ropa_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    if not _priv.delete_ropa(db, tenant_id, ropa_id):
++        raise HTTPException(404, "unknown activity")
++    return {"deleted": ropa_id}
++
++
++@app.get("/privacy/retention", tags=["privacy"])
++def list_retention_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_retention(db, tenant_id)
++
++
++@app.post("/privacy/retention", tags=["privacy"])
++def create_retention_ep(req: _RetentionReq, db: Session = Depends(get_db),
++                        p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.upsert_retention(db, req.tenant_id, req.model_dump())
++
++
++@app.patch("/privacy/retention/{policy_id}", tags=["privacy"])
++def update_retention_ep(policy_id: str, req: _RetentionReq, db: Session = Depends(get_db),
++                        p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    out = _priv.upsert_retention(db, req.tenant_id, req.model_dump(exclude_unset=True), policy_id)
++    if out is None:
++        raise HTTPException(404, "unknown policy")
++    return out
++
++
++@app.delete("/privacy/retention/{policy_id}", tags=["privacy"])
++def delete_retention_ep(policy_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
++                        p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    if not _priv.delete_retention(db, tenant_id, policy_id):
++        raise HTTPException(404, "unknown policy")
++    return {"deleted": policy_id}
++
++
++@app.post("/privacy/retention/scan", tags=["privacy"])
++def scan_retention_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    return _priv.scan_retention(db, tenant_id)
++
++
++@app.get("/privacy/audit-log", tags=["privacy"])
++def audit_log_ep(action: str | None = None, tenant_id: str = "default",
++                 db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_events(db, tenant_id, action=action)
++
++
+ @app.get("/evidence/export/oscal", tags=["evidence-graph"])
+ def export_oscal(framework: str = "NIST_800_53", tenant_id: str = "default",
+                  db: Session = Depends(get_db),
+diff --git a/app/models.py b/app/models.py
+index ab457b3..b08c486 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -199,6 +199,7 @@ class ConnectorEvidenceItem(Base):
+     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+     tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
+     connector_key: Mapped[str] = mapped_column(String(64), index=True)
++    instance_id: Mapped[Optional[str]] = mapped_column(String(36), index=True, nullable=True)
+     category: Mapped[str] = mapped_column(String(24), default="")
+     evidence_type: Mapped[str] = mapped_column(String(64), index=True)
+     title: Mapped[str] = mapped_column(String(256), default="")
+@@ -209,6 +210,31 @@ class ConnectorEvidenceItem(Base):
+     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+ 
+ 
++class ConnectorInstance(Base):
++    """A single configured connection of a connector type.
++
++    This is what makes Comp-Lens multi-app and multi-tenant: you can register
++    many instances of the same connector_key (e.g. three AWS accounts, two Okta
++    orgs), each with its own label, encrypted credentials, and sync status.
++    Credentials live in `config_enc` (Fernet-encrypted JSON) — never plaintext.
++    """
++    __tablename__ = "connector_instances"
++    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
++    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
++    connector_key: Mapped[str] = mapped_column(String(64), index=True)
++    label: Mapped[str] = mapped_column(String(128), default="")
++    config_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Fernet(JSON)
++    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
++    # embedded sync status (per-instance, so no shared (tenant,connector) ceiling)
++    last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
++    last_status: Mapped[str] = mapped_column(String(24), default="never")
++    last_mode: Mapped[str] = mapped_column(String(16), default="demo")
++    evidence_count: Mapped[int] = mapped_column(Integer, default=0)
++    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
++    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
++    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
++    __table_args__ = (Index("ix_instance_tenant_connector", "tenant_id", "connector_key"),)
++
+ # ── Pydantic API schemas ──
+ class AssessmentRequest(BaseModel):
+     tenant_id: str = Field(default="default")
+@@ -463,6 +489,8 @@ from app.grc_tprm_models import Risk, Vendor  # noqa: E402,F401
+ 
+ # Audit management
+ from app.audit_models import Audit, AuditControl, EvidenceRequest  # noqa: E402,F401
++from app.privacy_models import (AuditEvent, ConsentRecord, DataSubjectRequest,  # noqa: E402,F401
++                                ProcessingActivity, RetentionPolicy)  # noqa: E402,F401
+ 
+ from app.ai_governance_models import AISystemPET  # noqa: E402,F401
+ 
+diff --git a/app/privacy_models.py b/app/privacy_models.py
+new file mode 100644
+index 0000000..725cb48
+--- /dev/null
++++ b/app/privacy_models.py
+@@ -0,0 +1,101 @@
++"""Privacy & compliance models: consent ledger, data-subject requests (DSAR),
++records of processing (ROPA), data-retention policies, and an immutable
++activity/audit log. All tenant-scoped, matching the project's model conventions."""
++from __future__ import annotations
++
++import uuid
++from datetime import datetime, timezone
++from typing import Optional
++
++from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
++from sqlalchemy.orm import Mapped, mapped_column
++
++from app.database import Base
++
++
++def _uuid() -> str:
++    return str(uuid.uuid4())
++
++
++def utc_now() -> datetime:
++    return datetime.now(timezone.utc)
++
++
++class ConsentRecord(Base):
++    """An auditable, append-only record of a consent decision — the server-side
++    counterpart to the browser consent banner."""
++    __tablename__ = "consent_records"
++    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
++    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
++    subject: Mapped[str] = mapped_column(String(256), index=True, default="")     # email / device id / user ref
++    purpose: Mapped[str] = mapped_column(String(64), default="cookies")            # cookies, marketing, processing…
++    categories: Mapped[dict] = mapped_column(JSON, default=dict)                   # {essential, preferences, analytics}
++    granted: Mapped[bool] = mapped_column(Boolean, default=True)
++    version: Mapped[int] = mapped_column(Integer, default=1)
++    source: Mapped[str] = mapped_column(String(32), default="banner")             # banner, api, dsar, import
++    ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
++    user_agent: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
++    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
++
++
++class DataSubjectRequest(Base):
++    """A GDPR/CCPA data-subject rights request with a statutory deadline."""
++    __tablename__ = "data_subject_requests"
++    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
++    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
++    subject_email: Mapped[str] = mapped_column(String(256), index=True, default="")
++    request_type: Mapped[str] = mapped_column(String(24), default="access")        # access, erasure, rectification,
++    #                                                                                 portability, restriction, objection
++    status: Mapped[str] = mapped_column(String(24), default="received")            # received, in_progress, completed, rejected
++    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
++    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
++    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
++    due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
++    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
++
++
++class ProcessingActivity(Base):
++    """A Records-of-Processing-Activities (GDPR Art. 30) entry."""
++    __tablename__ = "processing_activities"
++    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
++    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
++    name: Mapped[str] = mapped_column(String(256), default="")
++    purpose: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
++    legal_basis: Mapped[str] = mapped_column(String(48), default="legitimate_interests")
++    data_categories: Mapped[list] = mapped_column(JSON, default=list)
++    data_subjects: Mapped[list] = mapped_column(JSON, default=list)
++    recipients: Mapped[list] = mapped_column(JSON, default=list)
++    retention: Mapped[str] = mapped_column(String(128), default="")
++    cross_border: Mapped[bool] = mapped_column(Boolean, default=False)
++    safeguards: Mapped[str] = mapped_column(String(256), default="")
++    role: Mapped[str] = mapped_column(String(16), default="controller")            # controller / processor
++    owner: Mapped[str] = mapped_column(String(128), default="")
++    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
++
++
++class RetentionPolicy(Base):
++    """A data-retention rule for a category of data."""
++    __tablename__ = "retention_policies"
++    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
++    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
++    data_category: Mapped[str] = mapped_column(String(128), index=True, default="")
++    retention_days: Mapped[int] = mapped_column(Integer, default=365)
++    action: Mapped[str] = mapped_column(String(24), default="delete")              # delete, anonymize, review
++    basis: Mapped[str] = mapped_column(String(256), default="")
++    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
++    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
++
++
++class AuditEvent(Base):
++    """Immutable activity log of meaningful actions in the platform."""
++    __tablename__ = "audit_events"
++    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
++    tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
++    actor: Mapped[str] = mapped_column(String(128), default="system")
++    action: Mapped[str] = mapped_column(String(64), index=True, default="")        # e.g. consent.recorded, dsar.created
++    entity_type: Mapped[str] = mapped_column(String(64), default="")
++    entity_id: Mapped[str] = mapped_column(String(128), default="")
++    summary: Mapped[str] = mapped_column(String(256), default="")
++    meta: Mapped[dict] = mapped_column(JSON, default=dict)
++    ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
++    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, default=utc_now)
+diff --git a/app/services/privacy.py b/app/services/privacy.py
+new file mode 100644
+index 0000000..5e68887
+--- /dev/null
++++ b/app/services/privacy.py
+@@ -0,0 +1,313 @@
++"""Service layer for the privacy & compliance modules."""
++from __future__ import annotations
++
++from datetime import timedelta, timezone
++from typing import Any, Dict, List, Optional
++
++from sqlalchemy import select, desc
++from sqlalchemy.orm import Session
++
++from app.privacy_models import (AuditEvent, ConsentRecord, DataSubjectRequest,
++                                ProcessingActivity, RetentionPolicy, utc_now)
++
++# Statutory response window for data-subject requests (GDPR: 1 month).
++DSAR_SLA_DAYS = 30
++
++LEGAL_BASES = ["consent", "contract", "legal_obligation", "vital_interests",
++               "public_task", "legitimate_interests"]
++DSAR_TYPES = ["access", "erasure", "rectification", "portability", "restriction", "objection"]
++
++
++# ─────────────────────────── serialisers ───────────────────────────
++def _iso(dt) -> Optional[str]:
++    return dt.isoformat() if dt else None
++
++
++def _aware(dt):
++    """SQLite returns naive datetimes; coerce to aware UTC for safe comparison."""
++    if dt is None:
++        return None
++    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
++
++
++def consent_dict(c: ConsentRecord) -> Dict[str, Any]:
++    return {"id": c.id, "subject": c.subject, "purpose": c.purpose,
++            "categories": c.categories or {}, "granted": c.granted,
++            "version": c.version, "source": c.source, "ip": c.ip,
++            "created_at": _iso(c.created_at)}
++
++
++def dsar_dict(d: DataSubjectRequest) -> Dict[str, Any]:
++    due = _aware(d.due_at)
++    overdue = bool(due and not d.completed_at and due < utc_now())
++    days_left = None
++    if d.due_at and not d.completed_at:
++        days_left = (due - utc_now()).days
++    return {"id": d.id, "subject_email": d.subject_email, "request_type": d.request_type,
++            "status": d.status, "details": d.details, "notes": d.notes,
++            "received_at": _iso(d.received_at), "due_at": _iso(d.due_at),
++            "completed_at": _iso(d.completed_at), "overdue": overdue, "days_left": days_left}
++
++
++def ropa_dict(r: ProcessingActivity) -> Dict[str, Any]:
++    return {"id": r.id, "name": r.name, "purpose": r.purpose, "legal_basis": r.legal_basis,
++            "data_categories": r.data_categories or [], "data_subjects": r.data_subjects or [],
++            "recipients": r.recipients or [], "retention": r.retention,
++            "cross_border": r.cross_border, "safeguards": r.safeguards, "role": r.role,
++            "owner": r.owner, "updated_at": _iso(r.updated_at)}
++
++
++def retention_dict(r: RetentionPolicy) -> Dict[str, Any]:
++    return {"id": r.id, "data_category": r.data_category, "retention_days": r.retention_days,
++            "action": r.action, "basis": r.basis, "enabled": r.enabled,
++            "updated_at": _iso(r.updated_at)}
++
++
++def audit_dict(a: AuditEvent) -> Dict[str, Any]:
++    return {"id": a.id, "actor": a.actor, "action": a.action, "entity_type": a.entity_type,
++            "entity_id": a.entity_id, "summary": a.summary, "meta": a.meta or {},
++            "ip": a.ip, "created_at": _iso(a.created_at)}
++
++
++# ─────────────────────────── audit log ───────────────────────────
++def record_event(db: Session, tenant_id: str, action: str, *, actor: str = "system",
++                 entity_type: str = "", entity_id: str = "", summary: str = "",
++                 meta: Optional[dict] = None, ip: Optional[str] = None) -> AuditEvent:
++    ev = AuditEvent(tenant_id=tenant_id, actor=actor, action=action,
++                    entity_type=entity_type, entity_id=entity_id, summary=summary,
++                    meta=meta or {}, ip=ip)
++    db.add(ev)
++    db.commit()
++    return ev
++
++
++def list_events(db: Session, tenant_id: str, *, action: Optional[str] = None,
++                limit: int = 200) -> List[Dict[str, Any]]:
++    q = select(AuditEvent).where(AuditEvent.tenant_id == tenant_id)
++    if action:
++        q = q.where(AuditEvent.action == action)
++    q = q.order_by(desc(AuditEvent.created_at)).limit(limit)
++    return [audit_dict(a) for a in db.execute(q).scalars().all()]
++
++
++# ─────────────────────────── consent ledger ───────────────────────────
++def record_consent(db: Session, tenant_id: str, subject: str, categories: dict, *,
++                   purpose: str = "cookies", granted: bool = True, source: str = "banner",
++                   ip: Optional[str] = None, user_agent: Optional[str] = None) -> Dict[str, Any]:
++    c = ConsentRecord(tenant_id=tenant_id, subject=subject or "anonymous", purpose=purpose,
++                      categories=categories or {}, granted=granted, source=source,
++                      ip=ip, user_agent=user_agent)
++    db.add(c)
++    db.commit()
++    record_event(db, tenant_id, "consent.recorded", actor=subject or "anonymous",
++                 entity_type="consent", entity_id=c.id,
++                 summary=f"Consent {'granted' if granted else 'withdrawn'} for {purpose}", ip=ip)
++    return consent_dict(c)
++
++
++def list_consent(db: Session, tenant_id: str, *, subject: Optional[str] = None,
++                 limit: int = 200) -> List[Dict[str, Any]]:
++    q = select(ConsentRecord).where(ConsentRecord.tenant_id == tenant_id)
++    if subject:
++        q = q.where(ConsentRecord.subject == subject)
++    q = q.order_by(desc(ConsentRecord.created_at)).limit(limit)
++    return [consent_dict(c) for c in db.execute(q).scalars().all()]
++
++
++# ─────────────────────────── DSAR ───────────────────────────
++def create_dsar(db: Session, tenant_id: str, subject_email: str, request_type: str,
++                details: str = "", ip: Optional[str] = None) -> Dict[str, Any]:
++    if request_type not in DSAR_TYPES:
++        request_type = "access"
++    now = utc_now()
++    d = DataSubjectRequest(tenant_id=tenant_id, subject_email=subject_email,
++                           request_type=request_type, details=details, status="received",
++                           received_at=now, due_at=now + timedelta(days=DSAR_SLA_DAYS))
++    db.add(d)
++    db.commit()
++    record_event(db, tenant_id, "dsar.created", actor=subject_email or "anonymous",
++                 entity_type="dsar", entity_id=d.id,
++                 summary=f"{request_type.title()} request received", ip=ip)
++    return dsar_dict(d)
++
++
++def list_dsar(db: Session, tenant_id: str) -> List[Dict[str, Any]]:
++    q = select(DataSubjectRequest).where(DataSubjectRequest.tenant_id == tenant_id) \
++        .order_by(desc(DataSubjectRequest.received_at))
++    return [dsar_dict(d) for d in db.execute(q).scalars().all()]
++
++
++def update_dsar(db: Session, tenant_id: str, dsar_id: str, *, status: Optional[str] = None,
++                notes: Optional[str] = None) -> Optional[Dict[str, Any]]:
++    d = db.get(DataSubjectRequest, dsar_id)
++    if not d or d.tenant_id != tenant_id:
++        return None
++    if status:
++        d.status = status
++        if status in ("completed", "rejected") and not d.completed_at:
++            d.completed_at = utc_now()
++        if status not in ("completed", "rejected"):
++            d.completed_at = None
++    if notes is not None:
++        d.notes = notes
++    db.commit()
++    record_event(db, tenant_id, "dsar.updated", entity_type="dsar", entity_id=d.id,
++                 summary=f"Status → {d.status}")
++    return dsar_dict(d)
++
++
++# ─────────────────────────── ROPA ───────────────────────────
++_ROPA_DEFAULTS = [
++    {"name": "Customer account & billing", "purpose": "Operate the service and bill customers.",
++     "legal_basis": "contract", "data_categories": ["name", "email", "billing"],
++     "data_subjects": ["customers"], "recipients": ["payment processor"],
++     "retention": "Life of contract + 7 years", "role": "controller", "owner": "Finance"},
++    {"name": "Compliance evidence & findings", "purpose": "Demonstrate control compliance to auditors.",
++     "legal_basis": "legal_obligation", "data_categories": ["system metadata", "control status"],
++     "data_subjects": ["employees", "systems"], "recipients": ["external auditors"],
++     "retention": "7 years", "role": "controller", "owner": "Compliance"},
++    {"name": "Connector credentials", "purpose": "Collect evidence from connected systems.",
++     "legal_basis": "legitimate_interests", "data_categories": ["API tokens"],
++     "data_subjects": ["service accounts"], "recipients": [],
++     "retention": "Until connection removed", "role": "processor", "owner": "Security"},
++    {"name": "Website & product analytics", "purpose": "Understand product usage in aggregate.",
++     "legal_basis": "consent", "data_categories": ["usage events"], "data_subjects": ["visitors"],
++     "recipients": [], "retention": "14 months", "role": "controller", "owner": "Product"},
++]
++
++
++def ensure_seeded(db: Session, tenant_id: str) -> None:
++    """Optional: seed a starter Article-30 register + retention schedule.
++    NOT called automatically — live tables stay empty until the user adds rows."""
++    if not db.execute(select(ProcessingActivity).where(
++            ProcessingActivity.tenant_id == tenant_id).limit(1)).first():
++        for r in _ROPA_DEFAULTS:
++            db.add(ProcessingActivity(tenant_id=tenant_id, **r))
++        db.commit()
++    if not db.execute(select(RetentionPolicy).where(
++            RetentionPolicy.tenant_id == tenant_id).limit(1)).first():
++        for cat, days, act, basis in [
++            ("Connector evidence", 365, "review", "Audit evidence lifecycle"),
++            ("Audit / activity log", 730, "review", "Security & accountability"),
++            ("Consent records", 1095, "review", "Proof of consent (GDPR Art. 7)"),
++            ("DSAR records", 730, "delete", "Rights-request recordkeeping"),
++            ("Product analytics", 425, "anonymize", "Analytics minimisation"),
++        ]:
++            db.add(RetentionPolicy(tenant_id=tenant_id, data_category=cat,
++                                   retention_days=days, action=act, basis=basis))
++        db.commit()
++
++
++def create_ropa(db: Session, tenant_id: str, data: dict) -> Dict[str, Any]:
++    r = ProcessingActivity(
++        tenant_id=tenant_id, name=data.get("name", ""), purpose=data.get("purpose", ""),
++        legal_basis=data.get("legal_basis", "legitimate_interests"),
++        data_categories=data.get("data_categories", []), data_subjects=data.get("data_subjects", []),
++        recipients=data.get("recipients", []), retention=data.get("retention", ""),
++        cross_border=bool(data.get("cross_border", False)), safeguards=data.get("safeguards", ""),
++        role=data.get("role", "controller"), owner=data.get("owner", ""))
++    db.add(r)
++    db.commit()
++    record_event(db, tenant_id, "ropa.created", entity_type="ropa", entity_id=r.id,
++                 summary=f"Processing activity '{r.name}' added")
++    return ropa_dict(r)
++
++
++def list_ropa(db: Session, tenant_id: str) -> List[Dict[str, Any]]:
++    q = select(ProcessingActivity).where(ProcessingActivity.tenant_id == tenant_id) \
++        .order_by(ProcessingActivity.name)
++    return [ropa_dict(r) for r in db.execute(q).scalars().all()]
++
++
++def update_ropa(db: Session, tenant_id: str, ropa_id: str, data: dict) -> Optional[Dict[str, Any]]:
++    r = db.get(ProcessingActivity, ropa_id)
++    if not r or r.tenant_id != tenant_id:
++        return None
++    for f in ("name", "purpose", "legal_basis", "data_categories", "data_subjects",
++              "recipients", "retention", "cross_border", "safeguards", "role", "owner"):
++        if f in data:
++            setattr(r, f, data[f])
++    r.updated_at = utc_now()
++    db.commit()
++    return ropa_dict(r)
++
++
++def delete_ropa(db: Session, tenant_id: str, ropa_id: str) -> bool:
++    r = db.get(ProcessingActivity, ropa_id)
++    if not r or r.tenant_id != tenant_id:
++        return False
++    db.delete(r)
++    db.commit()
++    record_event(db, tenant_id, "ropa.deleted", entity_type="ropa", entity_id=ropa_id)
++    return True
++
++
++# ─────────────────────────── retention ───────────────────────────
++def list_retention(db: Session, tenant_id: str) -> List[Dict[str, Any]]:
++    q = select(RetentionPolicy).where(RetentionPolicy.tenant_id == tenant_id) \
++        .order_by(RetentionPolicy.data_category)
++    return [retention_dict(r) for r in db.execute(q).scalars().all()]
++
++
++def upsert_retention(db: Session, tenant_id: str, data: dict,
++                     policy_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
++    r = db.get(RetentionPolicy, policy_id) if policy_id else None
++    if policy_id and (not r or r.tenant_id != tenant_id):
++        return None
++    if not r:
++        r = RetentionPolicy(tenant_id=tenant_id)
++        db.add(r)
++    for f in ("data_category", "retention_days", "action", "basis", "enabled"):
++        if f in data:
++            setattr(r, f, data[f])
++    r.updated_at = utc_now()
++    db.commit()
++    return retention_dict(r)
++
++
++def delete_retention(db: Session, tenant_id: str, policy_id: str) -> bool:
++    r = db.get(RetentionPolicy, policy_id)
++    if not r or r.tenant_id != tenant_id:
++        return False
++    db.delete(r)
++    db.commit()
++    return True
++
++
++# Map a retention category to a concrete table + timestamp column for the scan.
++def _scan_targets():
++    from app.models import ConnectorEvidenceItem, Finding  # lazy
++    return {
++        "connector evidence": (ConnectorEvidenceItem, ConnectorEvidenceItem.collected_at),
++        "audit / activity log": (AuditEvent, AuditEvent.created_at),
++        "consent records": (ConsentRecord, ConsentRecord.created_at),
++        "findings": (Finding, getattr(Finding, "detected_at", getattr(Finding, "created_at", None))),
++    }
++
++
++def scan_retention(db: Session, tenant_id: str) -> Dict[str, Any]:
++    """Evaluate each enabled policy against real rows and report how many are
++    past their retention window (the action is reported, not auto-applied)."""
++    targets = _scan_targets()
++    results, total_expired = [], 0
++    for r in db.execute(select(RetentionPolicy).where(
++            RetentionPolicy.tenant_id == tenant_id)).scalars().all():
++        cutoff = utc_now() - timedelta(days=r.retention_days)
++        key = (r.data_category or "").strip().lower()
++        target = targets.get(key)
++        expired = None
++        if target and target[1] is not None:
++            model, col = target
++            try:
++                expired = db.query(model).filter(
++                    model.tenant_id == tenant_id, col < cutoff).count()
++            except Exception:  # noqa: BLE001
++                expired = None
++        if expired:
++            total_expired += expired
++        results.append({"data_category": r.data_category, "retention_days": r.retention_days,
++                        "action": r.action, "enabled": r.enabled, "cutoff": _iso(cutoff),
++                        "expired": expired, "measurable": target is not None})
++    record_event(db, tenant_id, "retention.scanned", entity_type="retention",
++                 summary=f"Retention scan: {total_expired} record(s) past retention")
++    return {"scanned_at": _iso(utc_now()), "total_expired": total_expired, "policies": results}
