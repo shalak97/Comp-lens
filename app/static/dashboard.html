@@ -2168,8 +2168,262 @@ function drawGraph3D(host,model){
     window.removeEventListener("mousemove",move);window.removeEventListener("mouseup",up);};
 }
 
+/* ===================== PRIVACY & COMPLIANCE VIEWS ===================== */
+const apiPATCH=(p,b)=>api(p,{method:"PATCH",body:JSON.stringify(b||{})});
+const LEGAL_BASIS={consent:"Consent",contract:"Contract",legal_obligation:"Legal obligation",vital_interests:"Vital interests",public_task:"Public task",legitimate_interests:"Legitimate interests"};
+function lbChip(b){return `<span class="chip c-dim"><span class="d"></span>${esc(LEGAL_BASIS[b]||b||"—")}</span>`;}
+function dsarTypeLabel(t){return ({access:"Access",erasure:"Erasure",rectification:"Rectification",portability:"Portability",restriction:"Restriction",objection:"Objection"})[t]||t;}
+
+D.consentLog=[
+  {id:"c1",subject:"alex@acme.com",purpose:"cookies",categories:{essential:true,preferences:true,analytics:false},granted:true,source:"banner",created_at:new Date(Date.now()-2*864e5).toISOString()},
+  {id:"c2",subject:"sam@acme.com",purpose:"cookies",categories:{essential:true,preferences:false,analytics:false},granted:true,source:"banner",created_at:new Date(Date.now()-5*864e5).toISOString()},
+  {id:"c3",subject:"jo@acme.com",purpose:"marketing",categories:{marketing:false},granted:false,source:"api",created_at:new Date(Date.now()-9*864e5).toISOString()},
+];
+D.dsar=[
+  {id:"d1",subject_email:"jane@user.com",request_type:"access",status:"in_progress",received_at:new Date(Date.now()-6*864e5).toISOString(),due_at:new Date(Date.now()+24*864e5).toISOString(),completed_at:null,overdue:false,days_left:24},
+  {id:"d2",subject_email:"mark@user.com",request_type:"erasure",status:"received",received_at:new Date(Date.now()-1*864e5).toISOString(),due_at:new Date(Date.now()+29*864e5).toISOString(),completed_at:null,overdue:false,days_left:29},
+  {id:"d3",subject_email:"lee@user.com",request_type:"portability",status:"completed",received_at:new Date(Date.now()-40*864e5).toISOString(),due_at:new Date(Date.now()-10*864e5).toISOString(),completed_at:new Date(Date.now()-12*864e5).toISOString(),overdue:false,days_left:-10},
+  {id:"d4",subject_email:"kim@user.com",request_type:"access",status:"received",received_at:new Date(Date.now()-35*864e5).toISOString(),due_at:new Date(Date.now()-5*864e5).toISOString(),completed_at:null,overdue:true,days_left:-5},
+];
+D.ropa=[
+  {id:"r1",name:"Customer account & billing",purpose:"Operate the service and bill customers.",legal_basis:"contract",data_categories:["name","email","billing"],data_subjects:["customers"],recipients:["payment processor"],retention:"Life of contract + 7y",cross_border:true,safeguards:"Standard Contractual Clauses",role:"controller",owner:"Finance"},
+  {id:"r2",name:"Compliance evidence & findings",purpose:"Demonstrate control compliance to auditors.",legal_basis:"legal_obligation",data_categories:["system metadata","control status"],data_subjects:["employees","systems"],recipients:["external auditors"],retention:"7 years",cross_border:false,safeguards:"",role:"controller",owner:"Compliance"},
+  {id:"r3",name:"Website & product analytics",purpose:"Understand product usage in aggregate.",legal_basis:"consent",data_categories:["usage events"],data_subjects:["visitors"],recipients:[],retention:"14 months",cross_border:false,safeguards:"",role:"controller",owner:"Product"},
+];
+D.retention=[
+  {id:"rp1",data_category:"Connector evidence",retention_days:365,action:"review",basis:"Audit evidence lifecycle",enabled:true},
+  {id:"rp2",data_category:"Audit / activity log",retention_days:730,action:"review",basis:"Security & accountability",enabled:true},
+  {id:"rp3",data_category:"Consent records",retention_days:1095,action:"review",basis:"Proof of consent (GDPR Art. 7)",enabled:true},
+  {id:"rp4",data_category:"Product analytics",retention_days:425,action:"anonymize",basis:"Analytics minimisation",enabled:true},
+];
+D.auditlog=[
+  {id:"a1",actor:"alex@acme.com",action:"consent.recorded",entity_type:"consent",summary:"Consent granted for cookies",created_at:new Date(Date.now()-2*36e5).toISOString()},
+  {id:"a2",actor:"jane@user.com",action:"dsar.created",entity_type:"dsar",summary:"Access request received",created_at:new Date(Date.now()-6*36e5).toISOString()},
+  {id:"a3",actor:"system",action:"retention.scanned",entity_type:"retention",summary:"Retention scan: 0 record(s) past retention",created_at:new Date(Date.now()-12*36e5).toISOString()},
+  {id:"a4",actor:"admin",action:"ropa.updated",entity_type:"ropa",summary:"Processing activity 'Analytics' updated",created_at:new Date(Date.now()-26*36e5).toISOString()},
+];
+
+RENDER.consent=async function(){
+  const m=main();m.innerHTML=viewHead("Consent ledger","An auditable, server-side record of every consent decision — the proof regulators ask for.","","privacy / 01");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  const[res]=await Promise.all([load(withTenant("/privacy/consent"),D.consentLog)]);
+  const rows=res.data||D.consentLog;CACHE.consent=rows;
+  const granted=rows.filter(r=>r.granted).length;
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Consent records</div><div class="v num">${rows.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Granted</div><div class="v num">${granted}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Withdrawn / denied</div><div class="v num">${rows.length-granted}</div></div>
+    <div class="ro"><div class="k">Latest</div><div class="v num" style="font-size:15px">${rows[0]?ago(rows[0].created_at):"—"}</div></div>
+  </div>
+  <div class="panel"><div class="panel-h"><h3>Consent records</h3><div class="sub" style="margin-left:auto">append-only</div></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Subject</th><th>Purpose</th><th>Categories</th><th>Decision</th><th>Source</th><th class="right">When</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td class="mono" style="font-size:11.5px">${esc(r.subject)}</td>
+      <td>${esc(r.purpose)}</td>
+      <td>${Object.entries(r.categories||{}).map(([k,v])=>`<span class="chip ${v?'c-pass':'c-out'}" style="font-size:9px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"—"}</td>
+      <td>${r.granted?'<span class="chip c-pass"><span class="d"></span>Granted</span>':'<span class="chip c-fail"><span class="d"></span>Withdrawn</span>'}</td>
+      <td class="mono" style="font-size:11px;color:var(--steel)">${esc(r.source)}</td>
+      <td class="right mono" style="font-size:11px;color:var(--steel)">${ago(r.created_at)}</td></tr>`).join("")||`<tr><td colspan="6">${emptyState("No consent records yet","Consent decisions from the banner are recorded here.")}</td></tr>`}</tbody>
+  </table></div></div></div>`;
+};
+
+RENDER.dsar=async function(){
+  const m=main();m.innerHTML=viewHead("Data subject requests","Intake and track GDPR/CCPA rights requests against their statutory deadline.",
+    `<button class="btn primary" onclick="openDsarIntake()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New request</button>`,"privacy / 02");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  const[res]=await Promise.all([load(withTenant("/privacy/dsar"),D.dsar)]);
+  const rows=res.data||D.dsar;CACHE.dsar=rows;
+  const open=rows.filter(r=>!["completed","rejected"].includes(r.status));
+  const overdue=rows.filter(r=>r.overdue).length;
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Total requests</div><div class="v num">${rows.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Open</div><div class="v num">${open.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Overdue</div><div class="v num">${overdue}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Completed</div><div class="v num">${rows.filter(r=>r.status==='completed').length}</div></div>
+  </div>
+  <div class="note">Statutory response window: 30 days from receipt. Click a request to advance its status.</div>
+  <div class="panel"><div class="panel-h"><h3>Requests</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Subject</th><th>Type</th><th>Status</th><th>Deadline</th><th class="right">Received</th></tr></thead>
+    <tbody data-ent="dsar">${rows.map(r=>{
+      const dl=r.days_left; const dchip=r.completed_at?'<span style="color:var(--steel);font-size:11px">closed</span>':r.overdue?`<span class="chip c-fail"><span class="d"></span>${Math.abs(dl)}d overdue</span>`:`<span class="chip ${dl<=7?'c-warn':'c-out'}"><span class="d"></span>${dl}d left</span>`;
+      return `<tr>
+        <td class="mono" style="font-size:11.5px">${esc(r.subject_email)}</td>
+        <td>${esc(dsarTypeLabel(r.request_type))}</td>
+        <td>${statusChip(r.status)}</td>
+        <td>${dchip}</td>
+        <td class="right mono" style="font-size:11px;color:var(--steel)">${ago(r.received_at)}</td></tr>`;}).join("")||`<tr><td colspan="5">${emptyState("No requests","Log a data subject request to start the clock.")}</td></tr>`}</tbody>
+  </table></div></div></div>`;
+};
+DETAIL.dsar=function(r){
+  openDrawer({eyebrow:"request · "+r.request_type,title:esc(r.subject_email),sub:dsarTypeLabel(r.request_type)+" request",badges:statusChip(r.status)+(r.overdue?' <span class="chip c-fail"><span class="d"></span>overdue</span>':''),
+    body:
+      dsec("Timeline",kvlist([["Received",ago(r.received_at)],["Deadline",r.due_at?new Date(r.due_at).toLocaleDateString():"—"],["Status",titlecase((r.status||"").replace("_"," "))],["Completed",r.completed_at?ago(r.completed_at):"—"]]))+
+      (r.details?dsec("Details",`<div style="font-size:12.5px;color:var(--body)">${esc(r.details)}</div>`):"")+
+      dsec("Advance status",`<div style="display:flex;gap:6px;flex-wrap:wrap">${["received","in_progress","completed","rejected"].map(s=>`<button class="btn sm ${s===r.status?'primary':''}" onclick="dsarSetStatus('${esc(r.id)}','${s}')">${titlecase(s.replace('_',' '))}</button>`).join("")}</div>`),
+    actions:`<div style="flex:1"></div>${closeBtn}`});
+};
+async function dsarSetStatus(id,status){
+  if(STATE.demo){const r=(CACHE.dsar||D.dsar).find(x=>x.id===id);if(r){r.status=status;r.completed_at=(status==='completed'||status==='rejected')?new Date().toISOString():null;}toast("Status → "+status,"pass");closeDrawer();render();return;}
+  try{await apiPATCH("/privacy/dsar/"+encodeURIComponent(id),withTenantBody({status}));toast("Status → "+status,"pass");closeDrawer();render();}catch(e){toast("Update failed: "+(e.message||e),"warn");}
+}
+function openDsarIntake(){
+  const s=$("#settings");
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>New data subject request</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  <div class="dialog-b">
+    <div class="note">Logging a request starts the 30-day statutory response clock.</div>
+    <div class="fld"><label>Subject email</label><input id="dsEmail" placeholder="person@example.com"/></div>
+    <div class="fld"><label>Request type</label><select id="dsType">${["access","erasure","rectification","portability","restriction","objection"].map(t=>`<option value="${t}">${dsarTypeLabel(t)}</option>`).join("")}</select></div>
+    <div class="fld"><label>Details (optional)</label><input id="dsDetails" placeholder="What is being requested"/></div>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="submitDsar()">Log request</button></div></div>`;
+  s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+async function submitDsar(){
+  const email=$("#dsEmail").value.trim(),type=$("#dsType").value,details=$("#dsDetails").value.trim();
+  if(!email){toast("Enter a subject email","warn");return;}
+  if(STATE.demo){const due=new Date(Date.now()+30*864e5);D.dsar.unshift({id:"d"+Date.now(),subject_email:email,request_type:type,status:"received",received_at:new Date().toISOString(),due_at:due.toISOString(),completed_at:null,overdue:false,days_left:30});closeSettings();toast("Request logged (demo)","pass");render();return;}
+  try{await apiPOST(withTenant("/privacy/dsar"),{subject_email:email,request_type:type,details});closeSettings();toast("Request logged — 30-day clock started","pass");render();}catch(e){toast("Failed: "+(e.message||e),"warn");}
+}
+
+RENDER.ropa=async function(){
+  const m=main();m.innerHTML=viewHead("Records of processing (ROPA)","Your GDPR Article 30 register — every processing activity, its purpose, and legal basis.",
+    `<button class="btn primary" onclick="openRopaAdd()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add activity</button>`,"privacy / 03");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  const[res]=await Promise.all([load(withTenant("/privacy/ropa"),D.ropa)]);
+  const rows=res.data||D.ropa;CACHE.ropa=rows;
+  const xborder=rows.filter(r=>r.cross_border).length;
+  const byBasis={};rows.forEach(r=>byBasis[r.legal_basis]=(byBasis[r.legal_basis]||0)+1);
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Processing activities</div><div class="v num">${rows.length}</div></div>
+    <div class="ro"><div class="k">Legal bases used</div><div class="v num">${Object.keys(byBasis).length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Cross-border transfers</div><div class="v num">${xborder}</div></div>
+    <div class="ro"><div class="k">Controller / processor</div><div class="v num" style="font-size:16px">${rows.filter(r=>r.role==='controller').length} / ${rows.filter(r=>r.role==='processor').length}</div></div>
+  </div>
+  <div class="panel"><div class="panel-h"><h3>Article 30 register</h3><div class="sub" style="margin-left:auto">click an activity for detail</div></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Activity</th><th>Legal basis</th><th>Data categories</th><th>Retention</th><th>Role</th><th>Owner</th></tr></thead>
+    <tbody data-ent="ropa">${rows.map(r=>`<tr>
+      <td><b>${esc(r.name)}</b></td>
+      <td>${lbChip(r.legal_basis)}</td>
+      <td>${(r.data_categories||[]).slice(0,3).map(c=>`<span class="chip c-dim" style="font-size:9px"><span class="d"></span>${esc(c)}</span>`).join(" ")}${(r.data_categories||[]).length>3?` <span style="color:var(--steel);font-size:11px">+${r.data_categories.length-3}</span>`:""}</td>
+      <td style="font-size:11.5px;color:var(--steel)">${esc(r.retention||"—")}</td>
+      <td>${esc(titlecase(r.role||""))}${r.cross_border?' <span class="chip c-warn" style="font-size:9px"><span class="d"></span>x-border</span>':''}</td>
+      <td style="font-size:11.5px">${esc(r.owner||"—")}</td></tr>`).join("")}</tbody>
+  </table></div></div></div>`;
+};
+DETAIL.ropa=function(r){
+  openDrawer({eyebrow:"processing · "+r.role,title:esc(r.name),sub:LEGAL_BASIS[r.legal_basis]||r.legal_basis,badges:lbChip(r.legal_basis)+(r.cross_border?' <span class="chip c-warn"><span class="d"></span>cross-border</span>':''),
+    body:
+      dsec("Purpose",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${esc(r.purpose||"—")}</div>`)+
+      dsec("Data",kvlist([["Categories",(r.data_categories||[]).join(", ")||"—"],["Subjects",(r.data_subjects||[]).join(", ")||"—"],["Recipients",(r.recipients||[]).join(", ")||"none"]]))+
+      dsec("Governance",kvlist([["Legal basis",LEGAL_BASIS[r.legal_basis]||r.legal_basis],["Retention",r.retention||"—"],["Role",titlecase(r.role||"")],["Owner",r.owner||"—"],["Cross-border",r.cross_border?"Yes — "+(r.safeguards||"safeguards unset"):"No"]])),
+    actions:`<div style="flex:1"></div>${closeBtn}`});
+};
+function openRopaAdd(){
+  const s=$("#settings");
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Add processing activity</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  <div class="dialog-b">
+    <div class="fld"><label>Name</label><input id="roName" placeholder="e.g. Marketing emails"/></div>
+    <div class="fld"><label>Purpose</label><input id="roPurpose" placeholder="Why you process this data"/></div>
+    <div class="fld"><label>Legal basis</label><select id="roBasis">${Object.entries(LEGAL_BASIS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
+    <div class="fld"><label>Data categories (comma-separated)</label><input id="roCats" placeholder="email, name"/></div>
+    <div class="fld"><label>Retention</label><input id="roRet" placeholder="e.g. 24 months"/></div>
+    <div class="fld"><label>Owner</label><input id="roOwner" placeholder="Team"/></div>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="submitRopa()">Add</button></div></div>`;
+  s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+async function submitRopa(){
+  const data={name:$("#roName").value.trim(),purpose:$("#roPurpose").value.trim(),legal_basis:$("#roBasis").value,data_categories:$("#roCats").value.split(",").map(x=>x.trim()).filter(Boolean),retention:$("#roRet").value.trim(),owner:$("#roOwner").value.trim()};
+  if(!data.name){toast("Enter a name","warn");return;}
+  if(STATE.demo){D.ropa.unshift(Object.assign({id:"r"+Date.now(),data_subjects:[],recipients:[],cross_border:false,safeguards:"",role:"controller"},data));closeSettings();toast("Activity added (demo)","pass");render();return;}
+  try{await apiPOST(withTenant("/privacy/ropa"),data);closeSettings();toast("Activity added","pass");render();}catch(e){toast("Failed: "+(e.message||e),"warn");}
+}
+
+RENDER.retention=async function(){
+  const m=main();m.innerHTML=viewHead("Data retention","Your retention schedule per data category, and a scan for records past their window.",
+    `<button class="btn primary" onclick="runRetentionScan()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Run scan</button>`,"privacy / 04");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  const[res]=await Promise.all([load(withTenant("/privacy/retention"),D.retention)]);
+  const rows=res.data||D.retention;CACHE.retention=rows;
+  const scan=CACHE.retentionScan||{};
+  const expiredMap={};(scan.policies||[]).forEach(p=>expiredMap[p.data_category]=p.expired);
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Retention policies</div><div class="v num">${rows.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Enabled</div><div class="v num">${rows.filter(r=>r.enabled).length}</div></div>
+    <div class="ro drill" onclick="runRetentionScan()"><div class="k"><span class="tick" style="background:var(--fail)"></span>Past retention</div><div class="v num">${scan.total_expired!=null?scan.total_expired:"—"}</div><div class="s">run scan →</div></div>
+    <div class="ro"><div class="k">Last scan</div><div class="v num" style="font-size:15px">${scan.scanned_at?ago(scan.scanned_at):"never"}</div></div>
+  </div>
+  <div class="panel"><div class="panel-h"><h3>Retention schedule</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Data category</th><th>Retention</th><th>Action</th><th>Basis</th><th>Past window</th><th>State</th></tr></thead>
+    <tbody>${rows.map(r=>{const ex=expiredMap[r.data_category];return `<tr>
+      <td><b>${esc(r.data_category)}</b></td>
+      <td class="num">${r.retention_days} days</td>
+      <td><span class="chip ${r.action==='delete'?'c-fail':r.action==='anonymize'?'c-warn':'c-out'}"><span class="d"></span>${esc(r.action)}</span></td>
+      <td style="font-size:11.5px;color:var(--steel)">${esc(r.basis||"—")}</td>
+      <td class="num">${ex==null?'<span style="color:var(--faint)">—</span>':ex>0?`<span class="chip c-fail"><span class="d"></span>${ex}</span>`:'<span class="chip c-pass"><span class="d"></span>0</span>'}</td>
+      <td>${r.enabled?'<span class="chip c-pass"><span class="d"></span>Enabled</span>':'<span class="chip c-out"><span class="d"></span>Off</span>'}</td></tr>`;}).join("")}</tbody>
+  </table></div></div></div>`;
+};
+async function runRetentionScan(){
+  if(STATE.demo){CACHE.retentionScan={scanned_at:new Date().toISOString(),total_expired:0,policies:(D.retention).map(r=>({data_category:r.data_category,expired:0,measurable:true}))};toast("Scan complete (demo) — 0 past retention","pass");render();return;}
+  try{const r=await apiPOST(withTenant("/privacy/retention/scan"),{});CACHE.retentionScan=r;toast("Scan complete — "+r.total_expired+" record(s) past retention",r.total_expired?"warn":"pass");render();}catch(e){toast("Scan failed: "+(e.message||e),"warn");}
+}
+
+RENDER.auditlog=async function(){
+  const m=main();m.innerHTML=viewHead("Activity log","An immutable trail of meaningful actions across the platform.","","privacy / 05");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  const[res]=await Promise.all([load(withTenant("/privacy/audit-log"),D.auditlog)]);
+  const rows=res.data||D.auditlog;CACHE.auditlog=rows;
+  const byAction={};rows.forEach(r=>byAction[r.action]=(byAction[r.action]||0)+1);
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Events</div><div class="v num">${rows.length}</div></div>
+    <div class="ro"><div class="k">Action types</div><div class="v num">${Object.keys(byAction).length}</div></div>
+    <div class="ro"><div class="k">Latest</div><div class="v num" style="font-size:15px">${rows[0]?ago(rows[0].created_at):"—"}</div></div>
+  </div>
+  <div class="panel"><div class="panel-h"><h3>Events</h3><div class="sub" style="margin-left:auto">newest first · append-only</div></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Summary</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td class="mono" style="font-size:11px;color:var(--steel);white-space:nowrap">${ago(r.created_at)}</td>
+      <td class="mono" style="font-size:11.5px">${esc(r.actor)}</td>
+      <td><span class="chip c-dim" style="font-size:9px"><span class="d"></span>${esc(r.action)}</span></td>
+      <td style="font-size:12.5px">${esc(r.summary||"")}</td></tr>`).join("")||`<tr><td colspan="4">${emptyState("No activity yet","Actions like consent and DSAR changes appear here.")}</td></tr>`}</tbody>
+  </table></div></div></div>`;
+};
+
+RENDER.cookiepolicy=function(){
+  const m=main();m.innerHTML=viewHead("Cookie & storage policy","What Comp-Lens stores in your browser, why, and how to control it.","","privacy / 06");
+  const host=el("div");m.appendChild(host);
+  const cat=(name,color,items)=>`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>${name}</h3><span class="chip ${color}" style="margin-left:auto"><span class="d"></span>${items.length} item${items.length===1?'':'s'}</span></div><div class="panel-b">${items.map(i=>`<div class="tgl"><div class="tx"><div class="tt">${esc(i.k)}</div><div class="td">${esc(i.d)}</div></div><div class="mono" style="font-size:11px;color:var(--steel)">${esc(i.r)}</div></div>`).join("")}</div></div>`;
+  host.innerHTML=`
+  <div class="note">Comp-Lens uses only first-party browser storage — no advertising or cross-site tracking cookies. We honour your browser's Do Not Track signal for optional storage. Manage your choices anytime in <span class="clink" onclick="openPrivacy()">Privacy &amp; data</span>.</div>
+  ${cat("Strictly necessary","c-pass",[
+    {k:"Consent record (cl-consent)",d:"Remembers your privacy choices so we don't re-ask each visit.",r:"persistent"},
+    {k:"Local connector credentials (cl-local-connections)",d:"API keys you chose to keep in this browser only.",r:"until removed"},
+  ])}
+  ${cat("Preferences","c-out",[
+    {k:"Theme (cl-theme)",d:"Light or dark appearance.",r:"persistent"},
+    {k:"Demo mode (cl-demo)",d:"Whether you view sample or live data.",r:"persistent"},
+  ])}
+  ${cat("Analytics","c-dim",[
+    {k:"None",d:"Comp-Lens sets no analytics or advertising cookies.",r:"—"},
+  ])}
+  <div style="display:flex;gap:8px;margin-top:4px"><button class="btn" onclick="openConsentPrefs()">Manage preferences</button><button class="btn" onclick="openPrivacy()">Privacy &amp; data</button></div>`;
+};
+
+
 /* ===================== NAV ===================== */
 const ICON={
+  consent:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
+  dsar:'<path d="M16 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
+  ropa:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  retention:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  auditlog:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  cookiepolicy:'<path d="M12 2a10 10 0 1010 10 4 4 0 01-5-5 4 4 0 01-5-5z"/><circle cx="9.5" cy="11.5" r=".6"/><circle cx="14.5" cy="14.5" r=".6"/><circle cx="9" cy="16" r=".6"/>',
   overview:'<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>',
   controls:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
   findings:'<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
@@ -2196,6 +2450,7 @@ const GROUPS=[
   ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"]]],
   ["Intelligence",[["response","Response"],["inventory","AI Inventory"],["threat","Threat Intel"]]],
   ["Risk & Vendors",[["risks","Risk Register"],["vendors","Vendors"],["trustgraph","Trust Graph"]]],
+  ["Privacy & Compliance",[["consent","Consent Ledger"],["dsar","Data Requests"],["ropa","Processing (ROPA)"],["retention","Retention"],["auditlog","Activity Log"],["cookiepolicy","Cookie Policy"]]],
 ];
 const LABELS={};GROUPS.forEach(([,t])=>t.forEach(([id,name])=>LABELS[id]=name));
 function buildNav(){
