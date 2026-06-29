@@ -883,7 +883,7 @@ RENDER.overview = async function(){
   const openFindings=findings.filter(f=>["open","in_progress","fail"].includes(f.status));
   const crit=openFindings.filter(f=>["critical","high"].includes(String(f.severity).toLowerCase()));
   const attn=openFindings.sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).slice(0,7);CACHE.findings=attn;
-  const fwData=normFrameworks(fw.data||D.frameworks);
+  const fwData=normFrameworks(fw.data||(STATE.demo?D.frameworks:[]));
 
   host.innerHTML=`
   <div class="readouts">
@@ -1031,7 +1031,7 @@ RENDER.frameworks = async function(){
   m.innerHTML=viewHead("Frameworks","Audit-readiness per standard. One control's evidence can satisfy many frameworks — that overlap is where the savings are.","","posture / 04");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading frameworks…</div>`;
   const[fw]=await Promise.all([load("/catalog/frameworks",D.frameworks)]);
-  const rows=normFrameworks(fw.data||D.frameworks);CACHE.frameworks=rows;
+  const rows=normFrameworks(fw.data||(STATE.demo?D.frameworks:[]));CACHE.frameworks=rows;
   const assessed=rows.filter(f=>f.ready!=null);
   const avg=assessed.length?assessed.reduce((a,f)=>a+f.ready,0)/assessed.length:null;
   const ready=rows.filter(f=>(f.ready||0)>=80).length;
@@ -1188,7 +1188,7 @@ RENDER.inventory = async function(){
   m.innerHTML=viewHead("AI inventory","Your organisation's AI systems, each classified by EU AI Act risk tier with its governance obligations, residual privacy risk, and the AI frameworks it answers to.","","intelligence / 02");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading AI systems…</div>`;
   const[inv]=await Promise.all([load(withTenant("/ai-systems"),D.aisystems)]);
-  const rows=inv.data||D.aisystems;CACHE.inventory=rows;
+  const rows=inv.data||(STATE.demo?D.aisystems:[]);CACHE.inventory=rows;
   const highRisk=rows.filter(r=>["high","prohibited"].includes(r.risk_tier)).length;
   const gaps=rows.reduce((a,r)=>a+((r.gaps||[]).length),0);
   const avg=rows.length?rows.reduce((a,r)=>a+(r.compliance_pct||0),0)/rows.length:0;
@@ -1221,7 +1221,7 @@ RENDER.risks = async function(){
   m.innerHTML=viewHead("Risk register","Identified risks scored by likelihood and impact, with a treatment decision and an owner.","","risk / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading risks…</div>`;
   const[rk]=await Promise.all([load(withTenant("/risks"),D.risks)]);
-  const rows=rk.data||D.risks;
+  const rows=rk.data||(STATE.demo?D.risks:[]);
   const score=r=>(r.likelihood||0)*(r.impact||0);CACHE.risks=rows;
   const high=rows.filter(r=>score(r)>=12).length;
   const cell=(l,i)=>{const s=l*i;const c=s>=15?'var(--fail)':s>=8?'var(--warn)':s>=4?'var(--focus)':'var(--pass)';
@@ -1258,7 +1258,7 @@ RENDER.vendors = async function(){
   m.innerHTML=viewHead("Vendors","Third-party risk: each vendor scored, tiered by criticality, with a recurring review date and the certifications they hold.","","risk / 02");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading vendors…</div>`;
   const[vd]=await Promise.all([load(withTenant("/vendors"),D.vendors)]);
-  const rows=vd.data||D.vendors;
+  const rows=vd.data||(STATE.demo?D.vendors:[]);
   const overdue=rows.filter(v=>new Date(v.review_due)<Date.now()).length;CACHE.vendors=rows;
   host.innerHTML=`
   <div class="readouts">
@@ -1803,7 +1803,7 @@ RENDER.policy = async function(){
     `<button class="btn primary" onclick="toast('Policy editor opens in your IDE via the CLI')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New policy</button>`,"compliance-as-code / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading policies…</div>`;
   const[pol]=await Promise.all([load(withTenant("/policies"),D.policies)]);
-  const rows=[...PDF_POLICIES, ...(pol.data||D.policies)];CACHE.policies=rows;
+  const rows=[...PDF_POLICIES, ...(pol.data||(STATE.demo?D.policies:[]))];CACHE.policies=rows;
   host.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k">Policies</div><div class="v num">${rows.length}</div></div>
@@ -1890,7 +1890,7 @@ RENDER.evidencehub = async function(){
   m.innerHTML=viewHead("Evidence","Every collected record, hash-sealed at capture. The hash is what an auditor checks to confirm nothing was altered after the fact.","","evidence / 04");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading evidence…</div>`;
   const[ev]=await Promise.all([load(withTenant("/evidence"),D.evidence)]);
-  const rows=ev.data||D.evidence;CACHE.evidence=rows;
+  const rows=ev.data||(STATE.demo?D.evidence:[]);CACHE.evidence=rows;
   host.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k">Records</div><div class="v num">${rows.length}</div></div>
@@ -1917,7 +1917,7 @@ RENDER.threat = async function(){
   m.innerHTML=viewHead("Threat intel","Known-exploited vulnerabilities (CISA KEV) cross-referenced with your asset inventory, so patching maps straight onto affected controls.","","intelligence / 03");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading intel…</div>`;
   const[kev]=await Promise.all([load("/threat/kev",D.kev)]);
-  const rows=kev.data||D.kev;
+  const rows=kev.data||(STATE.demo?D.kev:[]);
   const overdue=rows.filter(k=>new Date(k.due)<Date.now()).length;CACHE.kev=rows;
   host.innerHTML=`
   <div class="readouts">
@@ -1944,7 +1944,7 @@ RENDER.response = async function(){
   m.innerHTML=viewHead("Response","Remediation queue: open findings ranked by the fix that buys the most posture per hour of effort.","","intelligence / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Prioritizing…</div>`;
   const[fnd]=await Promise.all([load(withTenant("/findings?limit=200"),D.findings)]);
-  const open=(fnd.data||D.findings).filter(f=>["open","in_progress","fail"].includes(f.status));
+  const open=(fnd.data||(STATE.demo?D.findings:[])).filter(f=>["open","in_progress","fail"].includes(f.status));
   const lift={critical:8,high:5,medium:3,low:1};
   const ranked=open.map(f=>({...f,lift:lift[String(f.severity).toLowerCase()]||1})).sort((a,b)=>b.lift-a.lift);CACHE.findings=ranked;
   host.innerHTML=`
@@ -2207,7 +2207,7 @@ RENDER.consent=async function(){
   const m=main();m.innerHTML=viewHead("Consent ledger","An auditable, server-side record of every consent decision — the proof regulators ask for.","","privacy / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
   const[res]=await Promise.all([load(withTenant("/privacy/consent"),D.consentLog)]);
-  const rows=res.data||D.consentLog;CACHE.consent=rows;
+  const rows=res.data||(STATE.demo?D.consentLog:[]);CACHE.consent=rows;
   const granted=rows.filter(r=>r.granted).length;
   host.innerHTML=`
   <div class="readouts">
@@ -2233,7 +2233,7 @@ RENDER.dsar=async function(){
     `<button class="btn primary" onclick="openDsarIntake()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New request</button>`,"privacy / 02");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
   const[res]=await Promise.all([load(withTenant("/privacy/dsar"),D.dsar)]);
-  const rows=res.data||D.dsar;CACHE.dsar=rows;
+  const rows=res.data||(STATE.demo?D.dsar:[]);CACHE.dsar=rows;
   const open=rows.filter(r=>!["completed","rejected"].includes(r.status));
   const overdue=rows.filter(r=>r.overdue).length;
   host.innerHTML=`
@@ -2292,7 +2292,7 @@ RENDER.ropa=async function(){
     `<button class="btn primary" onclick="openRopaAdd()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add activity</button>`,"privacy / 03");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
   const[res]=await Promise.all([load(withTenant("/privacy/ropa"),D.ropa)]);
-  const rows=res.data||D.ropa;CACHE.ropa=rows;
+  const rows=res.data||(STATE.demo?D.ropa:[]);CACHE.ropa=rows;
   const xborder=rows.filter(r=>r.cross_border).length;
   const byBasis={};rows.forEach(r=>byBasis[r.legal_basis]=(byBasis[r.legal_basis]||0)+1);
   host.innerHTML=`
@@ -2344,10 +2344,11 @@ async function submitRopa(){
 
 RENDER.retention=async function(){
   const m=main();m.innerHTML=viewHead("Data retention","Your retention schedule per data category, and a scan for records past their window.",
+    `<button class="btn" onclick="openRetentionAdd()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add policy</button>`+
     `<button class="btn primary" onclick="runRetentionScan()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Run scan</button>`,"privacy / 04");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
   const[res]=await Promise.all([load(withTenant("/privacy/retention"),D.retention)]);
-  const rows=res.data||D.retention;CACHE.retention=rows;
+  const rows=res.data||(STATE.demo?D.retention:[]);CACHE.retention=rows;
   const scan=CACHE.retentionScan||{};
   const expiredMap={};(scan.policies||[]).forEach(p=>expiredMap[p.data_category]=p.expired);
   host.innerHTML=`
@@ -2372,12 +2373,30 @@ async function runRetentionScan(){
   if(STATE.demo){CACHE.retentionScan={scanned_at:new Date().toISOString(),total_expired:0,policies:(D.retention).map(r=>({data_category:r.data_category,expired:0,measurable:true}))};toast("Scan complete (demo) — 0 past retention","pass");render();return;}
   try{const r=await apiPOST(withTenant("/privacy/retention/scan"),{});CACHE.retentionScan=r;toast("Scan complete — "+r.total_expired+" record(s) past retention",r.total_expired?"warn":"pass");render();}catch(e){toast("Scan failed: "+(e.message||e),"warn");}
 }
+function openRetentionAdd(){
+  const s=$("#settings");
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Add retention policy</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  <div class="dialog-b">
+    <div class="fld"><label>Data category</label><input id="rtCat" placeholder="e.g. Support tickets"/></div>
+    <div class="fld"><label>Retention (days)</label><input id="rtDays" type="number" value="365"/></div>
+    <div class="fld"><label>Action at expiry</label><select id="rtAct"><option value="delete">Delete</option><option value="anonymize">Anonymize</option><option value="review">Review</option></select></div>
+    <div class="fld"><label>Basis (optional)</label><input id="rtBasis" placeholder="Why this period"/></div>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="submitRetention()">Add</button></div></div>`;
+  s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+async function submitRetention(){
+  const data={data_category:$("#rtCat").value.trim(),retention_days:parseInt($("#rtDays").value,10)||365,action:$("#rtAct").value,basis:$("#rtBasis").value.trim(),enabled:true};
+  if(!data.data_category){toast("Enter a data category","warn");return;}
+  if(STATE.demo){D.retention.unshift(Object.assign({id:"rp"+Date.now()},data));closeSettings();toast("Policy added (demo)","pass");render();return;}
+  try{await apiPOST(withTenant("/privacy/retention"),data);closeSettings();toast("Retention policy added","pass");render();}catch(e){toast("Failed: "+(e.message||e),"warn");}
+}
 
 RENDER.auditlog=async function(){
   const m=main();m.innerHTML=viewHead("Activity log","An immutable trail of meaningful actions across the platform.","","privacy / 05");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
   const[res]=await Promise.all([load(withTenant("/privacy/audit-log"),D.auditlog)]);
-  const rows=res.data||D.auditlog;CACHE.auditlog=rows;
+  const rows=res.data||(STATE.demo?D.auditlog:[]);CACHE.auditlog=rows;
   const byAction={};rows.forEach(r=>byAction[r.action]=(byAction[r.action]||0)+1);
   host.innerHTML=`
   <div class="readouts">
