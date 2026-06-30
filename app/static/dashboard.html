@@ -1340,7 +1340,7 @@ function wireDelegation(){
   });
 }
 
-const tkt=id=>`<button class="btn sm" onclick="toast('Remediation ticket drafted for ${esc(id||"item")}');closeDrawer()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Create ticket</button>`;
+const tkt=id=>`<button class="btn sm" onclick="createTicket('${esc(id||"")}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Create ticket</button>`;
 const closeBtn=`<button class="btn sm ghost" onclick="closeDrawer()">Close</button>`;
 
 const DETAIL={};
@@ -1417,7 +1417,7 @@ DETAIL.inventory=function(r){
         ?dsec("Residual privacy risk",kvlist([["Data sensitivity",r.data_sensitivity||"\u2014"],["Residual risk",r.residual_risk!=null?r.residual_risk+" / 100":"\u2014"],["Band",r.residual_band],["PETs applied",(r.pets||[]).join(", ")||"none"]])+(r.privacy_explanation?`<div class="note" style="margin-top:8px">${esc(r.privacy_explanation)}</div>`:""))
         :dsec("Residual privacy risk",`<div style="font-size:12.5px;color:var(--steel);line-height:1.5">No privacy-enhancing technologies registered. Attach PETs (differential privacy, k-anonymity, \u2026) to reduce inherent data risk.</div>`))+
       dsec("Governed under",(r.frameworks||[]).map(f=>`<span class="chip c-out" style="margin:2px">${esc(f)}</span>`).join(" ")||"\u2014"),
-    actions:`<button class="btn sm primary" onclick="toast('Promoted to risk register');closeDrawer()">Promote to risk</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="promoteAiToRisk('${esc(r.id)}')">Promote to risk</button><div style="flex:1"></div>${closeBtn}`});
 };
 /* compact demo catalog so the browser works offline; live fetches the full set */
 D.catalogControls={
@@ -1497,7 +1497,7 @@ DETAIL.kev=function(k){
     body:
       dsec("Exposure",kvlist([["Affected","this org · "+k.affected],["CVSS",k.cvss.toFixed(1)],["Exploited in wild",k.exploited?"yes — on CISA KEV":"no"],["Remediate by",(od?"overdue · ":"")+fmtDate(k.due)]]))+
       (od?dsec("Overdue",`<div class="note" style="margin:0;border-left-color:var(--fail)">Remediation deadline has <b>passed</b>. Prioritize patching the affected asset.</div>`):""),
-    actions:`<button class="btn sm primary" onclick="toast('Remediation ticket drafted for ${esc(k.cve)}');closeDrawer()">Create remediation</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="createTicket('${esc(k.cve)}','high','Remediate '+'${esc(k.cve)}')">Create remediation</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.policies=function(p){
   const code=`package complens.${(p.id||"policy").toLowerCase().replace(/[^a-z0-9]+/g,"_")}\n\n`+
@@ -1695,6 +1695,70 @@ function withTenantQS(){return "?tenant_id="+encodeURIComponent(CFG.tenant);}
 /* ── Local credential vault: connector credentials kept ONLY in this browser ──
    (localStorage). They are sent to the server transiently to run a sync/test and
    are never persisted server-side. */
+/* ── encrypted local credential vault (WebCrypto AES-GCM + PBKDF2) ── */
+const VAULT_META_KEY="cl-local-vault";
+let VAULT_KEY=null;
+const _td=new TextDecoder(), _te=new TextEncoder();
+const _b64=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
+const _ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function _deriveKey(pass,salt){
+  const base=await crypto.subtle.importKey("raw",_te.encode(pass),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:150000,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function _encStr(key,text){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,_te.encode(text));return {iv:_b64(iv),ct:_b64(ct)};}
+async function _decStr(key,e){const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:_ub64(e.iv)},key,_ub64(e.ct));return _td.decode(pt);}
+function _vaultMeta(){try{return JSON.parse(localStorage.getItem(VAULT_META_KEY)||"null");}catch(_){return null;}}
+async function ensureVaultKey(){
+  if(VAULT_KEY)return VAULT_KEY;
+  const meta=_vaultMeta(), creating=!meta;
+  const pass=await askPassphrase(creating);
+  if(pass==null)throw new Error("cancelled");
+  if(creating){
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    const key=await _deriveKey(pass,salt);
+    localStorage.setItem(VAULT_META_KEY,JSON.stringify({salt:_b64(salt),check:await _encStr(key,"comp-lens-vault-ok")}));
+    VAULT_KEY=key;return key;
+  }
+  const key=await _deriveKey(pass,_ub64(meta.salt));
+  try{if(await _decStr(key,meta.check)!=="comp-lens-vault-ok")throw 0;}
+  catch(_){toast("Wrong passphrase","warn");throw new Error("bad passphrase");}
+  VAULT_KEY=key;return key;
+}
+function askPassphrase(creating){
+  return new Promise(res=>{
+    const s=$("#settings");
+    s.innerHTML=`<div class="dialog" style="max-width:400px"><div class="dialog-h"><h3>${creating?"Set a vault passphrase":"Unlock credential vault"}</h3></div>
+    <div class="dialog-b">
+      <div class="note">${creating?"Your connector credentials are encrypted in this browser with this passphrase. It's never sent anywhere and can't be recovered \u2014 if you forget it you'll re-enter the credentials.":"Enter your vault passphrase to decrypt connector credentials for this session."}</div>
+      <div class="fld"><label>Passphrase</label><input id="vpass" type="password" autocomplete="off" autofocus/></div>
+      ${creating?'<div class="fld"><label>Confirm</label><input id="vpass2" type="password" autocomplete="off"/></div>':''}
+    </div>
+    <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="__vp(null)">Cancel</button><button class="btn primary" onclick="__vpOk(${creating})">${creating?"Set passphrase":"Unlock"}</button></div></div>`;
+    s.classList.add("on");
+    window.__vp=v=>{s.onclick=null;delete window.__vp;delete window.__vpOk;res(v);};
+    window.__vpOk=isCreate=>{const p=($("#vpass")||{}).value||"";if(!p){toast("Enter a passphrase","warn");return;}if(isCreate){if(p!==(($("#vpass2")||{}).value||"")){toast("Passphrases don't match","warn");return;}if(p.length<6){toast("Use at least 6 characters","warn");return;}}window.__vp(p);};
+    s.onclick=e=>{if(e.target===s)window.__vp(null);};
+  });
+}
+async function encryptConfig(config){return _encStr(await ensureVaultKey(),JSON.stringify(config||{}));}
+async function decryptConn(conn){if(!conn.enc)return conn.config||{};return JSON.parse(await _decStr(await ensureVaultKey(),conn.enc));}
+
+/* ── wired actions (real endpoints, with demo simulation) ── */
+async function promoteAiToRisk(id){
+  if(STATE.demo){toast("Promoted to risk register (demo)","pass");closeDrawer();return;}
+  try{const r=await apiPOST(withTenant("/v1/integrate/ai-systems/"+encodeURIComponent(id)+"/to-risk"),{});
+    toast("Promoted to risk register"+(r.residual_band?" \u00b7 "+r.residual_band:""),"pass");closeDrawer();render();}
+  catch(e){toast("Promote failed: "+(e.message||e),"warn");}
+}
+async function createTicket(controlId,severity,detail){
+  if(STATE.demo){toast("Remediation ticket created (demo)"+(controlId?" \u2014 "+controlId:""),"pass");if(typeof closeDrawer==="function")closeDrawer();return;}
+  try{await apiPOST(withTenant("/remediation/tickets"),{control_id:controlId||"",severity:severity||"medium",detail:detail||""});
+    toast("Remediation ticket created"+(controlId?" \u2014 "+controlId:""),"pass");if(typeof closeDrawer==="function")closeDrawer();}
+  catch(e){toast("Ticket failed: "+(e.message||e),"warn");}
+}
+let _LEGAL=null;
+async function loadLegal(){if(_LEGAL!==null)return _LEGAL;try{_LEGAL=await apiGET("/legal/notices");}catch(_){_LEGAL=false;}return _LEGAL;}
+
 const LOCAL_CONN_KEY="cl-local-connections";
 function loadLocalConns(){try{return JSON.parse(localStorage.getItem(LOCAL_CONN_KEY)||"[]");}catch(e){return [];}}
 function saveLocalConns(a){try{localStorage.setItem(LOCAL_CONN_KEY,JSON.stringify(a||[]));}catch(e){}}
@@ -1702,7 +1766,7 @@ function localConnById(id){return loadLocalConns().find(x=>x.id===id);}
 function upsertLocalConn(c){const a=loadLocalConns();const i=a.findIndex(x=>x.id===c.id);if(i>=0)a[i]=c;else a.unshift(c);saveLocalConns(a);}
 function genLocalId(){return "local-"+Math.random().toString(36).slice(2,10);}
 let AC_STORE="local";
-function setAcStore(v){AC_STORE=v;const seg=$("#acStore");if(seg)[...seg.children].forEach(b=>b.classList.toggle("on",b.dataset.store===v));const n=$("#acStoreNote");if(n)n.innerHTML=v==="local"?"Credentials are saved <b>only in this browser</b> and sent to the server only to run a sync \u2014 never stored there.":"Credentials are encrypted at rest (Fernet) and stored on the server for scheduled syncs.";}
+function setAcStore(v){AC_STORE=v;const seg=$("#acStore");if(seg)[...seg.children].forEach(b=>b.classList.toggle("on",b.dataset.store===v));const n=$("#acStoreNote");if(n)n.innerHTML=v==="local"?"Credentials are <b>encrypted in this browser</b> (AES-GCM) and sent to the server only to run a sync \u2014 never stored there.":"Credentials are encrypted at rest (Fernet) and stored on the server for scheduled syncs.";}
 
 function openAddConnection(preKey){
   const cat=_cat(),s=$("#settings");
@@ -1717,7 +1781,7 @@ function openAddConnection(preKey){
         <button type="button" class="on" data-store="local" onclick="setAcStore('local')">This browser only</button>
         <button type="button" data-store="server" onclick="setAcStore('server')">Server (encrypted)</button>
       </div>
-      <div id="acStoreNote" class="note" style="margin-top:8px">Credentials are saved <b>only in this browser</b> and sent to the server only to run a sync \u2014 never stored there.</div>
+      <div id="acStoreNote" class="note" style="margin-top:8px">Credentials are <b>encrypted in this browser</b> (AES-GCM) and sent to the server only to run a sync \u2014 never stored there.</div>
     </div>
     <div id="acFields"></div>
   </div>
@@ -1739,9 +1803,13 @@ async function submitAddConnection(){
   const key=$("#acType").value, label=$("#acLabel").value.trim()||c.name, config={};
   (c.env_vars||[]).forEach(v=>{const el=$("#ac_"+v);if(el&&el.value.trim())config[v]=el.value.trim();});
   if(AC_STORE==="local"){
-    upsertLocalConn({id:genLocalId(),connector_key:key,label,config,config_keys_set:Object.keys(config),
-      enabled:true,last_status:"never",last_mode:"demo",evidence_count:0,last_sync_at:null,last_error:null,local:true});
-    closeSettings();toast("Connection saved in this browser \u2014 "+label,"pass");render();return;
+    try{
+      const enc=await encryptConfig(config);
+      upsertLocalConn({id:genLocalId(),connector_key:key,label,enc,config_keys_set:Object.keys(config),
+        enabled:true,last_status:"never",last_mode:"demo",evidence_count:0,last_sync_at:null,last_error:null,local:true});
+      closeSettings();toast("Connection saved & encrypted in this browser \u2014 "+label,"pass");render();
+    }catch(e){toast(e&&e.message==="cancelled"?"Add cancelled":"Encrypt failed: "+((e&&e.message)||e),"warn");}
+    return;
   }
   if(STATE.demo){
     D.instances.push({id:"demo-"+Date.now(),connector_key:key,label,enabled:true,config_keys_set:Object.keys(config),last_status:"never",last_mode:"demo",evidence_count:0,last_sync_at:null,last_error:null});
@@ -1754,7 +1822,8 @@ async function instSync(id,label){
   if(String(id).startsWith("local-")){
     const conn=localConnById(id); if(!conn){toast("Local connection not found","warn");return;}
     try{
-      const r=await apiPOST("/connectors/instances/ephemeral/sync",withTenantBody({connector_key:conn.connector_key,config:conn.config||{},instance_id:id}));
+      const config=await decryptConn(conn);
+      const r=await apiPOST("/connectors/instances/ephemeral/sync",withTenantBody({connector_key:conn.connector_key,config,instance_id:id}));
       conn.last_status=r.status||"ok";conn.last_mode=r.mode;conn.evidence_count=r.evidence_count;conn.last_sync_at=new Date().toISOString();conn.last_error=r.error||null;upsertLocalConn(conn);
       toast("Synced \u2014 "+r.evidence_count+" evidence items ("+r.mode+")","pass");closeDrawer();render();
     }catch(e){toast("Sync failed: "+(e.message||e),"warn");}
@@ -1788,7 +1857,7 @@ DETAIL.instances=function(i){
   openDrawer({eyebrow:"connection · "+i.connector_key,title:esc(i.label),sub:esc(c.name||i.connector_key),badges:instModeBadge(i)+(i.local?' <span class="chip c-dim"><span class="d"></span>local</span>':""),
     body:
       dsec("Status",kvlist([["State",i.last_status==="never"?"Never synced":titlecase(i.last_status)],["Mode",titlecase(i.last_mode||"demo")],["Evidence collected",String(i.evidence_count||0)],["Last sync",i.last_sync_at?ago(i.last_sync_at):"—"],["Error",i.last_error||"—"]]))+
-      dsec("Credentials",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Configured: ${(i.config_keys_set||[]).map(k=>`<span class="chip c-dim" style="margin:2px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"none"}</div>`+(missing.length?`<div class="note" style="margin-top:8px">Missing for live: ${missing.map(esc).join(", ")} — runs in demo until set.</div>`:"")+(i.local?`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored <b>only in this browser</b> (local storage). Sent to the server only to run a sync \u2014 never saved there.</div>`:`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored encrypted (Fernet) on the server; values are never displayed.</div>`))+
+      dsec("Credentials",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Configured: ${(i.config_keys_set||[]).map(k=>`<span class="chip c-dim" style="margin:2px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"none"}</div>`+(missing.length?`<div class="note" style="margin-top:8px">Missing for live: ${missing.map(esc).join(", ")} — runs in demo until set.</div>`:"")+(i.local?`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored <b>encrypted in this browser</b> (AES-GCM, unlocked by your passphrase). Sent to the server only to run a sync \u2014 never saved there.</div>`:`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored encrypted (Fernet) on the server; values are never displayed.</div>`))+
       dsec("Coverage",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Feeds normalized evidence into the same control fields as every other source — so multiple accounts of one type each contribute independently.</div>`),
     actions:`<button class="btn sm primary" onclick="instSync('${esc(i.id)}','${esc(i.label)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button> <button class="btn sm" onclick="instTest('${esc(i.id)}')">Test</button><div style="flex:1"></div><button class="btn sm" onclick="instDelete('${esc(i.id)}','${esc(i.label)}')">Remove</button>${closeBtn}`});
 };
@@ -1834,19 +1903,13 @@ function insertPolicyPdf(input){
   if(!f)return;
   if(f.type!=="application/pdf" && !/\.pdf$/i.test(f.name)){toast("Please choose a PDF file","warn");return;}
   var title=f.name.replace(/\.pdf$/i,"").replace(/[_-]+/g," ").trim();
-  PDF_POLICIES.unshift({
-    id:"PDF · "+f.name,
-    title:title||f.name,
-    lang:"PDF",
-    version:"0.1-draft",
-    coverage:["uploaded"],
-    status:"draft",
-    last_eval:null,
-    source:"pdf",
-    size_kb:Math.max(1,Math.round(f.size/1024))
-  });
-  toast('Inserted "'+f.name+'" as a draft policy','pass');
-  render();
+  if(STATE.demo){
+    PDF_POLICIES.unshift({id:"PDF · "+f.name,title:title||f.name,lang:"PDF",version:"0.1-draft",coverage:["uploaded"],status:"draft",last_eval:null,source:"pdf",size_kb:Math.max(1,Math.round(f.size/1024))});
+    toast('Inserted "'+f.name+'" as a draft policy (demo)','pass');render();return;
+  }
+  apiPOST(withTenant("/policies/import"),{name:f.name})
+    .then(()=>{toast('Imported "'+f.name+'" as a draft policy','pass');render();})
+    .catch(e=>toast("Import failed: "+((e&&e.message)||e),"warn"));
 }
 
 /* ---------- MIDDLEWARE (evidence pipeline) ---------- */
@@ -1963,7 +2026,7 @@ RENDER.response = async function(){
       <td class="mono" style="font-size:12px">${esc(f.source_system||"—")}</td>
       <td>${sevChip(f.severity)}</td>
       <td><span class="chip c-pass"><span class="d"></span>+${f.lift} pts</span></td>
-      <td class="right"><button class="btn sm ghost" onclick="toast('Remediation ticket drafted for ${esc(f.control_id)}')">Create ticket</button></td></tr>`).join("")||`<tr><td colspan="7">${emptyState("Queue empty","No open findings to remediate.")}</td></tr>`}</tbody>
+      <td class="right"><button class="btn sm ghost" onclick="createTicket('${esc(f.control_id)}','${f.severity||'medium'}')">Create ticket</button></td></tr>`).join("")||`<tr><td colspan="7">${emptyState("Queue empty","No open findings to remediate.")}</td></tr>`}</tbody>
   </table></div></div></div>`;
 };
 
@@ -2414,23 +2477,29 @@ RENDER.auditlog=async function(){
   </table></div></div></div>`;
 };
 
-RENDER.cookiepolicy=function(){
+RENDER.cookiepolicy=async function(){
   const m=main();m.innerHTML=viewHead("Cookie & storage policy","What Comp-Lens stores in your browser, why, and how to control it.","","privacy / 06");
   const host=el("div");m.appendChild(host);
   const cat=(name,color,items)=>`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>${name}</h3><span class="chip ${color}" style="margin-left:auto"><span class="d"></span>${items.length} item${items.length===1?'':'s'}</span></div><div class="panel-b">${items.map(i=>`<div class="tgl"><div class="tx"><div class="tt">${esc(i.k)}</div><div class="td">${esc(i.d)}</div></div><div class="mono" style="font-size:11px;color:var(--steel)">${esc(i.r)}</div></div>`).join("")}</div></div>`;
+  const toneMap={pass:"c-pass",out:"c-out",dim:"c-dim"};
+  const legal=await loadLegal();
+  let intro, cats;
+  if(legal&&legal.cookie_policy){
+    intro=legal.cookie_policy.intro;
+    cats=legal.cookie_policy.categories.map(c=>cat(c.name,toneMap[c.tone]||"c-out",c.items)).join("");
+  }else{
+    intro="Comp-Lens uses only first-party browser storage — no advertising or cross-site tracking cookies. We honour your browser's Do Not Track signal for optional storage.";
+    cats=cat("Strictly necessary","c-pass",[
+        {k:"Consent record (cl-consent)",d:"Remembers your privacy choices so we don't re-ask each visit.",r:"persistent"},
+        {k:"Local connector credentials (cl-local-connections)",d:"Encrypted connector secrets kept in this browser only.",r:"until removed"}])
+      +cat("Preferences","c-out",[
+        {k:"Theme (cl-theme)",d:"Light or dark appearance.",r:"persistent"},
+        {k:"Demo mode (cl-demo)",d:"Whether you view sample or live data.",r:"persistent"}])
+      +cat("Analytics","c-dim",[{k:"None",d:"Comp-Lens sets no analytics or advertising cookies.",r:"—"}]);
+  }
   host.innerHTML=`
-  <div class="note">Comp-Lens uses only first-party browser storage — no advertising or cross-site tracking cookies. We honour your browser's Do Not Track signal for optional storage. Manage your choices anytime in <span class="clink" onclick="openPrivacy()">Privacy &amp; data</span>.</div>
-  ${cat("Strictly necessary","c-pass",[
-    {k:"Consent record (cl-consent)",d:"Remembers your privacy choices so we don't re-ask each visit.",r:"persistent"},
-    {k:"Local connector credentials (cl-local-connections)",d:"API keys you chose to keep in this browser only.",r:"until removed"},
-  ])}
-  ${cat("Preferences","c-out",[
-    {k:"Theme (cl-theme)",d:"Light or dark appearance.",r:"persistent"},
-    {k:"Demo mode (cl-demo)",d:"Whether you view sample or live data.",r:"persistent"},
-  ])}
-  ${cat("Analytics","c-dim",[
-    {k:"None",d:"Comp-Lens sets no analytics or advertising cookies.",r:"—"},
-  ])}
+  <div class="note">${esc(intro)} Manage your choices anytime in <span class="clink" onclick="openPrivacy()">Privacy &amp; data</span>.</div>
+  ${cats}
   <div style="display:flex;gap:8px;margin-top:4px"><button class="btn" onclick="openConsentPrefs()">Manage preferences</button><button class="btn" onclick="openPrivacy()">Privacy &amp; data</button></div>`;
 };
 
