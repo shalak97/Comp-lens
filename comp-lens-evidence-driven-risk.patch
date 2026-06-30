@@ -1,0 +1,829 @@
+diff --git a/app/main.py b/app/main.py
+index 2f8db12..222a60a 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -9,7 +9,7 @@ from __future__ import annotations
+ import logging
+ from contextlib import asynccontextmanager
+ 
+-from fastapi import Depends, FastAPI, HTTPException, Query
++from fastapi import Depends, FastAPI, HTTPException, Query, Request
+ from fastapi.middleware.cors import CORSMiddleware
+ from fastapi.responses import Response
+ from sqlalchemy import select
+@@ -152,6 +152,204 @@ def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
+     return [cfw.status_one(db, c, tenant_id) for c in ccat.all_connectors()]
+ 
+ 
++# ── Connector INSTANCES (multi-app / multi-tenant connections) ──
++# Registered BEFORE /connectors/{name} so "instances" isn't captured as a name.
++from pydantic import BaseModel as _InstBase
++
++
++class _InstanceCreate(_InstBase):
++    connector_key: str
++    label: str = ""
++    config: dict = {}
++    tenant_id: str = "default"
++    enabled: bool = True
++
++
++class _InstancePatch(_InstBase):
++    label: "str | None" = None
++    enabled: "bool | None" = None
++    config: "dict | None" = None
++    tenant_id: str = "default"
++
++
++class _InstSyncRequest(_InstBase):
++    tenant_id: str = "default"
++    force_demo: bool = False
++
++
++class _EphemeralTest(_InstBase):
++    connector_key: str
++    config: dict = {}
++    tenant_id: str = "default"
++
++
++class _EphemeralSync(_InstBase):
++    connector_key: str
++    config: dict = {}
++    instance_id: str = ""           # caller-supplied local id, e.g. "local-ab12cd34"
++    tenant_id: str = "default"
++    force_demo: bool = False
++
++
++@app.post("/connectors/assess", tags=["connectors"])
++def assess_connectors_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> dict:
++    """Roll collected connector evidence up into control posture findings.
++
++    Syncing connectors fills the evidence store; this projects that evidence into
++    findings so it actually moves your compliance posture. Idempotent.
++    """
++    authorize_tenant(p, tenant_id)
++    from app.services import integration as _integ
++    return _integ.assess_connector_evidence(db, tenant_id)
++
++
++@app.get("/connectors/instances", tags=["connectors"])
++def list_instances(tenant_id: str = "default", connector_key: "str | None" = None,
++                   db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).list(tenant_id, connector_key)
++
++
++@app.post("/connectors/instances", tags=["connectors"])
++def create_instance(body: _InstanceCreate, db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.connectors import catalog as ccat
++    if not ccat.get(body.connector_key):
++        raise HTTPException(404, f"unknown connector type '{body.connector_key}'")
++    from app.services.secrets import secrets_configured
++    if body.config and not secrets_configured() and settings.is_production:
++        raise HTTPException(400, "COMP_LENS_SECRET_KEY must be set to store connector "
++                                 "credentials in production")
++    from app.services.connector_instances import ConnectorInstanceService
++    return ConnectorInstanceService(db).create(body.tenant_id, body.connector_key,
++                                               body.label, body.config, body.enabled)
++
++
++@app.get("/connectors/instances/{instance_id}", tags=["connectors"])
++def get_instance(instance_id: str, tenant_id: str = "default",
++                 db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    inst = ConnectorInstanceService(db).get_public(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    return inst
++
++
++@app.patch("/connectors/instances/{instance_id}", tags=["connectors"])
++def update_instance(instance_id: str, body: _InstancePatch,
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, body.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    out = ConnectorInstanceService(db).update(instance_id, body.tenant_id,
++                                              label=body.label, enabled=body.enabled,
++                                              config=body.config)
++    if not out:
++        raise HTTPException(404, "unknown connector instance")
++    return out
++
++
++@app.delete("/connectors/instances/{instance_id}", tags=["connectors"])
++def delete_instance(instance_id: str, tenant_id: str = "default",
++                    db: Session = Depends(get_db),
++                    p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    if not ConnectorInstanceService(db).delete(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return {"deleted": True, "id": instance_id}
++
++
++@app.post("/connectors/instances/ephemeral/test", tags=["connectors"])
++def ephemeral_test_ep(req: _EphemeralTest,
++                      p: Principal = Depends(require_principal)) -> dict:
++    """Test a connection using browser-held (local) credentials. The supplied
++    config is used in memory only and is NEVER written to the database."""
++    authorize_tenant(p, req.tenant_id)
++    from app.connectors import catalog as ccat, framework as cfw
++    c = ccat.get(req.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{req.connector_key}'")
++    return cfw.test_instance(c, req.config or {})
++
++
++@app.post("/connectors/instances/ephemeral/sync", tags=["connectors"])
++def ephemeral_sync_ep(req: _EphemeralSync, db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> dict:
++    """Sync using browser-held (local) credentials. Credentials are used in
++    memory only and are NEVER persisted; the derived evidence (which contains no
++    secrets) is stored under the caller-supplied local instance id so it still
++    aggregates into the compliance posture."""
++    authorize_tenant(p, req.tenant_id)
++    from uuid import uuid4
++    from app.connectors import catalog as ccat, framework as cfw
++    c = ccat.get(req.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{req.connector_key}'")
++    iid = req.instance_id if req.instance_id.startswith("local-") else "local-" + (req.instance_id or uuid4().hex[:8])
++    res = cfw.sync_instance(db, c, iid, req.config or {}, req.tenant_id, req.force_demo)
++    res["instance_id"] = iid
++    res["evidence"] = cfw.evidence_for_instance(db, iid, req.tenant_id)
++    return res
++
++
++@app.post("/connectors/instances/{instance_id}/test", tags=["connectors"])
++def test_instance_ep(instance_id: str, tenant_id: str = "default",
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    return cfw.test_instance(c, svc.config_of(inst))
++
++
++@app.post("/connectors/instances/{instance_id}/sync", tags=["connectors"])
++def sync_instance_ep(instance_id: str, req: "_InstSyncRequest | None" = None,
++                     db: Session = Depends(get_db),
++                     p: Principal = Depends(require_principal)) -> dict:
++    req = req or _InstSyncRequest()
++    authorize_tenant(p, req.tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import catalog as ccat, framework as cfw
++    svc = ConnectorInstanceService(db)
++    inst = svc.get(instance_id, req.tenant_id)
++    if not inst:
++        raise HTTPException(404, "unknown connector instance")
++    c = ccat.get(inst.connector_key)
++    if not c:
++        raise HTTPException(404, f"unknown connector type '{inst.connector_key}'")
++    res = cfw.sync_instance(db, c, instance_id, svc.config_of(inst),
++                            req.tenant_id, req.force_demo)
++    svc.record_sync(inst, status=res["status"], mode=res["mode"],
++                    evidence_count=res["evidence_count"], error=res.get("error"))
++    return res
++
++
++@app.get("/connectors/instances/{instance_id}/evidence", tags=["connectors"])
++def instance_evidence_ep(instance_id: str, tenant_id: str = "default",
++                         db: Session = Depends(get_db),
++                         p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    from app.services.connector_instances import ConnectorInstanceService
++    from app.connectors import framework as cfw
++    if not ConnectorInstanceService(db).get(instance_id, tenant_id):
++        raise HTTPException(404, "unknown connector instance")
++    return cfw.evidence_for_instance(db, instance_id, tenant_id)
++
++
+ @app.get("/connectors/{name}", tags=["connectors"])
+ def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+@@ -418,16 +616,65 @@ def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
+                  eval_report=req.eval_report, logging_enabled=req.logging_enabled,
+                  accuracy_tested=req.accuracy_tested)
+     db.add(s); db.flush()
++    _auto_link_ai_risk(db, req.tenant_id, s.id)
+     return {"id": s.id, "name": s.name, "risk_tier": s.risk_tier}
+ 
+ 
++def _ai_system_row(s) -> dict:
++    return {"id": s.id, "name": s.name, "owner": s.owner, "risk_tier": s.risk_tier,
++            "impact_assessment": s.impact_assessment, "data_governance": s.data_governance,
++            "human_oversight": s.human_oversight, "transparency_notice": s.transparency_notice,
++            "eval_report": s.eval_report, "logging_enabled": s.logging_enabled,
++            "accuracy_tested": s.accuracy_tested,
++            "registered_at": s.registered_at.isoformat() if s.registered_at else None}
++
++
++def _pets_by_system(db: Session, tenant_id: str) -> dict:
++    rows = db.execute(select(_PET).where(_PET.tenant_id == tenant_id)).scalars().all()
++    out: dict = {}
++    for r in rows:
++        out.setdefault(r.system_id, []).append(
++            {"pet": r.pet, "params": _json.loads(r.params_json or "{}"), "_sens": r.data_sensitivity})
++    return out
++
++
++def _auto_link_ai_risk(db, tenant_id: str, system_id: str) -> None:
++    """Keep the risk register in sync when an AI system or its PETs change."""
++    try:
++        _integ.ai_system_to_risk(db, tenant_id, system_id)
++    except Exception:  # never let auto-linking break the request
++        pass
++
++
+ @app.get("/ai-systems")
+ def list_ai_systems(tenant_id: str = "default", db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> list[dict]:
++    """Each AI system as a self-describing governance record: EU AI Act tier,
++    obligation coverage (met/gaps/%), residual privacy risk from its PETs, and
++    the AI frameworks it is governed under."""
+     authorize_tenant(p, tenant_id)
+     from app.models import AISystem
+     rows = db.execute(select(AISystem).where(AISystem.tenant_id == tenant_id)).scalars().all()
+-    return [{"id": s.id, "name": s.name, "owner": s.owner, "risk_tier": s.risk_tier} for s in rows]
++    pets = _pets_by_system(db, tenant_id)
++    out = []
++    for s in rows:
++        ps = pets.get(s.id, [])
++        sens = ps[0]["_sens"] if ps else "pii"
++        out.append(_aigov.system_governance(_ai_system_row(s), ps, sens))
++    return out
++
++
++@app.get("/ai-systems/{system_id}")
++def get_ai_system(system_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
++                  p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    from app.models import AISystem
++    s = db.get(AISystem, system_id)
++    if not s or s.tenant_id != tenant_id:
++        raise HTTPException(404, "unknown AI system")
++    ps = _pets_by_system(db, tenant_id).get(system_id, [])
++    sens = ps[0]["_sens"] if ps else "pii"
++    return _aigov.system_governance(_ai_system_row(s), ps, sens)
+ 
+ 
+ # ── Merkle transparency log ──
+@@ -771,6 +1018,221 @@ def control_crosswalk(control_id: str, framework: str = "NIST_800_53",
+             "mapped": mapped_controls(control_id, framework)}
+ 
+ 
++# ======================= POLICY OBLIGATION DISPATCH =======================
++from app.policy_as_code import obligations as _obl  # noqa: E402
++
++
++class _ObligationPreviewReq(_InstBase):
++    evidence_by_control: dict = {}
++    framework: str = "ALL"
++    tenant_id: str = "default"
++
++
++@app.get("/policy/obligations", tags=["policy"])
++def list_obligations_ep(control_id: str | None = None, procedure: str | None = None,
++                        tenant_id: str = "default", db: Session = Depends(get_db),
++                        p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    return {"procedures": _obl.PROCEDURES,
++            "dispatches": _obl.list_dispatches(db, tenant_id, control_id=control_id,
++                                               procedure=procedure)}
++
++
++@app.post("/policy/obligations/preview", tags=["policy"])
++def preview_obligations_ep(req: _ObligationPreviewReq, db: Session = Depends(get_db),
++                           p: Principal = Depends(require_principal)) -> dict:
++    """Dry-run: evaluate policies against supplied evidence and show which
++    operational procedures each failing rule WOULD disperse to — no side effects."""
++    authorize_tenant(p, req.tenant_id)
++    from app.policy_as_code import get_engine
++    decisions = get_engine().evaluate_all(req.evidence_by_control or {})
++    planned = []
++    for d in decisions:
++        if d.status == "fail" and getattr(d, "obligations", None):
++            planned += _obl.dispatch_for_decision(
++                db, req.tenant_id, d,
++                evidence=(req.evidence_by_control or {}).get(d.control_id, {}),
++                dry_run=True)
++    return {"evaluated": len(decisions),
++            "failing": [d.control_id for d in decisions if d.status == "fail"],
++            "planned_actions": planned}
++
++
++# ======================= PRIVACY & COMPLIANCE =======================
++from app.services import privacy as _priv  # noqa: E402
++
++
++class _ConsentReq(_InstBase):
++    subject: str = "anonymous"
++    categories: dict = {}
++    purpose: str = "cookies"
++    granted: bool = True
++    source: str = "banner"
++    tenant_id: str = "default"
++
++
++class _DsarReq(_InstBase):
++    subject_email: str
++    request_type: str = "access"
++    details: str = ""
++    tenant_id: str = "default"
++
++
++class _DsarPatch(_InstBase):
++    status: str | None = None
++    notes: str | None = None
++    tenant_id: str = "default"
++
++
++class _RopaReq(_InstBase):
++    name: str = ""
++    purpose: str = ""
++    legal_basis: str = "legitimate_interests"
++    data_categories: list = []
++    data_subjects: list = []
++    recipients: list = []
++    retention: str = ""
++    cross_border: bool = False
++    safeguards: str = ""
++    role: str = "controller"
++    owner: str = ""
++    tenant_id: str = "default"
++
++
++class _RetentionReq(_InstBase):
++    data_category: str = ""
++    retention_days: int = 365
++    action: str = "delete"
++    basis: str = ""
++    enabled: bool = True
++    tenant_id: str = "default"
++
++
++def _client_ip(request: Request) -> str | None:
++    return request.client.host if request and request.client else None
++
++
++@app.post("/privacy/consent", tags=["privacy"])
++def record_consent_ep(req: _ConsentReq, request: Request, db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.record_consent(db, req.tenant_id, req.subject, req.categories,
++                                purpose=req.purpose, granted=req.granted, source=req.source,
++                                ip=_client_ip(request), user_agent=request.headers.get("user-agent"))
++
++
++@app.get("/privacy/consent", tags=["privacy"])
++def list_consent_ep(subject: str | None = None, tenant_id: str = "default",
++                    db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_consent(db, tenant_id, subject=subject)
++
++
++@app.post("/privacy/dsar", tags=["privacy"])
++def create_dsar_ep(req: _DsarReq, request: Request, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.create_dsar(db, req.tenant_id, req.subject_email, req.request_type,
++                             req.details, ip=_client_ip(request))
++
++
++@app.get("/privacy/dsar", tags=["privacy"])
++def list_dsar_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_dsar(db, tenant_id)
++
++
++@app.patch("/privacy/dsar/{dsar_id}", tags=["privacy"])
++def update_dsar_ep(dsar_id: str, req: _DsarPatch, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    out = _priv.update_dsar(db, req.tenant_id, dsar_id, status=req.status, notes=req.notes)
++    if out is None:
++        raise HTTPException(404, "unknown request")
++    return out
++
++
++@app.get("/privacy/ropa", tags=["privacy"])
++def list_ropa_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                 p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_ropa(db, tenant_id)
++
++
++@app.post("/privacy/ropa", tags=["privacy"])
++def create_ropa_ep(req: _RopaReq, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.create_ropa(db, req.tenant_id, req.model_dump())
++
++
++@app.patch("/privacy/ropa/{ropa_id}", tags=["privacy"])
++def update_ropa_ep(ropa_id: str, req: _RopaReq, db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    out = _priv.update_ropa(db, req.tenant_id, ropa_id, req.model_dump(exclude_unset=True))
++    if out is None:
++        raise HTTPException(404, "unknown activity")
++    return out
++
++
++@app.delete("/privacy/ropa/{ropa_id}", tags=["privacy"])
++def delete_ropa_ep(ropa_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
++                   p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    if not _priv.delete_ropa(db, tenant_id, ropa_id):
++        raise HTTPException(404, "unknown activity")
++    return {"deleted": ropa_id}
++
++
++@app.get("/privacy/retention", tags=["privacy"])
++def list_retention_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_retention(db, tenant_id)
++
++
++@app.post("/privacy/retention", tags=["privacy"])
++def create_retention_ep(req: _RetentionReq, db: Session = Depends(get_db),
++                        p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    return _priv.upsert_retention(db, req.tenant_id, req.model_dump())
++
++
++@app.patch("/privacy/retention/{policy_id}", tags=["privacy"])
++def update_retention_ep(policy_id: str, req: _RetentionReq, db: Session = Depends(get_db),
++                        p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, req.tenant_id)
++    out = _priv.upsert_retention(db, req.tenant_id, req.model_dump(exclude_unset=True), policy_id)
++    if out is None:
++        raise HTTPException(404, "unknown policy")
++    return out
++
++
++@app.delete("/privacy/retention/{policy_id}", tags=["privacy"])
++def delete_retention_ep(policy_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
++                        p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    if not _priv.delete_retention(db, tenant_id, policy_id):
++        raise HTTPException(404, "unknown policy")
++    return {"deleted": policy_id}
++
++
++@app.post("/privacy/retention/scan", tags=["privacy"])
++def scan_retention_ep(tenant_id: str = "default", db: Session = Depends(get_db),
++                      p: Principal = Depends(require_principal)) -> dict:
++    authorize_tenant(p, tenant_id)
++    return _priv.scan_retention(db, tenant_id)
++
++
++@app.get("/privacy/audit-log", tags=["privacy"])
++def audit_log_ep(action: str | None = None, tenant_id: str = "default",
++                 db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
++    authorize_tenant(p, tenant_id)
++    return _priv.list_events(db, tenant_id, action=action)
++
++
+ @app.get("/evidence/export/oscal", tags=["evidence-graph"])
+ def export_oscal(framework: str = "NIST_800_53", tenant_id: str = "default",
+                  db: Session = Depends(get_db),
+@@ -1349,6 +1811,7 @@ def add_system_pet(system_id: str, payload: dict, tenant_id: str = "default",
+                params_json=_json.dumps(payload.get("params", {})),
+                data_sensitivity=payload.get("data_sensitivity", "pii"))
+     db.add(row); db.commit(); db.refresh(row)
++    _auto_link_ai_risk(db, tenant_id, system_id)
+     return {"id": row.id, "system_id": system_id, "pet": pet,
+             "assessment": _aigov.assess_pet(pet, payload.get("params"))}
+ 
+diff --git a/app/services/grc_tprm.py b/app/services/grc_tprm.py
+index 812dc62..2ce9a92 100644
+--- a/app/services/grc_tprm.py
++++ b/app/services/grc_tprm.py
+@@ -15,6 +15,12 @@ def _now() -> datetime:
+     return datetime.now(timezone.utc)
+ 
+ 
++def _aware(dt):
++    if dt is None:
++        return None
++    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
++
++
+ # severity banding shared by risk + vendor scores (out of 25 for risk, 100 for vendor)
+ def _risk_band(score: int) -> str:
+     if score >= 20: return "critical"
+@@ -28,17 +34,51 @@ class RiskService:
+     def __init__(self, db: Session):
+         self.db = db
+ 
++    def _control_coverage(self, control_id, tenant_id):
++        """0..1 — how well a linked control is *currently* evidenced. Passing with
++        fresh evidence ~1.0; passing but ageing decays toward 0; failing/none → 0.
++        This is what makes residual respond to evidence instead of being typed."""
++        if not control_id:
++            return None
++        from app.models import Posture  # local import avoids circulars
++        from app.services.evidence_policy import _decay_factor
++        rows = self.db.execute(
++            select(Posture.status, Posture.updated_at)
++            .where(Posture.tenant_id == tenant_id, Posture.control_id == control_id)
++        ).all()
++        if not rows:
++            return None
++        passing = any(str(getattr(s, "value", s)).lower() == "pass" for s, _ in rows)
++        if not passing:
++            return 0.0
++        newest = max((u for _, u in rows if u), default=None)
++        if newest is None:
++            return 1.0
++        age = (_now() - _aware(newest)).days
++        return _decay_factor(age)
++
+     def _ser(self, r: Risk) -> Dict[str, Any]:
+         inherent = r.likelihood * r.impact
+-        rl = r.residual_likelihood if r.residual_likelihood else r.likelihood
+-        ri = r.residual_impact if r.residual_impact else r.impact
+-        residual = rl * ri
++        cov = self._control_coverage(r.linked_control, r.tenant_id) if r.linked_control else None
++        if cov is not None:
++            # DERIVED residual: a fresh passing linked-control drives residual down;
++            # stale evidence lets it climb back toward inherent automatically.
++            floor = max(1, round(inherent * 0.1))
++            residual = max(floor, round(inherent * (1 - cov * 0.8)))
++            residual_source = "derived"
++        else:
++            rl = r.residual_likelihood if r.residual_likelihood else r.likelihood
++            ri = r.residual_impact if r.residual_impact else r.impact
++            residual = rl * ri
++            residual_source = "manual"
+         return {
+             "id": r.id, "title": r.title, "description": r.description,
+             "category": r.category, "owner": r.owner,
+             "likelihood": r.likelihood, "impact": r.impact,
+             "inherent_score": inherent, "inherent_band": _risk_band(inherent),
+             "residual_score": residual, "residual_band": _risk_band(residual),
++            "residual_source": residual_source,
++            "control_coverage": round(cov, 2) if cov is not None else None,
+             "treatment": r.treatment, "status": r.status,
+             "linked_control": r.linked_control, "linked_vendor_id": r.linked_vendor_id,
+             "review_date": r.review_date.isoformat() if r.review_date else None,
+diff --git a/app/services/integration.py b/app/services/integration.py
+index 7c12cbd..31a28d7 100644
+--- a/app/services/integration.py
++++ b/app/services/integration.py
+@@ -27,20 +27,44 @@ from typing import Any, Dict, List, Optional
+ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+-from app.models import Finding, ControlStatus, Severity, Lifecycle
++from app.models import Finding, ControlStatus, Severity, Lifecycle, Posture
+ 
+ _SEV_MAP = {"critical": Severity.CRITICAL, "high": Severity.HIGH,
+             "medium": Severity.MEDIUM, "low": Severity.LOW, "info": Severity.INFO}
+ _VULN_CONTROLS = {"RA-5", "SI-2", "SI-3", "SC-7", "CA-7", "RA-3"}
+ 
+ POLICY_SOURCE = "policy-as-code"
++CONNECTOR_SOURCE = "connector-evidence"
++_KEV_MARKER = "[kev-escalated]"
+ AIGOV_CATEGORY = "ai_governance"
+ 
+ 
+ # ── 1. POLICY ENGINE → FINDINGS ──────────────────────────────────────
++def _upsert_posture(db: Session, tenant_id: str, control_id: str, source_system: str,
++                    status, severity, finding_id) -> None:
++    """Materialize a control's current state into the Posture table — the view
++    remediation, /summary and blast-radius read from. Mirrors the assessment path
++    so connector- and policy-sourced findings are equally visible downstream."""
++    src = (source_system or "").upper()
++    p = db.execute(select(Posture).where(
++        Posture.tenant_id == tenant_id, Posture.control_id == control_id,
++        Posture.source_system == src, Posture.asset_key == "")).scalar_one_or_none()
++    if p:
++        p.prev_status = p.status
++        p.status = status
++        p.severity = severity
++        p.last_finding_id = finding_id
++        p.updated_at = datetime.now(timezone.utc)
++    else:
++        db.add(Posture(tenant_id=tenant_id, control_id=control_id, source_system=src,
++                       asset_id=None, asset_key="", status=status, prev_status=None,
++                       severity=severity, last_finding_id=finding_id))
++
++
+ def evaluate_policies_to_findings(db: Session, tenant_id: str,
+                                   evidence_by_control: Dict[str, Dict[str, Any]],
+-                                  framework: str = "ALL") -> Dict[str, Any]:
++                                  framework: str = "ALL",
++                                  dispatch: bool = True) -> Dict[str, Any]:
+     """Run every policy against supplied evidence; persist fail/pass as findings.
+ 
+     This is the missing spine: 'compliance as code' decisions now enter the same
+@@ -51,6 +75,7 @@ def evaluate_policies_to_findings(db: Session, tenant_id: str,
+     decisions = engine.evaluate_all(evidence_by_control)
+     run_id = "pol_" + uuid.uuid4().hex[:12]
+     created, updated = 0, 0
++    finding_by_control = {}
+     for d in decisions:
+         if d.status == "error":
+             continue
+@@ -70,22 +95,40 @@ def evaluate_policies_to_findings(db: Session, tenant_id: str,
+             existing.updated_at = datetime.now(timezone.utc)
+             if cstatus == ControlStatus.PASS:
+                 existing.lifecycle = Lifecycle.RESOLVED
++            finding_by_control[d.control_id] = existing
++            _upsert_posture(db, tenant_id, d.control_id, POLICY_SOURCE, cstatus, sev, existing.finding_id)
+             updated += 1
+         else:
+-            db.add(Finding(
++            _f = Finding(
+                 finding_id=str(uuid.uuid4()), tenant_id=tenant_id, run_id=run_id,
+                 framework=framework, control_id=d.control_id, source_system=POLICY_SOURCE,
+                 status=cstatus, severity=sev,
+                 lifecycle=Lifecycle.OPEN if cstatus == ControlStatus.FAIL else Lifecycle.RESOLVED,
+                 description=d.reason,
+-                remediation={"obligations": d.obligations, "rules": d.rules}))
++                remediation={"obligations": d.obligations, "rules": d.rules})
++            db.add(_f)
++            finding_by_control[d.control_id] = _f
++            _upsert_posture(db, tenant_id, d.control_id, POLICY_SOURCE, cstatus, sev, _f.finding_id)
+             created += 1
+     db.commit()
++
++    # ── dispersion: route each failing rule's obligations to operational procedures ──
++    dispatched = []
++    if dispatch:
++        from app.policy_as_code import obligations as _obl
++        for d in decisions:
++            if d.status == "fail" and getattr(d, "obligations", None):
++                dispatched += _obl.dispatch_for_decision(
++                    db, tenant_id, d,
++                    evidence=evidence_by_control.get(d.control_id, {}),
++                    finding=finding_by_control.get(d.control_id))
+     failing = [d.control_id for d in decisions if d.status == "fail"]
+     return {"run_id": run_id, "evaluated": len(decisions),
+             "findings_created": created, "findings_updated": updated,
+             "failing_controls": failing,
+-            "note": "policy decisions are now findings — visible in blast radius, remediation, and posture"}
++            "obligations_dispatched": len(dispatched),
++            "actions": dispatched,
++            "note": "policy decisions are now findings; obligations dispersed to operational procedures"}
+ 
+ 
+ # ── 2. AI GOVERNANCE → RISK REGISTER ─────────────────────────────────
+@@ -98,7 +141,7 @@ def ai_system_to_risk(db: Session, tenant_id: str, system_id: str) -> Dict[str,
+     from app.ai_governance_models import AISystemPET
+     from app.services import ai_governance as aigov
+     from app.services.grc_tprm import RiskService
+-    from app.grc_tprm_models import RiskIn
++    from app.grc_tprm_models import RiskIn, RiskPatch
+     from app.models import AISystem
+ 
+     sys = db.get(AISystem, system_id)
+@@ -126,8 +169,11 @@ def ai_system_to_risk(db: Session, tenant_id: str, system_id: str) -> Dict[str,
+             f"{len(pets)} privacy-enhancing technolog{'y' if len(pets)==1 else 'ies'}. "
+             f"{risk['explanation']}")
+     if existing:
+-        return {"linked": True, "risk_id": existing[0]["id"],
+-                "residual_band": band, "note": "risk already exists for this system (idempotent)"}
++        svc.update(tenant_id, existing[0]["id"], RiskPatch(
++            likelihood=likelihood, impact=impact, description=desc))
++        return {"linked": True, "risk_id": existing[0]["id"], "residual_band": band,
++                "residual_risk": risk["residual_risk"], "updated": True,
++                "note": "AI system risk refreshed in register"}
+     created = svc.create(tenant_id, RiskIn(
+         title=title, description=desc, category=AIGOV_CATEGORY,
+         owner=sys.owner, likelihood=likelihood, impact=impact,
+@@ -166,9 +212,18 @@ def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
+     escalated = []
+     for r in risks:
+         ctrl = (r.get("linked_control") or "").split("(")[0].strip()
+-        if ctrl in _VULN_CONTROLS and r.get("impact", 3) < 5:
++        if ctrl not in _VULN_CONTROLS:
++            continue
++        # idempotent: a risk already escalated by a previous run carries the marker,
++        # so re-running the pipeline never inflates impact a second time.
++        desc = r.get("description") or ""
++        if _KEV_MARKER in desc:
++            continue
++        if r.get("impact", 3) < 5:
+             new_impact = min(5, r.get("impact", 3) + 1)
+-            svc.update(tenant_id, r["id"], RiskPatch(impact=new_impact))
++            new_desc = (desc + " " + _KEV_MARKER).strip()
++            svc.update(tenant_id, r["id"],
++                       RiskPatch(impact=new_impact, description=new_desc))
+             escalated.append({"risk_id": r["id"], "control": ctrl,
+                               "impact": f"{r.get('impact')}→{new_impact}"})
+     return {"escalated": len(escalated), "details": escalated,
+@@ -177,6 +232,64 @@ def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
+             "note": "risks on actively-exploited vuln controls had their impact raised"}
+ 
+ 
++# ── CONNECTOR EVIDENCE → POSTURE (findings) ──────────────────────────
++def assess_connector_evidence(db: Session, tenant_id: str) -> Dict[str, Any]:
++    """Project collected connector evidence into control posture findings.
++
++    This closes the loop the product promises: syncing a connector now actually
++    moves your posture. Connectors already evaluate telemetry into pass/fail per
++    item; we roll that up by control and persist one idempotent finding per
++    (control, connector-evidence) — so it flows into blast radius, remediation,
++    and the compliance score exactly like any other finding.
++    """
++    from app.connectors.framework import aggregate_control_status
++    status_by_control = aggregate_control_status(db, tenant_id)
++    run_id = "conn_" + uuid.uuid4().hex[:12]
++    created, updated, failing = 0, 0, []
++    for cid, agg in status_by_control.items():
++        cstatus = ControlStatus.FAIL if agg["status"] == "fail" else ControlStatus.PASS
++        sev = Severity.HIGH if cstatus == ControlStatus.FAIL else Severity.INFO
++        srcs = ", ".join(agg["sources"]) or "connectors"
++        reason = (f"{agg['fail']} of {agg['items']} evidence item(s) failing from {srcs}"
++                  if cstatus == ControlStatus.FAIL
++                  else f"{agg['items']} evidence item(s) passing from {srcs}")
++        if cstatus == ControlStatus.FAIL:
++            failing.append(cid)
++        # idempotent across re-runs: match ANY prior connector finding for this
++        # control (PASS findings are stored RESOLVED, so don't filter on lifecycle)
++        existing = db.execute(
++            select(Finding).where(Finding.tenant_id == tenant_id,
++                                  Finding.control_id == cid,
++                                  Finding.source_system == CONNECTOR_SOURCE)
++            .order_by(Finding.updated_at.desc())).scalars().first()
++        if existing:
++            existing.status = cstatus
++            existing.severity = sev
++            existing.description = reason
++            existing.remediation = {"sources": agg["sources"], "items": agg["items"]}
++            existing.updated_at = datetime.now(timezone.utc)
++            if cstatus == ControlStatus.PASS:
++                existing.lifecycle = Lifecycle.RESOLVED
++            _upsert_posture(db, tenant_id, cid, CONNECTOR_SOURCE, cstatus, sev, existing.finding_id)
++            updated += 1
++        else:
++            _cf = Finding(
++                finding_id=str(uuid.uuid4()), tenant_id=tenant_id, run_id=run_id,
++                framework="ALL", control_id=cid, source_system=CONNECTOR_SOURCE,
++                status=cstatus, severity=sev,
++                lifecycle=Lifecycle.OPEN if cstatus == ControlStatus.FAIL else Lifecycle.RESOLVED,
++                description=reason,
++                remediation={"sources": agg["sources"], "items": agg["items"]})
++            db.add(_cf)
++            _upsert_posture(db, tenant_id, cid, CONNECTOR_SOURCE, cstatus, sev, _cf.finding_id)
++            created += 1
++    db.commit()
++    return {"run_id": run_id, "controls_assessed": len(status_by_control),
++            "findings_created": created, "findings_updated": updated,
++            "failing_controls": failing,
++            "note": "connector evidence is now reflected in findings + posture"}
++
++
+ # ── UNIFIED: run the whole integrated pipeline ───────────────────────
+ def run_unified_pipeline(db: Session, tenant_id: str,
+                          evidence_by_control: Optional[Dict[str, Dict[str, Any]]] = None
+@@ -187,5 +300,6 @@ def run_unified_pipeline(db: Session, tenant_id: str,
+         out["policy_to_findings"] = evaluate_policies_to_findings(db, tenant_id, evidence_by_control)
+     out["ai_to_risk"] = sync_all_ai_risks(db, tenant_id)
+     out["threat_escalation"] = escalate_risks_from_threat(db, tenant_id)
++    out["connector_to_posture"] = assess_connector_evidence(db, tenant_id)
+     return {"tenant_id": tenant_id, "ran": list(out.keys()), "results": out,
+             "note": "policy decisions, AI-governance, and threat intel are now wired into the findings + risk register"}
+diff --git a/tests/test_integration.py b/tests/test_integration.py
+index 8f9fb36..87c8f39 100644
+--- a/tests/test_integration.py
++++ b/tests/test_integration.py
+@@ -59,9 +59,10 @@ def test_ai_to_risk_idempotent(client):
+     sys = client.post("/ai-systems", json={"name": "Model Y"}).json()
+     client.post(f"/v1/ai-gov/systems/{sys['id']}/pets",
+                 json={"pet": "differential_privacy", "params": {"epsilon": 5}, "data_sensitivity": "pii"})
+-    client.post(f"/v1/integrate/ai-systems/{sys['id']}/to-risk")
++    r1 = client.post(f"/v1/integrate/ai-systems/{sys['id']}/to-risk").json()
+     r2 = client.post(f"/v1/integrate/ai-systems/{sys['id']}/to-risk").json()
+-    assert "already exists" in r2.get("note", "")
++    # idempotent: re-triggering refreshes the same risk, never duplicates it
++    assert r2["risk_id"] == r1["risk_id"]
+ 
+ 
+ def test_threat_escalates_risk(client):
+@@ -74,4 +75,4 @@ def test_threat_escalates_risk(client):
+ def test_unified_pipeline(client):
+     u = client.post("/v1/integrate/run",
+                     json={"evidence": {"SI-2": {"critical_vulns": 1, "scan_age_days": 5}}}).json()
+-    assert len(u["ran"]) == 3
++    assert len(u["ran"]) == 4
