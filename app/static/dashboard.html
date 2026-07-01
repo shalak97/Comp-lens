@@ -1352,15 +1352,15 @@ DETAIL.findings=function(f){
     IA:"Enforce the authentication requirement for all in-scope identities.",
     SA:"Apply the required repository / pipeline guardrail and re-evaluate."}[String(f.control_id||"").slice(0,2)]
     ||"Apply the control requirement to the affected asset and re-run the assessment.";
-  openDrawer({eyebrow:"finding · "+(f.id||f.control_id),title:esc(f.title),
+  openDrawer({eyebrow:"finding · "+(f.finding_id||f.id||f.control_id),title:esc(f.title),
     sub:`Raised by control ${esc(f.control_id)} on ${esc(f.source_system||"—")}`,
     badges:sevChip(f.severity)+statusChip(f.status)+(f.lift?`<span class="chip c-pass"><span class="d"></span>+${f.lift} pts on fix</span>`:""),
     body:
-      dsec("Detail",kvlist([["Finding ID",f.id||"—"],["Control",f.control_id,false],["Source system",f.source_system||"—"],["Affected asset",f.asset||"—"],["Severity",titlecase(f.severity)],["Status",titlecase(f.status)]]))+
+      dsec("Detail",kvlist([["Finding ID",f.finding_id||f.id||"—"],["Control",f.control_id,false],["Source system",f.source_system||"—"],["Affected asset",f.asset||"—"],["Severity",titlecase(f.severity)],["Status",titlecase(f.status)]]))+
       dsec("Linked control",drow(`<span class="id">${esc(f.control_id)}</span><span class="sp"></span><span class="go">open ›</span>`, `closeDrawer();(CACHE.controls||(STATE.demo?D.controls:[])).filter(c=>c.control_id==='${esc(f.control_id)}').forEach(DETAIL.controls)`))+
       dsec("Suggested remediation",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${esc(rem)}</div>`)+
       dsec("Timeline",`<div class="timeline"><div class="tl"><div>Detected by automated assessment</div><div class="w">${esc(fmtDate(f.detected_at))} · ${esc(ago(f.detected_at))}</div></div><div class="tl"><div>Current status — ${esc(titlecase(f.status))}</div><div class="w">now</div></div></div>`),
-    actions:`<button class="btn sm primary" onclick="toast('Marked resolved — re-run assessment to confirm');closeDrawer()">Mark resolved</button><button class="btn sm" onclick="toast('Risk accepted — logged with justification');closeDrawer()">Accept risk</button>${tkt(f.control_id)}<div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="setFindingLifecycle('${esc(f.finding_id||f.id)}','resolved')">Mark resolved</button><button class="btn sm" onclick="setFindingLifecycle('${esc(f.finding_id||f.id)}','risk_accepted')">Accept risk</button>${tkt(f.control_id)}<div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.controls=function(c){
   const rel=relFindings(c.control_id);
@@ -1370,7 +1370,7 @@ DETAIL.controls=function(c){
       dsec("Framework crosswalk",`<div class="flex wrap">${Object.entries(c.frameworks||{}).map(([k,v])=>`<span class="chip c-out">${esc(k)} ${esc((v||[]).join(", "))}</span>`).join("")||'<span style="color:var(--faint)">No mappings</span>'}</div>`)+
       dsec("What this checks",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">The <b>${esc(c.title)}</b> control verifies the ${esc((c.domain||"relevant").toLowerCase())} requirement is enforced across every connected system that exposes it, and produces signed evidence on each evaluation.</div>`)+
       dsec("Related findings ("+rel.length+")",rel.length?rel.map((f,i)=>drow(`${sevChip(f.severity)}<span style="flex:1">${esc(f.title)}</span><span class="go">open ›</span>`,`openFindingByControl('${esc(c.control_id)}',${i})`)).join(""):`<div style="font-size:12.5px;color:var(--steel)">No open findings — this control is clean.</div>`),
-    actions:`<button class="btn sm primary" onclick="toast('Assessment queued for ${esc(c.control_id)}');closeDrawer()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Run assessment</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="runControlAssessment('${esc(c.control_id)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Run assessment</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.connectors=function(c){
   const md={connected:["c-pass","Connected"],demo:["c-focus","Demo"],error:["c-fail","Error"],not_configured:["c-dim","Not configured"],not_connected:["c-dim","Not configured"]}[c.mode]||["c-dim","Not configured"];
@@ -1382,8 +1382,8 @@ DETAIL.connectors=function(c){
       (c.error?dsec("Last error",`<div class="note" style="margin:0;border-left-color:var(--fail)"><b>${esc(c.error)}</b></div>`):"")+
       dsec("Sync status",`<div class="timeline"><div class="tl"><div>${c.mode==='connected'?'Healthy — evidence flowing':c.mode==='error'?'Sync failing':c.mode==='demo'?'Running on synthetic data':'Awaiting credentials'}</div><div class="w">${c.last_sync?ago(c.last_sync):'—'}</div></div></div>`),
     actions:c.mode==='not_configured'
-      ?`<button class="btn sm primary" onclick="toast('Opens credential setup');closeDrawer()">Configure</button><div style="flex:1"></div>${closeBtn}`
-      :`<button class="btn sm primary" onclick="toast('Sync triggered for ${esc(c.name)}');closeDrawer()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button><div style="flex:1"></div>${closeBtn}`});
+      ?`<button class="btn sm primary" onclick="closeDrawer();openAddConnection('${esc(c.key||c.registry_key||"")}')">Configure</button><div style="flex:1"></div>${closeBtn}`
+      :`<button class="btn sm primary" onclick="syncAllOfType('${esc(c.key||c.registry_key||"")}','${esc(c.name)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.risks=function(r){
   const s=(r.likelihood||0)*(r.impact||0);const c=s>=15?'c-fail':s>=8?'c-warn':s>=4?'c-focus':'c-pass';
@@ -1392,7 +1392,7 @@ DETAIL.risks=function(r){
     body:
       dsec("Assessment",kvlist([["Owner",r.owner],["Category",r.category],["Likelihood",r.likelihood+" / 5"],["Impact",r.impact+" / 5"],["Inherent score",`<span class="num">${s}</span> (L×I)`,true],["Treatment",titlecase(r.treatment)]]))+
       dsec("Treatment plan",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${{mitigate:"Apply controls to reduce likelihood or impact, then re-score.",transfer:"Shift exposure via contract, insurance, or a third party.",accept:"Residual risk formally accepted and monitored.",avoid:"Eliminate the activity that produces this risk."}[r.treatment]||"Decide and document a treatment."}</div>`),
-    actions:`<button class="btn sm primary" onclick="toast('Treatment updated');closeDrawer()">Update treatment</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="openTreatmentPicker('${esc(r.id)}','${esc(r.treatment)}')">Update treatment</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.vendors=function(v){
   const sc=v.score||0;const col=sc>=80?'var(--pass)':sc>=60?'var(--warn)':'var(--fail)';
@@ -1403,7 +1403,7 @@ DETAIL.vendors=function(v){
       dsec("Trust score",`<div class="flex"><div class="scorebar"><i style="width:${sc}%;background:${col}"></i></div><span class="num" style="font-size:20px;font-weight:600">${sc}</span></div>`)+
       dsec("Assurance",kvlist([["Criticality tier",titlecase(v.tier)],["Status",titlecase(v.status)],["Certifications",(v.frameworks||[]).join(", ")||"none on file"],["Next review",(od?"overdue · ":"")+fmtDate(v.review_due)]]))+
       (od?dsec("Action needed",`<div class="note" style="margin:0;border-left-color:var(--fail)">This vendor's review is <b>past due</b>. Request a current assurance report before renewing.</div>`):""),
-    actions:`<button class="btn sm primary" onclick="toast('Assurance report requested from ${esc(v.name)}');closeDrawer()">Request report</button><button class="btn sm" onclick="toast('Marked reviewed');closeDrawer()">Mark reviewed</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="vendorRequestReport('${esc(v.id||v.name)}','${esc(v.name)}')">Request report</button><button class="btn sm" onclick="vendorMarkReviewed('${esc(v.id||v.name)}','${esc(v.name)}')">Mark reviewed</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.inventory=function(r){
   const cov=r.coverage||{}, obls=r.obligations||[];
@@ -1486,9 +1486,9 @@ DETAIL.evidence=function(e){
     badges:e.verified?'<span class="chip c-pass"><span class="d"></span>Verified</span>':'<span class="chip c-warn"><span class="d"></span>Pending</span>',
     body:
       dsec("Provenance",kvlist([["Control",e.control,false],["Source",e.source],["Sealed",fmtDate(e.collected_at)+" · "+ago(e.collected_at)]]))+
-      dsec("Integrity seal",`<div class="codeblk">sha256: ${esc(e.hash)}\nmerkle: anchored ✓\nstate:  ${e.verified?'verified — no tampering detected':'pending re-verification'}</div>`)+
-      dsec("Note",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">The hash is computed at capture. An auditor recomputes it from the raw record to prove nothing changed after collection.</div>`),
-    actions:`<button class="btn sm primary" onclick="toast('Integrity re-check passed');closeDrawer()">Re-verify</button><div style="flex:1"></div>${closeBtn}`});
+      dsec("Integrity seal",`<div class="codeblk">sha256: ${esc(e.hash)}\nstate:  ${e.verified?'verified — matches stored record':'pending re-verification'}</div>`)+
+      dsec("Note",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">The hash is a sha256 digest of the stored record, recomputable on demand. It proves the record matches what\u2019s in the database now \u2014 it is not a cryptographic signature of authorship.</div>`),
+    actions:`<button class="btn sm primary" onclick="reverifyEvidence('${esc(e.id)}')">Re-verify</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.kev=function(k){
   const od=new Date(k.due)<Date.now();
@@ -1507,20 +1507,20 @@ DETAIL.policies=function(p){
     body:
       dsec("Definition",`<div class="codeblk">${code.replace(/\b(package|default|allow|if|import)\b/g,'<span class="kw">$1</span>').replace(/(== true)/g,'<span class="st">$1</span>')}</div>`)+
       dsec("Coverage & evaluation",kvlist([["Evaluated on",(p.coverage||[]).join(", ")||"—"],["Version",p.version],["Status",titlecase(p.status)],["Last evaluated",p.last_eval?ago(p.last_eval):"never"]])),
-    actions:`<button class="btn sm primary" onclick="toast('Policy evaluation queued');closeDrawer()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Evaluate now</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="evaluatePolicyNow('${esc(p.id)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Evaluate now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.platforms=function(p){
   openDrawer({eyebrow:"integration · "+p.name,title:esc(p.name),sub:"GRC platform sync",
     badges:`<span class="chip ${({healthy:'c-pass',degraded:'c-warn',not_connected:'c-dim'})[p.status]}"><span class="d"></span>${titlecase(p.status)}</span>`,
     body:dsec("Sync",kvlist([["Direction",p.dir],["Objects",p.objects],["Last sync",p.last?ago(p.last):"—"]])),
-    actions:`<button class="btn sm primary" onclick="toast('Sync triggered');closeDrawer()">Sync now</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="toast('Sync triggered (demo — no live GRC-suite connection exists)');closeDrawer()">Sync now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.audits=function(a){
   openDrawer({eyebrow:"audit · "+a.name,title:esc(a.name),sub:esc(a.auditor)+" · "+esc(a.window),
     badges:statusChip(a.status)+`<span class="chip c-out">${a.progress}% complete</span>`,
     body:dsec("Engagement",kvlist([["Auditor",a.auditor],["Window",a.window],["Evidence requests",a.requests],["Open requests",a.open],["Progress",a.progress+"%"]]))+
       dsec("Auditor access",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Access is read-only and scoped to the engagement window. Every document opened is written to the audit trail.</div>`),
-    actions:`<button class="btn sm primary" onclick="toast('Auditor invite sent');closeDrawer()">Grant access</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="refreshAuditPosture('${esc(a.id)}')">Refresh posture for auditor</button><div style="flex:1"></div>${closeBtn}`});
 };
 function graphNodeDetail(model,n){
   const ins=model.edges.filter(e=>e[1]===n.id).map(e=>model.byId[e[0]]);
@@ -1756,6 +1756,82 @@ async function createTicket(controlId,severity,detail){
     toast("Remediation ticket created"+(controlId?" \u2014 "+controlId:""),"pass");if(typeof closeDrawer==="function")closeDrawer();}
   catch(e){toast("Ticket failed: "+(e.message||e),"warn");}
 }
+async function setFindingLifecycle(id,lifecycle){
+  const label=lifecycle==='resolved'?'Marked resolved':'Risk accepted';
+  if(STATE.demo){const f=(CACHE.findings||D.findings||[]).find(x=>x.id===id);if(f)f.status=lifecycle;toast(label+' (demo)','pass');closeDrawer();render();return;}
+  try{await apiPATCH("/findings/"+encodeURIComponent(id),{lifecycle});toast(label,"pass");closeDrawer();render();}
+  catch(e){toast("Update failed: "+(e.message||e),"warn");}
+}
+async function runControlAssessment(controlId){
+  if(STATE.demo){toast("Assessment queued for "+controlId+" (demo)","pass");closeDrawer();return;}
+  try{await apiPOST(withTenant("/assessments"),{control_id:controlId,source_system:"MANUAL",framework:"NIST"});
+    toast("Assessment run for "+controlId,"pass");closeDrawer();render();}
+  catch(e){toast("Assessment failed: "+(e.message||e),"warn");}
+}
+async function syncAllOfType(connectorKey,name){
+  if(!connectorKey){toast("Unknown connector type","warn");return;}
+  if(STATE.demo){toast("Synced all "+name+" connections (demo)","pass");closeDrawer();return;}
+  try{
+    const insts=(await apiGET(withTenant("/connectors/instances"))).filter(i=>i.connector_key===connectorKey);
+    if(!insts.length){toast("No connections of this type yet \u2014 add one first","warn");closeDrawer();return;}
+    let total=0;
+    for(const i of insts){try{const r=await apiPOST("/connectors/instances/"+encodeURIComponent(i.id)+"/sync",withTenantBody({}));total+=r.evidence_count||0;}catch(_){}}
+    toast("Synced "+insts.length+" "+name+" connection(s) \u2014 "+total+" evidence items","pass");closeDrawer();render();
+  }catch(e){toast("Sync failed: "+(e.message||e),"warn");}
+}
+function openTreatmentPicker(riskId,current){
+  const s=$("#settings");
+  const opts=["mitigate","transfer","accept","avoid"];
+  s.innerHTML=`<div class="dialog" style="max-width:380px"><div class="dialog-h"><h3>Update treatment</h3></div>
+  <div class="dialog-b"><div class="fld"><label>Treatment</label><select id="trSel">${opts.map(o=>`<option value="${o}" ${o===current?'selected':''}>${o[0].toUpperCase()+o.slice(1)}</option>`).join("")}</select></div></div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="submitTreatment('${esc(riskId)}')">Save</button></div></div>`;
+  s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+async function submitTreatment(riskId){
+  const treatment=$("#trSel").value;
+  if(STATE.demo){const r=(CACHE.risks||D.risks||[]).find(x=>x.id===riskId);if(r)r.treatment=treatment;closeSettings();toast("Treatment updated (demo)","pass");closeDrawer();render();return;}
+  try{await apiPATCH(withTenant("/grc/risks/"+encodeURIComponent(riskId)),{treatment});closeSettings();toast("Treatment updated","pass");closeDrawer();render();}
+  catch(e){toast("Update failed: "+(e.message||e),"warn");}
+}
+async function vendorRequestReport(id,name){
+  if(STATE.demo){toast("Report requested from "+name+" (demo)","pass");closeDrawer();return;}
+  try{await apiPATCH(withTenant("/tprm/vendors/"+encodeURIComponent(id)),{assessment_state:"sent"});
+    toast("Report request logged for "+name,"pass");closeDrawer();render();}
+  catch(e){toast("Failed: "+(e.message||e),"warn");}
+}
+async function vendorMarkReviewed(id,name){
+  if(STATE.demo){toast("Marked reviewed (demo)","pass");closeDrawer();return;}
+  try{const next=new Date(Date.now()+90*864e5).toISOString();
+    await apiPATCH(withTenant("/tprm/vendors/"+encodeURIComponent(id)),{next_review:next});
+    toast(name+" marked reviewed \u2014 next review in 90 days","pass");closeDrawer();render();}
+  catch(e){toast("Failed: "+(e.message||e),"warn");}
+}
+async function reverifyEvidence(id){
+  if(STATE.demo){toast("Integrity re-check passed (demo)","pass");closeDrawer();return;}
+  try{const r=await apiGET("/evidence/"+encodeURIComponent(id)+"/verify"+withTenantQS());
+    toast((r.verified?"\u2713 ":"\u2717 ")+r.detail,r.verified?"pass":"warn");closeDrawer();}
+  catch(e){toast("Verify failed: "+(e.message||e),"warn");}
+}
+async function reverifyAllEvidence(){
+  if(STATE.demo){toast("Integrity re-check passed \u00b7 0 anomalies (demo)","pass");return;}
+  try{
+    const rows=CACHE.evidence||[];let bad=0;
+    for(const r of rows.slice(0,50)){try{const v=await apiGET("/evidence/"+encodeURIComponent(r.id)+"/verify"+withTenantQS());if(!v.verified)bad++;}catch(_){bad++;}}
+    toast(bad===0?"Integrity re-check passed \u00b7 0 anomalies ("+rows.length+" records)":"Integrity re-check found "+bad+" anomal"+(bad===1?"y":"ies"),bad===0?"pass":"warn");
+  }catch(e){toast("Verify failed: "+(e.message||e),"warn");}
+}
+async function evaluatePolicyNow(controlId){
+  if(STATE.demo){toast("Policy evaluated for "+controlId+" (demo)","pass");closeDrawer();return;}
+  try{const r=await apiPOST("/v1/policy/evaluate",{control:controlId,evidence:{}});
+    toast("Evaluated "+controlId+" \u2014 "+(r.status||"?").toUpperCase(),r.status==="fail"?"warn":"pass");closeDrawer();render();}
+  catch(e){toast("Evaluate failed: "+(e.message||e),"warn");}
+}
+async function refreshAuditPosture(auditId){
+  if(STATE.demo){toast("Posture refreshed for auditor view (demo)","pass");closeDrawer();return;}
+  try{await apiPOST("/audits/"+encodeURIComponent(auditId)+"/refresh-posture",{});
+    toast("Posture refreshed \u2014 up to date for the auditor","pass");closeDrawer();render();}
+  catch(e){toast("Refresh failed: "+(e.message||e),"warn");}
+}
 let _LEGAL=null;
 async function loadLegal(){if(_LEGAL!==null)return _LEGAL;try{_LEGAL=await apiGET("/legal/notices");}catch(_){_LEGAL=false;}return _LEGAL;}
 
@@ -1952,7 +2028,7 @@ RENDER.evidencehub = async function(){
   const m=main();
   m.innerHTML=viewHead("Evidence","Every collected record, hash-sealed at capture. The hash is what an auditor checks to confirm nothing was altered after the fact.","","evidence / 04");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading evidence…</div>`;
-  const[ev]=await Promise.all([load(withTenant("/evidence"),D.evidence)]);
+  const[ev]=await Promise.all([load(withTenant("/evidence"),D.evidence)]);  // real connector-evidence ledger, sha256-addressed
   const rows=ev.data||(STATE.demo?D.evidence:[]);CACHE.evidence=rows;
   host.innerHTML=`
   <div class="readouts">
@@ -1961,7 +2037,7 @@ RENDER.evidencehub = async function(){
     <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Pending verify</div><div class="v num">${rows.filter(r=>!r.verified).length}</div></div>
     <div class="ro"><div class="k">Seal</div><div class="v num" style="font-size:20px">SHA-256</div></div>
   </div>
-  <div class="panel"><div class="panel-h"><h3>Evidence ledger</h3><div class="sp"></div><button class="btn sm" onclick="toast('Integrity re-check passed · 0 anomalies')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>Verify integrity</button></div>
+  <div class="panel"><div class="panel-h"><h3>Evidence ledger</h3><div class="sp"></div><button class="btn sm" onclick="reverifyAllEvidence()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>Verify integrity</button></div>
   <div class="panel-b flush"><div class="tbl-scroll"><table>
     <thead><tr><th>Record</th><th>Control</th><th>Source</th><th>Hash</th><th>Sealed</th><th>State</th></tr></thead>
     <tbody data-ent="evidence">${rows.map(r=>`<tr>
@@ -2061,6 +2137,11 @@ RENDER.grcplatforms = function(){
   const m=main();
   m.innerHTML=viewHead("GRC platforms","Two-way sync with the GRC suites you already run. Comp-Lens pushes evidence and pulls control definitions so nothing is entered twice.","","evidence / 02");
   const m2=el("div");m.appendChild(m2);
+  if(!STATE.demo){
+    CACHE.platforms=[];
+    m2.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("No GRC platform connected","This is a preview of two-way GRC-suite sync — no ServiceNow, Archer, OneTrust, or AuditBoard connection is configured for this tenant yet. Turn on demo mode to see what a connected view looks like.")}</div></div>`;
+    return;
+  }
   const plats=[
     {name:"ServiceNow GRC",dir:"two-way",status:"healthy",objects:"controls · evidence · issues",last:new Date(Date.now()-2*36e5).toISOString()},
     {name:"Archer",dir:"push",status:"healthy",objects:"evidence",last:new Date(Date.now()-6*36e5).toISOString()},
@@ -2068,7 +2149,8 @@ RENDER.grcplatforms = function(){
     {name:"AuditBoard",dir:"two-way",status:"not_connected",objects:"—",last:null},
   ];
   const HM={healthy:"c-pass",degraded:"c-warn",not_connected:"c-dim"};CACHE.platforms=plats;
-  m2.innerHTML=`<div class="panel"><div class="panel-h"><h3>Connected suites</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+  m2.innerHTML=`<div class="note" style="margin-bottom:12px">Demo preview — no live GRC-suite connections exist yet.</div>
+  <div class="panel"><div class="panel-h"><h3>Connected suites</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
     <thead><tr><th>Platform</th><th>Direction</th><th>Objects synced</th><th>Status</th><th class="right">Last sync</th></tr></thead>
     <tbody data-ent="platforms">${plats.map(p=>`<tr>
       <td><b>${esc(p.name)}</b></td>
