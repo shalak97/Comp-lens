@@ -1510,17 +1510,18 @@ DETAIL.policies=function(p){
     actions:`<button class="btn sm primary" onclick="evaluatePolicyNow('${esc(p.id)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Evaluate now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.platforms=function(p){
-  openDrawer({eyebrow:"integration · "+p.name,title:esc(p.name),sub:"GRC platform sync",
-    badges:`<span class="chip ${({healthy:'c-pass',degraded:'c-warn',not_connected:'c-dim'})[p.status]}"><span class="d"></span>${titlecase(p.status)}</span>`,
-    body:dsec("Sync",kvlist([["Direction",p.dir],["Objects",p.objects],["Last sync",p.last?ago(p.last):"—"]])),
-    actions:`<button class="btn sm primary" onclick="toast('Sync triggered (demo — no live GRC-suite connection exists)');closeDrawer()">Sync now</button><div style="flex:1"></div>${closeBtn}`});
+  openDrawer({eyebrow:"integration · "+p.name,title:esc(p.name),sub:"GRC platform attestation sync",
+    badges:`<span class="chip ${({connected:'c-pass',not_connected:'c-dim'})[p.status]}"><span class="d"></span>${p.status==='connected'?'Connected':'Not configured'}</span>`,
+    body:dsec("Inherited attestations",kvlist([["Total ingested",p.total||0],["Passing",p.pass||0],["Failing",p.fail||0],["Mapped to controls",p.mapped||0]]))+
+      (p.status==='not_connected'?dsec("Connect",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">This connector is read-only and credential-gated \u2014 it fails closed until the platform's API key is configured on the server.</div>`):""),
+    actions:`<button class="btn sm primary" onclick="syncGrcPlatform('${esc(p.key)}','${esc(p.name)}')">Sync now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.audits=function(a){
   openDrawer({eyebrow:"audit · "+a.name,title:esc(a.name),sub:esc(a.auditor)+" · "+esc(a.window),
     badges:statusChip(a.status)+`<span class="chip c-out">${a.progress}% complete</span>`,
     body:dsec("Engagement",kvlist([["Auditor",a.auditor],["Window",a.window],["Evidence requests",a.requests],["Open requests",a.open],["Progress",a.progress+"%"]]))+
       dsec("Auditor access",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Access is read-only and scoped to the engagement window. Every document opened is written to the audit trail.</div>`),
-    actions:`<button class="btn sm primary" onclick="refreshAuditPosture('${esc(a.id)}')">Refresh posture for auditor</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="refreshAuditPosture('${esc(a.id)}')">Refresh posture for auditor</button>${STATE.demo?'':`<a class="btn sm" href="${esc(CFG.base.replace(/\/$/,""))}${esc(withTenant("/audits/"+encodeURIComponent(a.id)+"/export"))}" target="_blank" rel="noopener">Export package</a>`}<div style="flex:1"></div>${closeBtn}`});
 };
 function graphNodeDetail(model,n){
   const ins=model.edges.filter(e=>e[1]===n.id).map(e=>model.byId[e[0]]);
@@ -2107,15 +2108,28 @@ RENDER.response = async function(){
 };
 
 /* ---------- AUDITS ---------- */
-RENDER.audits = function(){
+RENDER.audits = async function(){
   const m=main();
   m.innerHTML=viewHead("Audits","Active and historical audit engagements, the auditor's read-only access window, and request status.","","posture / 05");
-  const m2=el("div");m.appendChild(m2);
-  const audits=[
-    {name:"SOC 2 Type II",auditor:"Prescott & Vale LLP",window:"Apr 1 – Jun 30",status:"in_progress",requests:42,open:6,progress:71},
-    {name:"ISO 27001 surveillance",auditor:"BSI",window:"completed Feb",status:"resolved",requests:33,open:0,progress:100},
-    {name:"HIPAA readiness",auditor:"internal",window:"scoping",status:"open",requests:0,open:0,progress:8},
-  ];CACHE.audits=audits;
+  const m2=el("div");m.appendChild(m2);m2.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  let audits;
+  if(STATE.demo){
+    audits=[
+      {id:"demo-1",name:"SOC 2 Type II",auditor:"Prescott & Vale LLP",window:"Apr 1 – Jun 30",status:"in_progress",requests:42,open:6,progress:71},
+      {id:"demo-2",name:"ISO 27001 surveillance",auditor:"BSI",window:"completed Feb",status:"resolved",requests:33,open:0,progress:100},
+      {id:"demo-3",name:"HIPAA readiness",auditor:"internal",window:"scoping",status:"open",requests:0,open:0,progress:8},
+    ];
+  }else{
+    try{
+      const rows=await apiGET(withTenant("/audits"));
+      audits=rows.map(a=>({id:a.id,name:a.name,auditor:a.auditor||"—",
+        window:(a.period_start?fmtDate(a.period_start):"")+(a.period_end?" – "+fmtDate(a.period_end):""),
+        status:a.status,requests:a.evidence_requests_total||0,open:a.evidence_requests_open||0,
+        progress:a.readiness_pct||0}));
+    }catch(e){audits=[];}
+  }
+  CACHE.audits=audits;
+  if(!audits.length){m2.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("No audit engagements yet","Create one to start tracking evidence requests and auditor readiness.")}</div></div>`;return;}
   m2.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k">Engagements</div><div class="v num">${audits.length}</div></div>
@@ -2129,38 +2143,51 @@ RENDER.audits = function(){
     <div class="calbar"><span class="tickmk" style="left:25%"></span><span class="tickmk" style="left:50%"></span><span class="tickmk" style="left:75%"></span><i style="width:${a.progress}%;background:${a.progress>=100?'var(--pass)':'var(--focus)'}"></i></div>
     <div class="flex" style="justify-content:space-between;margin-top:9px;font-family:var(--mono);font-size:11px;color:var(--steel)"><span>${a.progress}% complete</span><span>${a.open} open · ${a.requests} total</span></div>
   </div></div>`).join("")}</div>
-  <div class="note"><b>Auditor access</b> is read-only and scoped to the engagement window. Grant a time-boxed login from this view and every document they open is logged to the audit trail.</div>`;
+  <div class="note"><b>Auditor access</b> is read-only and scoped to the engagement window. Every document opened is logged to the audit trail.</div>`;
 };
 
 /* ---------- GRC PLATFORMS ---------- */
-RENDER.grcplatforms = function(){
+RENDER.grcplatforms = async function(){
   const m=main();
-  m.innerHTML=viewHead("GRC platforms","Two-way sync with the GRC suites you already run. Comp-Lens pushes evidence and pulls control definitions so nothing is entered twice.","","evidence / 02");
-  const m2=el("div");m.appendChild(m2);
-  if(!STATE.demo){
-    CACHE.platforms=[];
-    m2.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("No GRC platform connected","This is a preview of two-way GRC-suite sync — no ServiceNow, Archer, OneTrust, or AuditBoard connection is configured for this tenant yet. Turn on demo mode to see what a connected view looks like.")}</div></div>`;
+  m.innerHTML=viewHead("GRC platforms","Pull inherited attestations from the GRC suites you already run (Vanta, Drata, OneTrust) and see which controls agree across independent sources.","","evidence / 02");
+  const m2=el("div");m.appendChild(m2);m2.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  if(STATE.demo){
+    const plats=[
+      {key:"VANTA",name:"Vanta",status:"connected",total:14,pass:11,fail:3,mapped:12},
+      {key:"DRATA",name:"Drata",status:"connected",total:9,pass:9,fail:0,mapped:9},
+      {key:"ONETRUST",name:"OneTrust",status:"not_connected",total:0,pass:0,fail:0,mapped:0},
+    ];CACHE.platforms=plats;
+    m2.innerHTML=`<div class="note" style="margin-bottom:12px">Demo preview \u2014 credential-gated in live mode (set e.g. VANTA_API_KEY to connect for real).</div>${grcPlatTable(plats)}`;
     return;
   }
-  const plats=[
-    {name:"ServiceNow GRC",dir:"two-way",status:"healthy",objects:"controls · evidence · issues",last:new Date(Date.now()-2*36e5).toISOString()},
-    {name:"Archer",dir:"push",status:"healthy",objects:"evidence",last:new Date(Date.now()-6*36e5).toISOString()},
-    {name:"OneTrust",dir:"pull",status:"degraded",objects:"assessments",last:new Date(Date.now()-26*36e5).toISOString()},
-    {name:"AuditBoard",dir:"two-way",status:"not_connected",objects:"—",last:null},
-  ];
-  const HM={healthy:"c-pass",degraded:"c-warn",not_connected:"c-dim"};CACHE.platforms=plats;
-  m2.innerHTML=`<div class="note" style="margin-bottom:12px">Demo preview — no live GRC-suite connections exist yet.</div>
-  <div class="panel"><div class="panel-h"><h3>Connected suites</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
-    <thead><tr><th>Platform</th><th>Direction</th><th>Objects synced</th><th>Status</th><th class="right">Last sync</th></tr></thead>
+  let status,avail;
+  try{[status,avail]=await Promise.all([apiGET(withTenant("/v1/grc-sync/status")),apiGET("/v1/grc-sync/platforms")]);}
+  catch(e){m2.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("Could not load GRC platform status",String(e.message||e))}</div></div>`;return;}
+  const plats=Object.entries(avail.platforms||{}).map(([key,name])=>{
+    const s=(status.by_platform||{})[key]||{total:0,pass:0,fail:0,mapped:0};
+    return {key,name,status:(status.connected||[]).includes(key)?"connected":"not_connected",...s};
+  });
+  CACHE.platforms=plats;
+  m2.innerHTML=grcPlatTable(plats)+`<div class="note">Each platform is a real, credential-gated connector (read-only, fails closed without credentials). Inherited attestations are stored separately from native connector evidence and cross-checked in <span class="clink" onclick="STATE.active='trustgraph';render()">multi-source agreement</span>.</div>`;
+};
+function grcPlatTable(plats){
+  const HM={connected:"c-pass",not_connected:"c-dim"};
+  return `<div class="panel"><div class="panel-h"><h3>GRC platform connectors</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Platform</th><th>Status</th><th>Attestations ingested</th><th>Mapped to controls</th><th class="right"></th></tr></thead>
     <tbody data-ent="platforms">${plats.map(p=>`<tr>
       <td><b>${esc(p.name)}</b></td>
-      <td><span class="chip c-out">${p.dir==="two-way"?"↔ two-way":p.dir==="push"?"→ push":"← pull"}</span></td>
-      <td class="mono" style="font-size:11px;color:var(--steel)">${esc(p.objects)}</td>
-      <td><span class="chip ${HM[p.status]}"><span class="d"></span>${titlecase(p.status)}</span></td>
-      <td class="right mono" style="font-size:11px;color:var(--steel)">${p.last?ago(p.last):"—"}</td></tr>`).join("")}</tbody>
-  </table></div></div></div>
-  <div class="note">Already invested in a GRC suite? Comp-Lens sits underneath it as the <b>evidence engine</b> — your team keeps working where they are while assessments run automatically.</div>`;
-};
+      <td><span class="chip ${HM[p.status]}"><span class="d"></span>${p.status==='connected'?'Connected':'Not configured'}</span></td>
+      <td class="num">${p.total||0}${p.total?` <span style="color:var(--steel);font-size:11px">(${p.pass} pass / ${p.fail} fail)</span>`:""}</td>
+      <td class="num">${p.mapped||0}</td>
+      <td class="right"><button class="btn sm" onclick="event.stopPropagation();syncGrcPlatform('${esc(p.key)}','${esc(p.name)}')">Sync now</button></td></tr>`).join("")}</tbody>
+  </table></div></div></div>`;
+}
+async function syncGrcPlatform(key,name){
+  if(STATE.demo){toast("Synced "+name+" (demo)","pass");return;}
+  try{const r=await apiPOST(withTenant("/v1/grc-sync/"+encodeURIComponent(key)),{});
+    toast(name+": "+r.ingested+" attestations ingested ("+r.mapped+" mapped)","pass");render();}
+  catch(e){toast(name+": "+(e.message||e),"warn");}
+}
 
 /* ---------- KNOWLEDGE / TRUST GRAPH (2D + 3D) ---------- */
 let GMODE="2d";
@@ -2218,6 +2245,13 @@ function graphLegend(vendor){
 function graphView(title,desc,eyebrow,vendor){
   if(window._gstop){window._gstop();window._gstop=null;}
   const m=main();
+  if(!STATE.demo){
+    m.innerHTML=viewHead(title,desc,"",eyebrow);
+    const host=el("div");m.appendChild(host);
+    host.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("Illustrative view — demo only for now",
+      "This "+(vendor?"vendor/system/control":"framework/requirement/control")+" graph is a fixed illustrative diagram; it isn't yet wired to a live per-tenant graph. Turn on demo mode to explore it. "+(vendor?"":"A real evidence-concept graph exists at GET /evidence/graph for a future version of this view."))}</div></div>`;
+    return;
+  }
   m.innerHTML=viewHead(title,desc,
     `<div class="seg" id="gmode"><button data-m="2d" class="${GMODE==='2d'?'on':''}">2D</button><button data-m="3d" class="${GMODE==='3d'?'on':''}">3D</button></div>`,eyebrow);
   const m2=el("div");m.appendChild(m2);
@@ -2227,7 +2261,7 @@ function graphView(title,desc,eyebrow,vendor){
     <div class="panel-b" id="gbody" style="padding:${GMODE==='3d'?'0':'16px'}"></div>`;
   m2.appendChild(panel);
   m2.insertAdjacentHTML("beforeend",
-    `<div class="note">${GMODE==='3d'?'Drag to orbit · release to auto-rotate. ':''}Dashed red edges trace a path from a failing control back through the ${vendor?'system and vendor':'requirement and framework'} it affects — the chain an auditor follows, made visible.</div>`);
+    `<div class="note">Demo preview. ${GMODE==='3d'?'Drag to orbit · release to auto-rotate. ':''}Dashed red edges trace a path from a failing control back through the ${vendor?'system and vendor':'requirement and framework'} it affects — the chain an auditor follows, made visible.</div>`);
   if(GMODE==="2d") drawGraph2D($("#gbody"),model,vendor);
   else drawGraph3D($("#gbody"),model);
   m.querySelectorAll("#gmode button").forEach(b=>b.onclick=()=>{GMODE=b.dataset.m;render();});
