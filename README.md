@@ -1,6 +1,6 @@
-# Comp-Lens 2.0
+# Comp-Lens 
 
-**Comp-Lens 2.0** is a Compliance-as-Code and continuous control monitoring platform for GRC, security, audit, and AI governance teams.
+**Comp-Lens ** is a Compliance-as-Code and continuous control monitoring platform for GRC, security, audit, and AI governance teams.
 
 It helps organizations map controls across multiple frameworks, collect technical evidence, detect control failures, track remediation, manage waivers, and generate audit-ready reports from a single platform.
 
