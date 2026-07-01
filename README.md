@@ -388,10 +388,4 @@ It is suitable for:
 
 ## License
 
-Add your preferred license here.
-
----
-
-## Author
-
-Built by **Shalak More**.
+MIT License
