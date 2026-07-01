@@ -1,0 +1,187 @@
+diff --git a/app/services/assessment.py b/app/services/assessment.py
+--- a/app/services/assessment.py
++++ b/app/services/assessment.py
+@@
+-def _idem_key(req: AssessmentRequest) -> str:
+-    if req.idempotency_key:
+-        return f"{req.tenant_id}:{req.idempotency_key}"
+-    return f"{req.tenant_id}:{req.framework}:{req.control_id}:{req.source_system}:{req.asset_id}"
++def _idem_key(req: AssessmentRequest) -> Optional[str]:
++    """Return an idempotency key only when the caller explicitly asks for one.
++
++    Continuous compliance must re-collect telemetry on every scheduled/manual run.
++    The previous default key deduped by tenant/framework/control/source/asset, which
++    could return stale findings for a later scan of the same asset and control.
++    """
++    if not req.idempotency_key:
++        return None
++    return f"{req.tenant_id}:{req.idempotency_key}"
+@@
+-    def _existing(self, key: str) -> Optional[Finding]:
++    def _existing(self, key: Optional[str]) -> Optional[Finding]:
++        if not key:
++            return None
+         rec = self.db.get(IdempotencyRecord, key)
+         return self.db.get(Finding, rec.finding_id) if rec else None
+@@
+-        idem_key: str,
++        idem_key: Optional[str] = None,
+@@
+-        existing = self._existing(idem_key)
+-        if existing:
+-            return existing
++        existing = self._existing(idem_key)
++        if existing:
++            return existing
+@@
+-                self.db.add(IdempotencyRecord(key=idem_key, tenant_id=tenant_id, finding_id=finding.finding_id))
++                if idem_key:
++                    self.db.add(IdempotencyRecord(key=idem_key, tenant_id=tenant_id, finding_id=finding.finding_id))
+@@
+-            winner = self._existing(idem_key)
+-            if winner:
+-                return winner
++            if idem_key:
++                winner = self._existing(idem_key)
++                if winner:
++                    return winner
+             raise
+@@
+     def run_single(self, req: AssessmentRequest) -> Finding:
+         key = _idem_key(req)
+-        existing = self._existing(key)
+-        if existing:
+-            return existing
+         connector = registry.get(req.source_system)
+@@
+             owner=telemetry.get("owner"))
+
+ diff --git a/app/services/integration.py b/app/services/integration.py
+--- a/app/services/integration.py
++++ b/app/services/integration.py
+@@
+-from app.models import Finding, ControlStatus, Severity, Lifecycle
++from app.models import Finding, ControlStatus, Severity, Lifecycle
++from app.services.assessment import AssessmentService
+@@
+-    created, updated = 0, 0
++    created, updated = 0, 0
++    assessment = AssessmentService(db)
+@@
+-        # idempotent: one open policy-finding per control. update if it exists.
++        # Idempotent: one open policy-finding per control. Update if it exists.
+         existing = db.execute(
+@@
+-        else:
+-            db.add(Finding(
+-                finding_id=str(uuid.uuid4()),
+-                tenant_id=tenant_id,
+-                run_id=run_id,
+-                framework=framework,
+-                control_id=d.control_id,
+-                source_system=POLICY_SOURCE,
+-                status=cstatus,
+-                severity=sev,
+-                lifecycle=Lifecycle.OPEN if cstatus == ControlStatus.FAIL else Lifecycle.RESOLVED,
+-                description=d.reason,
+-                remediation={"obligations": d.obligations, "rules": d.rules}
+-            ))
+-            created += 1
++        else:
++            finding = assessment.record_external_finding(
++                tenant_id=tenant_id,
++                framework=framework,
++                control_id=d.control_id,
++                source_system=POLICY_SOURCE,
++                asset_id=None,
++                status=cstatus,
++                severity=sev,
++                description=d.reason,
++                raw={"policy_decision": d.model_dump() if hasattr(d, "model_dump") else d.__dict__},
++                external_id=f"policy:{d.control_id}",
++            )
++            if finding:
++                finding.lifecycle = Lifecycle.OPEN if cstatus == ControlStatus.FAIL else Lifecycle.RESOLVED
++                finding.remediation = {"obligations": d.obligations, "rules": d.rules}
++                created += 1
+@@
+-    db.commit()
++    db.commit()
+
+ diff --git a/app/config.py b/app/config.py
+--- a/app/config.py
++++ b/app/config.py
+@@
+-from pydantic import Field
++from pydantic import Field, model_validator
+@@
+-    # ── Policy engine ──
+-    # "builtin" = in-process rule catalog; "opa" = delegate to an OPA server.
+-    policy_engine: str = Field(default="builtin")
+-    opa_url: Optional[str] = Field(default=None) # e.g. http://opa:8181
+-    evidence_signing_key: Optional[str] = Field(default=None) # HMAC key for evidence chain of custody
+-    opa_decision_path: str = Field(default="/v1/data/complens/decision")
+-    # ── Policy engine ──
+-    # "rules" = built-in Python rule catalog; "opa" = Open Policy Agent server.
+-    policy_engine: str = Field(default="rules")
+-    opa_url: str = Field(default="http://localhost:8181")
+-    opa_package: str = Field(default="compliance")
++    # ── Policy engine ──
++    # "rules" = built-in Python rule catalog; "opa" = Open Policy Agent server.
++    policy_engine: str = Field(default="rules")
++    opa_url: Optional[str] = Field(default=None) # e.g. http://opa:8181
++    opa_package: str = Field(default="compliance")
++    opa_decision_path: str = Field(default="/v1/data/complens/decision")
++    evidence_signing_key: Optional[str] = Field(default=None) # HMAC key for evidence chain of custody
++
++    @property
++    def is_production(self) -> bool:
++        return self.app_env.lower() == "production"
++
++    @model_validator(mode="after")
++    def _production_requires_chain_of_custody(self):
++        if self.is_production and not self.evidence_signing_key:
++            raise ValueError("EVIDENCE_SIGNING_KEY is required when APP_ENV=production")
++        return self
+
+ diff --git a/app/services/evidence_sign.py b/app/services/evidence_sign.py
+--- a/app/services/evidence_sign.py
++++ b/app/services/evidence_sign.py
+@@
+-def _key() -> bytes:
+-    return (settings.evidence_signing_key or "dev-only-unsigned-evidence-key").encode()
++def _key() -> bytes:
++    if not settings.evidence_signing_key and settings.is_production:
++        raise RuntimeError("EVIDENCE_SIGNING_KEY is required in production")
++    return (settings.evidence_signing_key or "dev-only-unsigned-evidence-key").encode()
+
+ diff --git a/app/connectors/http_client.py b/app/connectors/http_client.py
+--- a/app/connectors/http_client.py
++++ b/app/connectors/http_client.py
+@@
+-            response = self.session.request(method, url, timeout=self.timeout, **kwargs)
++            # Do not follow redirects automatically. SSRF protections must validate
++            # the final Location target before any second request is made.
++            kwargs.setdefault("allow_redirects", False)
++            response = self.session.request(method, url, timeout=self.timeout, **kwargs)
+
+ diff --git a/render.yaml b/render.yaml
+--- a/render.yaml
++++ b/render.yaml
+@@
+   - key: ENABLE_DEMO_CONNECTOR
+-    value: true
++    value: false
+   - key: EVIDENCE_BACKEND
+-    value: local
+-  - key: EVIDENCE_LOCAL_PATH
+-    value: /tmp/evidence_store
++    value: s3
++  - key: EVIDENCE_S3_BUCKET
++    sync: false
++  - key: EVIDENCE_SIGNING_KEY
++    sync: false
++  - key: COMP_LENS_API_KEYS
++    sync: false
++  - key: LIVE_CONNECTORS_ALLOWLIST
++    value: ""
