@@ -1990,7 +1990,7 @@ function insertPolicyPdf(input){
 }
 
 /* ---------- MIDDLEWARE (evidence pipeline) ---------- */
-RENDER.middleware = function(){
+RENDER.middleware = async function(){
   const m=main();
   m.innerHTML=viewHead("Middleware","The pipeline that turns raw signals into signed, control-mapped evidence — the path every record takes between a connector and a finding.","","compliance-as-code / 02");
   const m2=el("div");m.appendChild(m2);
@@ -2001,8 +2001,7 @@ RENDER.middleware = function(){
     ["Sign","Hash + Merkle-anchor each record","var(--pass)"],
     ["Map","Crosswalk to frameworks","var(--pass)"],
   ];
-  m2.innerHTML=`
-  <div class="panel"><div class="panel-h"><h3>Evidence pipeline</h3><div class="sub" style="margin-left:auto">left → right</div></div>
+  const pipeline=`<div class="panel"><div class="panel-h"><h3>Evidence pipeline</h3><div class="sub" style="margin-left:auto">left → right</div></div>
   <div class="panel-b"><div style="display:grid;grid-template-columns:repeat(${stages.length},1fr);gap:0;align-items:stretch">
     ${stages.map((s,i)=>`<div style="position:relative;padding:16px 14px;border:1px solid var(--rule);border-right:${i<stages.length-1?'none':'1px solid var(--rule)'};${i===0?'border-radius:var(--rad) 0 0 var(--rad)':''}${i===stages.length-1?'border-radius:0 var(--rad) var(--rad) 0':''}">
       <div class="mono" style="font-size:9px;letter-spacing:.14em;color:var(--faint)">STAGE ${i+1}</div>
@@ -2010,17 +2009,22 @@ RENDER.middleware = function(){
       <div style="font-size:11.5px;color:var(--steel);line-height:1.45">${esc(s[1])}</div>
       ${i<stages.length-1?`<div style="position:absolute;right:-7px;top:50%;transform:translateY(-50%);z-index:2;width:14px;height:14px;background:var(--face);border:1px solid var(--rule);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:10px">›</div>`:""}
     </div>`).join("")}
-  </div></div></div>
-  <div class="grid g-3">
-    <div class="panel"><div class="panel-h"><h3>Throughput · 24h</h3></div><div class="panel-b">${barlist([["Collected",1842,2000,"var(--focus)"],["Evaluated",1810,2000,"var(--focus)"],["Signed",1810,2000,"var(--pass)"],["Findings",46,2000,"var(--fail)"]])}</div></div>
-    <div class="panel"><div class="panel-h"><h3>Integrity</h3></div><div class="panel-b"><div class="dl">
-      <dt>Algorithm</dt><dd>SHA-256 + Merkle tree</dd><dt>Anchored</dt><dd>every sync window</dd>
-      <dt>Verified</dt><dd><span class="chip c-pass"><span class="d"></span>100% · last run</span></dd><dt>Tampered</dt><dd>0 records</dd>
+  </div></div></div>`;
+  let stats;
+  if(STATE.demo){
+    stats={collected:1842,findings:46,evidence_addressable:1810,demo:true};
+  }else{
+    try{stats=await apiGET(withTenant("/middleware/pipeline-stats"));}catch(e){stats={collected:0,findings:0,evidence_addressable:0};}
+  }
+  m2.innerHTML=pipeline+`
+  ${STATE.demo?'<div class="note" style="margin:12px 0">Demo preview \u2014 illustrative volume.</div>':''}
+  <div class="grid g-3" style="margin-top:12px">
+    <div class="panel"><div class="panel-h"><h3>Throughput · 24h</h3></div><div class="panel-b">${barlist([["Collected",stats.collected||0,Math.max(stats.collected||0,10),"var(--focus)"],["Findings",stats.findings||0,Math.max(stats.collected||0,10),"var(--fail)"]])}</div></div>
+    <div class="panel"><div class="panel-h"><h3>Evidence integrity</h3></div><div class="panel-b"><div class="dl">
+      <dt>Algorithm</dt><dd>SHA-256, content-addressed</dd><dt>Addressable records</dt><dd class="num">${(stats.evidence_addressable||0).toLocaleString()}</dd>
+      <dt>Verify</dt><dd style="font-size:11.5px;color:var(--steel)">Recomputed on demand — see Evidence hub</dd>
     </div></div></div>
-    <div class="panel"><div class="panel-h"><h3>Latency</h3></div><div class="panel-b"><div class="dl">
-      <dt>Collect → finding</dt><dd class="num" style="font-weight:600">3.1s p50</dd><dt>p95</dt><dd class="num" style="font-weight:600">11.4s</dd>
-      <dt>Policy eval</dt><dd class="num">0.4s avg</dd><dt>Queue depth</dt><dd class="num">0</dd>
-    </div></div></div>
+    <div class="panel"><div class="panel-h"><h3>Latency</h3></div><div class="panel-b">${STATE.demo?'<div class="dl"><dt>Collect → finding</dt><dd class="num" style="font-weight:600">3.1s p50</dd><dt>p95</dt><dd class="num" style="font-weight:600">11.4s</dd></div>':`<div style="font-size:12px;color:var(--faint)">${emptyState("Not instrumented yet","Request-level pipeline latency isn't tracked in this build.")}</div>`}</div></div>
   </div>`;
 };
 
@@ -2620,8 +2624,108 @@ RENDER.cookiepolicy=async function(){
 };
 
 
+/* ===================== CRAWLERS ===================== */
+const CRAWL_KIND_LABEL={vendor_trust:"Vendor trust page",regulatory:"Regulatory update",advisory:"Security advisory"};
+const CRAWL_STATUS_CHIP={ok:"c-pass",changed:"c-warn",error:"c-fail",blocked:"c-fail",robots_disallowed:"c-dim",rate_limited:"c-dim"};
+D.crawlTargets=[
+  {id:"ct1",kind:"vendor_trust",name:"Cloudflare trust page",url:"https://www.cloudflare.com/trust-hub/",domain:"www.cloudflare.com",min_interval_hours:24,enabled:true,last_hash:"a1b2c3",last_checked_at:new Date(Date.now()-3*36e5).toISOString()},
+  {id:"ct2",kind:"regulatory",name:"NIST CSRC updates",url:"https://csrc.nist.gov/news",domain:"csrc.nist.gov",min_interval_hours:24,enabled:true,last_hash:"d4e5f6",last_checked_at:new Date(Date.now()-20*36e5).toISOString()},
+  {id:"ct3",kind:"advisory",name:"CISA advisories",url:"https://www.cisa.gov/news-events/cybersecurity-advisories",domain:"www.cisa.gov",min_interval_hours:12,enabled:true,last_hash:"g7h8i9",last_checked_at:new Date(Date.now()-6*36e5).toISOString()},
+  {id:"ct4",kind:"vendor_trust",name:"Datadog security page",url:"https://www.datadoghq.com/security/",domain:"www.datadoghq.com",min_interval_hours:24,enabled:false,last_hash:null,last_checked_at:null},
+];
+D.crawlResults=[
+  {id:"cr1",target_id:"ct1",status:"changed",content_hash:"a1b2c3",excerpt:"Cloudflare has updated its subprocessor list and added a new region for data residency…",duration_ms:412,fetched_at:new Date(Date.now()-3*36e5).toISOString()},
+  {id:"cr2",target_id:"ct2",status:"ok",content_hash:"d4e5f6",excerpt:"NIST Cybersecurity and Privacy news — latest publications and updates…",duration_ms:298,fetched_at:new Date(Date.now()-20*36e5).toISOString()},
+  {id:"cr3",target_id:"ct3",status:"changed",content_hash:"g7h8i9",excerpt:"CISA has released 3 new advisories today covering industrial control systems…",duration_ms:355,fetched_at:new Date(Date.now()-6*36e5).toISOString()},
+];
+
+RENDER.crawlers=async function(){
+  const m=main();m.innerHTML=viewHead("Crawlers","Guardrailed monitoring of external pages — vendor trust pages, regulatory updates, and security advisories — flagged the moment they change.",
+    `<button class="btn primary" onclick="openCrawlTargetAdd()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add target</button>`,"risk / 04");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
+  const[tg,rs]=await Promise.all([
+    load(withTenant("/crawlers/targets"),D.crawlTargets),
+    load(withTenant("/crawlers/results"),D.crawlResults),
+  ]);
+  const targets=tg.data||(STATE.demo?D.crawlTargets:[]);
+  const results=rs.data||(STATE.demo?D.crawlResults:[]);
+  CACHE.crawlers=targets;CACHE.crawlResults=results;
+  const lastByTarget={};results.forEach(r=>{if(!lastByTarget[r.target_id]||r.fetched_at>lastByTarget[r.target_id].fetched_at)lastByTarget[r.target_id]=r;});
+  const changed=results.filter(r=>r.status==='changed').length;
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Targets</div><div class="v num">${targets.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Enabled</div><div class="v num">${targets.filter(t=>t.enabled).length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Changes detected</div><div class="v num">${changed}</div></div>
+    <div class="ro"><div class="k">Checks run</div><div class="v num">${results.length}</div></div>
+  </div>
+  <div class="note">Read-only, public-page-only, SSRF-guarded, domain-pinned, robots.txt-respecting, and rate-limited. No credentials are ever attached to a crawl.</div>
+  <div class="panel"><div class="panel-h"><h3>Targets</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Name</th><th>Kind</th><th>Domain</th><th>Last check</th><th>Status</th><th class="right"></th></tr></thead>
+    <tbody data-ent="crawlers">${targets.map(t=>{const lr=lastByTarget[t.id];return `<tr>
+      <td><b>${esc(t.name)}</b></td>
+      <td><span class="chip c-out"><span class="d"></span>${esc(CRAWL_KIND_LABEL[t.kind]||t.kind)}</span></td>
+      <td class="mono" style="font-size:11px;color:var(--steel)">${esc(t.domain)}</td>
+      <td class="mono" style="font-size:11px;color:var(--steel)">${t.last_checked_at?ago(t.last_checked_at):"never"}</td>
+      <td>${lr?`<span class="chip ${CRAWL_STATUS_CHIP[lr.status]||'c-dim'}"><span class="d"></span>${esc(titlecase(lr.status.replace('_',' ')))}</span>`:'<span class="chip c-dim"><span class="d"></span>Not run</span>'}${t.enabled?'':' <span class="chip c-dim"><span class="d"></span>disabled</span>'}</td>
+      <td class="right"><button class="btn sm" onclick="event.stopPropagation();runCrawlTarget('${esc(t.id)}')">Run now</button></td></tr>`;}).join("")||`<tr><td colspan="6">${emptyState("No crawl targets yet","Add a vendor trust page, regulatory update page, or advisory feed to start monitoring.")}</td></tr>`}</tbody>
+  </table></div></div></div>`;
+};
+DETAIL.crawlers=function(t){
+  const myResults=(CACHE.crawlResults||[]).filter(r=>r.target_id===t.id).sort((a,b)=>b.fetched_at.localeCompare(a.fetched_at));
+  const last=myResults[0];
+  openDrawer({eyebrow:"crawl target · "+(CRAWL_KIND_LABEL[t.kind]||t.kind),title:esc(t.name),sub:esc(t.domain),
+    badges:(t.enabled?'<span class="chip c-pass"><span class="d"></span>Enabled</span>':'<span class="chip c-dim"><span class="d"></span>Disabled</span>')+(last?` <span class="chip ${CRAWL_STATUS_CHIP[last.status]||'c-dim'}"><span class="d"></span>${esc(titlecase(last.status.replace('_',' ')))}</span>`:''),
+    body:
+      dsec("Target",kvlist([["URL",t.url],["Domain (pinned)",t.domain],["Check interval",t.min_interval_hours+"h"],["Last checked",t.last_checked_at?ago(t.last_checked_at):"never"]]))+
+      (last?dsec("Latest check",kvlist([["Status",titlecase(last.status.replace('_',' '))],["Content hash",last.content_hash?last.content_hash.slice(0,16)+"…":"—"],["Duration",last.duration_ms?last.duration_ms+"ms":"—"]])+(last.excerpt?`<div class="note" style="margin-top:8px">${esc(last.excerpt)}</div>`:"")):"")+
+      dsec("Recent checks ("+myResults.length+")",myResults.slice(0,8).map(r=>drow(`<span class="chip ${CRAWL_STATUS_CHIP[r.status]||'c-dim'}" style="font-size:9px"><span class="d"></span>${esc(r.status)}</span><span style="flex:1;font-size:11.5px;color:var(--steel)">${ago(r.fetched_at)}</span>`,"")).join("")||'<div style="font-size:12px;color:var(--faint)">No checks yet.</div>')+
+      dsec("Guardrails",`<div style="font-size:12px;color:var(--steel);line-height:1.6">Domain-pinned to <b>${esc(t.domain)}</b> · robots.txt respected · SSRF-guarded (private/internal addresses blocked) · public pages only, no credentials · rate-limited to once per ${t.min_interval_hours}h</div>`),
+    actions:`<button class="btn sm primary" onclick="runCrawlTarget('${esc(t.id)}')">Run now</button><button class="btn sm" onclick="toggleCrawlTarget('${esc(t.id)}',${!t.enabled})">${t.enabled?'Disable':'Enable'}</button><button class="btn sm ghost" onclick="deleteCrawlTarget('${esc(t.id)}','${esc(t.name)}')">Delete</button><div style="flex:1"></div>${closeBtn}`});
+};
+function openCrawlTargetAdd(){
+  const s=$("#settings");
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Add crawl target</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  <div class="dialog-b">
+    <div class="note">Public pages only. The URL is validated and domain-pinned at creation — internal/private addresses are always rejected.</div>
+    <div class="fld"><label>Kind</label><select id="ctKind">${Object.entries(CRAWL_KIND_LABEL).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></div>
+    <div class="fld"><label>Name</label><input id="ctName" placeholder="e.g. Acme Corp trust page"/></div>
+    <div class="fld"><label>URL</label><input id="ctUrl" placeholder="https://example.com/trust"/></div>
+    <div class="fld"><label>Check interval (hours)</label><input id="ctInterval" type="number" value="24"/></div>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="submitCrawlTarget()">Add</button></div></div>`;
+  s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+async function submitCrawlTarget(){
+  const kind=$("#ctKind").value,name=$("#ctName").value.trim(),url=$("#ctUrl").value.trim(),interval=parseInt($("#ctInterval").value,10)||24;
+  if(!url){toast("Enter a URL","warn");return;}
+  if(STATE.demo){D.crawlTargets.unshift({id:"ct"+Date.now(),kind,name:name||url,url,domain:(url.match(/^https?:\/\/([^\/]+)/)||[,url])[1],min_interval_hours:interval,enabled:true,last_hash:null,last_checked_at:null});closeSettings();toast("Target added (demo)","pass");render();return;}
+  try{await apiPOST(withTenant("/crawlers/targets"),{kind,name,url,min_interval_hours:interval});closeSettings();toast("Target added","pass");render();}
+  catch(e){toast("Could not add target: "+(e.message||e),"warn");}
+}
+async function runCrawlTarget(id){
+  if(STATE.demo){toast("Crawled (demo) — no change detected","pass");closeDrawer();return;}
+  try{const r=await apiPOST("/crawlers/targets/"+encodeURIComponent(id)+"/run"+withTenantQS(),{});
+    const msg=r.status==='changed'?"Change detected!":r.status==='rate_limited'?`Rate-limited — retry in ${Math.ceil(r.meta.retry_after_min)}m`:r.status==='robots_disallowed'?"Blocked by target's robots.txt":r.status==='error'?"Fetch error: "+(r.error||''):r.status==='blocked'?"Blocked by guardrail: "+(r.error||''):"No change since last check";
+    toast(msg,r.status==='changed'?"warn":(r.status==='error'||r.status==='blocked')?"warn":"pass");closeDrawer();render();}
+  catch(e){toast("Run failed: "+(e.message||e),"warn");}
+}
+async function toggleCrawlTarget(id,enabled){
+  if(STATE.demo){const t=(CACHE.crawlers||D.crawlTargets).find(x=>x.id===id);if(t)t.enabled=enabled;toast(enabled?"Enabled (demo)":"Disabled (demo)","pass");closeDrawer();render();return;}
+  try{await apiPATCH("/crawlers/targets/"+encodeURIComponent(id)+withTenantQS(),{enabled});toast(enabled?"Enabled":"Disabled","pass");closeDrawer();render();}
+  catch(e){toast("Update failed: "+(e.message||e),"warn");}
+}
+async function deleteCrawlTarget(id,name){
+  if(!confirm("Remove crawl target "+(name||"")+"? Past results are kept."))return;
+  if(STATE.demo){D.crawlTargets=D.crawlTargets.filter(x=>x.id!==id);toast("Removed (demo)");closeDrawer();render();return;}
+  try{await api("/crawlers/targets/"+encodeURIComponent(id)+withTenantQS(),{method:"DELETE"});toast("Target removed");closeDrawer();render();}
+  catch(e){toast("Delete failed: "+(e.message||e),"warn");}
+}
+
+
 /* ===================== NAV ===================== */
 const ICON={
+  crawlers:'<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
   consent:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
   dsar:'<path d="M16 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
   ropa:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
@@ -2653,7 +2757,7 @@ const GROUPS=[
   ["Compliance as Code",[["policy","Policies"],["middleware","Middleware"],["enforcement","Enforcement"]]],
   ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"]]],
   ["Intelligence",[["response","Response"],["inventory","AI Inventory"],["threat","Threat Intel"]]],
-  ["Risk & Vendors",[["risks","Risk Register"],["vendors","Vendors"],["trustgraph","Trust Graph"]]],
+  ["Risk & Vendors",[["risks","Risk Register"],["vendors","Vendors"],["trustgraph","Trust Graph"],["crawlers","Crawlers"]]],
   ["Privacy & Compliance",[["consent","Consent Ledger"],["dsar","Data Requests"],["ropa","Processing (ROPA)"],["retention","Retention"],["auditlog","Activity Log"],["cookiepolicy","Cookie Policy"]]],
 ];
 const LABELS={};GROUPS.forEach(([,t])=>t.forEach(([id,name])=>LABELS[id]=name));
