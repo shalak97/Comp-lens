@@ -2196,6 +2196,107 @@ async function syncGrcPlatform(key,name){
 /* ---------- KNOWLEDGE / TRUST GRAPH (2D + 3D) ---------- */
 let GMODE="2d";
 RENDER.graph = function(){ graphView("Knowledge graph","How evidence, controls and frameworks connect. Trace any framework requirement back to the exact record that satisfies it. Switch to 3D and drag to orbit the ontology.","evidence / 03",false); };
+/* ===================== TRUST TELEMETRY ===================== */
+const TRUST_BAND={high:"c-pass",medium:"c-warn",low:"c-fail",critical:"c-fail"};
+function trustChip(band,val){return `<span class="chip ${TRUST_BAND[band]||'c-out'}"><span class="d"></span>${esc(band||'—')}${val!=null?' · '+val:''}</span>`;}
+const LANE_LABEL={native:"Native connectors",inherited:"Inherited (GRC platforms)",policy:"Policy-as-code",enforcement:"Runtime enforcement",followthrough:"Obligation follow-through"};
+const LANE_DESC={
+  native:"Direct connector evidence — freshest, strongest.",
+  inherited:"Attestations pulled from Vanta / Drata / OneTrust.",
+  policy:"The policy-as-code verdict, decayed by evidence age.",
+  enforcement:"Live PEP/PDP runtime proof — a control actually blocking real traffic.",
+  followthrough:"When violations dispatched obligations, did the procedures succeed?",
+};
+
+D.unifiedTrust={
+  unified_trust_score:68, band:"medium", controls_scored:6,
+  lane_weights:{native:0.30,inherited:0.20,policy:0.25,enforcement:0.15,followthrough:0.10},
+  lanes_available:{native:5,inherited:3,policy:6,enforcement:1,followthrough:4},
+  drift:{recent_changes:2,window_days:14,changes:[
+    {target:"Cloudflare trust",kind:"vendor_trust",fetched_at:new Date(Date.now()-3*36e5).toISOString()},
+    {target:"CISA advisories",kind:"advisory",fetched_at:new Date(Date.now()-6*36e5).toISOString()}]},
+  weakest:[
+    {control_id:"AC-2",trust:22,band:"critical",lane_coverage:"3/5",lanes:{policy:{score:0,detail:"fail, 0d old"},enforcement:{score:0.28,detail:"shadow, 40 req, 12 would-block"},followthrough:{score:0.5,detail:"2/4 procedures done"}}},
+    {control_id:"SC-28",trust:41,band:"low",lane_coverage:"2/5",lanes:{native:{score:0.6,detail:"live, stale"},policy:{score:0.3,detail:"pass, 120d old"}}},
+    {control_id:"CC6.1",trust:58,band:"medium",lane_coverage:"4/5",lanes:{native:{score:0.8},inherited:{score:0.7},policy:{score:1.0},followthrough:{score:0.9}}},
+  ],
+  controls:[
+    {control_id:"AC-2",trust:22,band:"critical",lane_coverage:"3/5",lanes:{policy:{score:0,detail:"fail"},enforcement:{score:0.28,detail:"shadow, would-blocks"},followthrough:{score:0.5}}},
+    {control_id:"SC-28",trust:41,band:"low",lane_coverage:"2/5",lanes:{native:{score:0.6},policy:{score:0.3}}},
+    {control_id:"CC6.1",trust:58,band:"medium",lane_coverage:"4/5",lanes:{native:{score:0.8},inherited:{score:0.7},policy:{score:1.0},followthrough:{score:0.9}}},
+    {control_id:"IA-2",trust:74,band:"medium",lane_coverage:"3/5",lanes:{native:{score:0.9},inherited:{score:0.6},policy:{score:1.0}}},
+    {control_id:"AU-2",trust:88,band:"high",lane_coverage:"3/5",lanes:{native:{score:1.0},policy:{score:1.0},followthrough:{score:0.7}}},
+    {control_id:"RA-5",trust:95,band:"high",lane_coverage:"4/5",lanes:{native:{score:1.0},inherited:{score:0.9},policy:{score:1.0},enforcement:{score:1.0}}},
+  ],
+};
+
+RENDER.trusttelemetry = async function(){
+  const m=main();
+  m.innerHTML=viewHead("Trust telemetry","One trust score per control, fused from every signal lane — native connectors, inherited GRC attestations, policy-as-code, live runtime enforcement, and obligation follow-through — with each lane kept visible so inherited trust is never silently merged with directly-verified trust.","","risk / 03");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Fusing signal lanes…</div>`;
+  let u;
+  if(STATE.demo){ u=D.unifiedTrust; }
+  else{
+    try{ u=await apiGET(withTenant("/v1/grc-trust/unified")); }
+    catch(e){ host.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("Trust telemetry unavailable",String(e.message||e))}</div></div>`; return; }
+  }
+  CACHE.trustcontrols=u.controls||[];
+  const laneNames=Object.keys(u.lanes_available||{});
+  const scored=u.controls_scored||0;
+  if(!scored){
+    host.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("No trust signal yet","Run an assessment, connect a GRC platform, or evaluate a policy — every lane that produces a signal will fuse into a per-control trust score here.")}</div></div>`;
+    return;
+  }
+  const drift=u.drift||{recent_changes:0};
+
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Unified trust</div><div class="v num">${u.unified_trust_score!=null?u.unified_trust_score:'—'}${u.unified_trust_score!=null?'<small>/100</small>':''}</div><div class="s">${trustChip(u.band)}</div></div>
+    <div class="ro"><div class="k">Controls scored</div><div class="v num">${scored}</div><div class="s">across ${laneNames.length} lanes</div></div>
+    <div class="ro drill" onclick="STATE.active='crawlers';render()"><div class="k"><span class="tick" style="background:var(--warn)"></span>External drift · ${drift.window_days||14}d</div><div class="v num">${drift.recent_changes||0}</div><div class="s">${drift.recent_changes?'sources changed →':'stable'}</div></div>
+    <div class="ro"><div class="k">Weakest control</div><div class="v" style="font-size:18px;font-family:var(--mono)">${(u.weakest&&u.weakest[0])?esc(u.weakest[0].control_id):'—'}</div><div class="s">${(u.weakest&&u.weakest[0])?trustChip(u.weakest[0].band,u.weakest[0].trust):''}</div></div>
+  </div>
+
+  <div class="note">Composite fuses only the lanes each control actually has (weights renormalised) — a control isn't punished for a lane that doesn't apply, and coverage is always shown. Each lane stays individually visible below.</div>
+
+  <div class="panel"><div class="panel-h"><h3>Signal lanes</h3><div class="sub" style="margin-left:auto">coverage across scored controls</div></div>
+  <div class="panel-b"><div class="grid g-3" style="gap:12px">
+    ${laneNames.map(n=>`<div style="border:1px solid var(--rule);border-radius:var(--rad);padding:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <b style="font-size:13px">${esc(LANE_LABEL[n]||n)}</b>
+        <span class="chip c-out" style="font-size:9px">w ${((u.lane_weights||{})[n]!=null?Math.round(u.lane_weights[n]*100):0)}%</span>
+      </div>
+      <div style="font-size:11px;color:var(--steel);margin:5px 0 8px;line-height:1.45">${esc(LANE_DESC[n]||'')}</div>
+      <div class="mono" style="font-size:11px;color:${(u.lanes_available[n])?'var(--pass)':'var(--faint)'}">${u.lanes_available[n]||0} control${(u.lanes_available[n]===1)?'':'s'} reporting</div>
+    </div>`).join("")}
+  </div></div></div>
+
+  <div class="panel"><div class="panel-h"><h3>Per-control trust</h3><div class="sub" style="margin-left:auto">weakest first · click for the lane breakdown</div></div>
+  <div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Control</th><th>Trust</th><th>Band</th><th>Lane coverage</th><th>Contributing lanes</th></tr></thead>
+    <tbody data-ent="trustcontrols">${(u.controls||[]).map(cn=>`<tr>
+      <td><b class="mono">${esc(cn.control_id)}</b></td>
+      <td class="num" style="font-weight:600;color:${cn.trust>=75?'var(--pass)':cn.trust>=50?'var(--warn)':'var(--fail)'}">${cn.trust}</td>
+      <td>${trustChip(cn.band)}</td>
+      <td class="mono" style="font-size:11px;color:var(--steel)">${esc(cn.lane_coverage||'')}</td>
+      <td>${Object.keys(cn.lanes||{}).map(ln=>`<span class="chip c-out" style="font-size:9px;margin:1px">${esc(ln)}</span>`).join("")}</td>
+    </tr>`).join("")}</tbody>
+  </table></div></div></div>`;
+};
+
+DETAIL.trustcontrols=function(cn){
+  openDrawer({eyebrow:"trust · "+cn.control_id,title:esc(cn.control_id),sub:"fused across "+(cn.lane_coverage||'')+" lanes",
+    badges:trustChip(cn.band,cn.trust),
+    body:
+      dsec("Composite",`<div style="font-size:13px;color:var(--body);line-height:1.6">Unified trust <b>${cn.trust}/100</b> — a weight-renormalised blend of the ${Object.keys(cn.lanes||{}).length} lane(s) below. Lanes that don't apply to this control are excluded, not counted as failures.</div>`)+
+      dsec("Lane breakdown",Object.entries(cn.lanes||{}).map(([ln,v])=>
+        `<div class="drow"><b style="font-size:12px">${esc(LANE_LABEL[ln]||ln)}</b><span class="mono" style="font-size:12px;color:${v.score>=0.75?'var(--pass)':v.score>=0.4?'var(--warn)':'var(--fail)'}">${Math.round((v.score||0)*100)}</span></div>`+
+        (v.detail?`<div style="font-size:11px;color:var(--steel);margin:-4px 0 8px 2px">${esc(v.detail)}</div>`:"")).join("")||'<div style="font-size:12px;color:var(--faint)">No lanes.</div>')+
+      dsec("How to read it",`<div style="font-size:11.5px;color:var(--steel);line-height:1.6">Each lane is an independent way of knowing the control works. Direct <b>native</b> and <b>runtime enforcement</b> evidence is the strongest; <b>inherited</b> attestations are trusted-but-secondhand and never silently merged in. Low coverage isn't bad on its own — it just means fewer independent confirmations.</div>`),
+    actions:`<div style="flex:1"></div>${closeBtn}`});
+};
+
+
 RENDER.trustgraph = function(){ graphView("Trust graph","Vendors, the systems they touch, and the controls that depend on them — so a vendor's weakness surfaces as control risk. Switch to 3D and drag to orbit.","risk / 03",true); };
 
 function cssvar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#888";}
@@ -2751,13 +2852,14 @@ const ICON={
   risks:'<path d="M12 2L2 7v10l10 5 10-5V7zM12 8v5M12 16h.01"/>',
   vendors:'<path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/>',
   trustgraph:'<circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>',
+  trusttelemetry:'<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',
 };
 const GROUPS=[
   ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"]]],
   ["Compliance as Code",[["policy","Policies"],["middleware","Middleware"],["enforcement","Enforcement"]]],
   ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"]]],
   ["Intelligence",[["response","Response"],["inventory","AI Inventory"],["threat","Threat Intel"]]],
-  ["Risk & Vendors",[["risks","Risk Register"],["vendors","Vendors"],["trustgraph","Trust Graph"],["crawlers","Crawlers"]]],
+  ["Risk & Vendors",[["risks","Risk Register"],["vendors","Vendors"],["trusttelemetry","Trust Telemetry"],["trustgraph","Trust Graph"],["crawlers","Crawlers"]]],
   ["Privacy & Compliance",[["consent","Consent Ledger"],["dsar","Data Requests"],["ropa","Processing (ROPA)"],["retention","Retention"],["auditlog","Activity Log"],["cookiepolicy","Cookie Policy"]]],
 ];
 const LABELS={};GROUPS.forEach(([,t])=>t.forEach(([id,name])=>LABELS[id]=name));
