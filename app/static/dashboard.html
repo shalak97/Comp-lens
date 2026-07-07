@@ -228,6 +228,23 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
   animation:sp .7s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .loading{padding:40px;text-align:center;color:var(--steel);font-family:var(--mono);font-size:12px}
+/* skeleton loaders — content-shaped placeholders that shimmer while data loads */
+@keyframes cl-shimmer{0%{background-position:-460px 0}100%{background-position:460px 0}}
+.skel{background:linear-gradient(90deg,var(--rule) 25%,var(--rule2) 37%,var(--rule) 63%);background-size:920px 100%;animation:cl-shimmer 1.25s ease-in-out infinite;border-radius:6px;display:block}
+.skel-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.skel-tile{border:1px solid var(--rule);border-radius:var(--rad);padding:18px 16px}
+.skel-row{display:flex;gap:16px;align-items:center;padding:13px 16px;border-bottom:1px solid var(--rule)}
+.skel-panel{border:1px solid var(--rule);border-radius:var(--rad);overflow:hidden}
+.skel-ph{padding:14px 16px;border-bottom:1px solid var(--rule)}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
+/* inline error state — distinct from empty, with retry */
+.errstate{padding:40px 20px;text-align:center;color:var(--steel)}
+.errstate svg{width:34px;height:34px;stroke:var(--fail);margin:0 auto 12px;opacity:.8}
+.errstate h4{font-size:13.5px;color:var(--ink);margin-bottom:4px;font-weight:600}
+.errstate p{font-size:12px;max-width:44ch;margin:0 auto 14px}
+.errstate .retry{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:var(--focus);border:1px solid var(--focus);border-radius:8px;padding:6px 14px;background:transparent}
+.errstate .retry:hover{background:var(--focus);color:#fff}
+.errstate .retry svg{width:13px;height:13px;stroke:currentColor;margin:0;opacity:1}
 .barlist{display:flex;flex-direction:column;gap:9px}
 .barlist .br{display:grid;grid-template-columns:108px 1fr 42px;align-items:center;gap:10px;font-size:12px}
 .barlist .br .lab{font-family:var(--mono);font-size:11px;color:var(--body)}
@@ -636,9 +653,36 @@ function setConn(cls,label,sub){
 async function load(path,demo){
   if(STATE.demo)return{data:demo,live:false,demo:true};
   try{return{data:await apiGET(path),live:true};}
-  catch(e){return{data:emptyLike(demo),live:false,error:true};}
+  catch(e){
+    const status=(String(e.message||"").match(/HTTP (\d+)/)||[])[1];
+    return{data:emptyLike(demo),live:false,error:true,status:status?Number(status):null,message:String(e.message||e)};
+  }
 }
 function emptyLike(x){return Array.isArray(x)?[]:(x&&typeof x==="object"?{}:null);}
+
+/* ---- loading skeletons: content-shaped placeholders (no layout-shift text flash) ---- */
+function skelBar(w,h){return `<span class="skel" style="width:${w};height:${h||'12px'}"></span>`;}
+function skelTiles(n){return `<div class="skel-tiles">${Array.from({length:n||4},()=>`<div class="skel-tile">${skelBar('42%','9px')}<div style="height:10px"></div>${skelBar('64%','22px')}</div>`).join("")}</div>`;}
+function skelTable(rows,cols){rows=rows||6;cols=cols||5;return `<div class="skel-panel"><div class="skel-ph">${skelBar('160px','13px')}</div>${Array.from({length:rows},()=>`<div class="skel-row">${Array.from({length:cols},(_,i)=>skelBar(i===0?'34%':(i===cols-1?'48px':'62%'),'11px')).join("")}</div>`).join("")}</div>`;}
+function skelView(opts){opts=opts||{};return (opts.tiles!==false?skelTiles(opts.tiles||4):"")+skelTable(opts.rows,opts.cols);}
+
+/* ---- error state: distinct from empty, offers retry (re-runs the current view) ---- */
+const RETRY_ICON='<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
+function errorState(title,msg,onRetry){
+  const retry=onRetry===false?"":`<button class="retry" onclick="${onRetry||'render()'}">${RETRY_ICON}Retry</button>`;
+  return `<div class="errstate"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg><h4>${esc(title||'Something went wrong')}</h4><p>${esc(msg||'')}</p>${retry}</div>`;
+}
+/* given a load() result, decide what to show. returns null when data is OK (caller draws). */
+function loadIssue(res,opts){
+  opts=opts||{};
+  if(res&&res.error){
+    const detail=res.status?`The server responded with an error (HTTP ${res.status}).`:(res.message&&/Failed to fetch|NetworkError/i.test(res.message)?`Couldn't reach the API${CFG.base?` at ${esc(hostOf(CFG.base))}`:''}.`:'The request failed.');
+    return errorState(opts.title||"Couldn't load this view",detail+' Your data is safe — this is a fetch problem.',opts.retry);
+  }
+  const arr=Array.isArray(res&&res.data)?res.data:null;
+  if(opts.empty&&arr&&arr.length===0){return opts.empty;}
+  return null;
+}
 
 /* ===================== THEME ===================== */
 const SUN='<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1.5 12h3M19.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>';
@@ -933,8 +977,9 @@ RENDER.controls = async function(){
   const m=main();
   m.innerHTML=viewHead("Control catalog","Every control, crosswalked to NIST, ISO 27001, SOC 2, CIS and AI frameworks. Filter by framework to score against one standard.",
     `<input id="ctlq" placeholder="Search controls…" style="width:220px;height:32px" value="${esc(CTL.q)}"/>`,"posture / 02");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading catalog…</div>`;
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
   const[ctl]=await Promise.all([load("/controls",D.controls)]);
+  const _i=loadIssue(ctl,{title:"Couldn't load the control catalog"});if(_i){host.innerHTML=_i;return;}
   let rows=ctl.data||[];
   const fws=["ALL",...new Set(rows.flatMap(r=>Object.keys(r.frameworks||{})))];
   const counts={pass:0,fail:0,error:0,other:0};rows.forEach(r=>{counts[r.status]!=null?counts[r.status]++:counts.other++;});
@@ -973,8 +1018,9 @@ RENDER.findings = async function(){
   const m=main();
   m.innerHTML=viewHead("Findings","Issues raised by control assessments. Each carries a lifecycle from open through resolved or risk-accepted.",
     "","posture / 03");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading findings…</div>`;
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:6});
   const[fnd]=await Promise.all([load(withTenant("/findings?limit=200"),D.findings)]);
+  const _i=loadIssue(fnd,{title:"Couldn't load findings"});if(_i){host.innerHTML=_i;return;}
   let rows=fnd.data||[];
   function draw(){
     let r=rows.slice();
@@ -1066,7 +1112,7 @@ RENDER.connectors = async function(){
   const m=main();
   m.innerHTML=viewHead("Connectors","Automated evidence collection across cloud, identity, DevOps, ITSM, security, endpoint, SaaS and GRC. Each connector normalizes its system into the same control fields.",
     `<button class="btn" onclick="STATE.active='evidencehub';render()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><path d='M14 2v6h6'/></svg>Evidence</button>`,"evidence / 01");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Polling connectors…</div>`;
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
 
   // Richest source is /connectors/status (per-tenant health + sync). Fall back to
   // /connectors/catalog (catalogue only), then the bare /connectors, then demo.
@@ -1083,6 +1129,7 @@ RENDER.connectors = async function(){
       }catch(e2){ rows=null; }
     }
   }
+  if(!rows && !STATE.demo){ host.innerHTML=errorState("Couldn't load connectors","Couldn't reach the connectors API. Your data is safe — this is a fetch problem."); return; }
   if(!rows){ rows=STATE.demo?D.connectors:[]; live=false; }   /* live mode: empty, never demo */
 
   // multi-app: load this tenant's connection instances + the catalog (for the Add modal)
@@ -1219,8 +1266,9 @@ RENDER.inventory = async function(){
 RENDER.risks = async function(){
   const m=main();
   m.innerHTML=viewHead("Risk register","Identified risks scored by likelihood and impact, with a treatment decision and an owner.","","risk / 01");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading risks…</div>`;
-  const[rk]=await Promise.all([load(withTenant("/risks"),D.risks)]);
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
+  const[rk]=await Promise.all([load(withTenant("/grc/risks"),D.risks)]);
+  const _i=loadIssue(rk,{title:"Couldn't load risks"});if(_i){host.innerHTML=_i;return;}
   const rows=rk.data||(STATE.demo?D.risks:[]);
   const score=r=>(r.likelihood||0)*(r.impact||0);CACHE.risks=rows;
   const high=rows.filter(r=>score(r)>=12).length;
@@ -1256,8 +1304,9 @@ RENDER.risks = async function(){
 RENDER.vendors = async function(){
   const m=main();
   m.innerHTML=viewHead("Vendors","Third-party risk: each vendor scored, tiered by criticality, with a recurring review date and the certifications they hold.","","risk / 02");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading vendors…</div>`;
-  const[vd]=await Promise.all([load(withTenant("/vendors"),D.vendors)]);
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
+  const[vd]=await Promise.all([load(withTenant("/tprm/vendors"),D.vendors)]);
+  const _i=loadIssue(vd,{title:"Couldn't load vendors"});if(_i){host.innerHTML=_i;return;}
   const rows=vd.data||(STATE.demo?D.vendors:[]);
   const overdue=rows.filter(v=>new Date(v.review_due)<Date.now()).length;CACHE.vendors=rows;
   host.innerHTML=`
@@ -1491,11 +1540,12 @@ DETAIL.evidence=function(e){
     actions:`<button class="btn sm primary" onclick="reverifyEvidence('${esc(e.id)}')">Re-verify</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.kev=function(k){
-  const od=new Date(k.due)<Date.now();
+  const od=k.due&&new Date(k.due)<Date.now();
+  const cvssTxt=k.cvss!=null?k.cvss.toFixed(1):"—";
   openDrawer({eyebrow:"vuln · "+k.cve,title:esc(k.cve),sub:esc(k.name),
-    badges:`<span class="chip ${k.cvss>=9?'c-fail':k.cvss>=7?'c-warn':'c-focus'}"><span class="d"></span>CVSS ${k.cvss.toFixed(1)}</span>${k.exploited?'<span class="chip c-fail"><span class="d"></span>Exploited</span>':''}`,
+    badges:`<span class="chip ${k.cvss>=9?'c-fail':k.cvss>=7?'c-warn':'c-focus'}"><span class="d"></span>CVSS ${cvssTxt}</span>${k.exploited?'<span class="chip c-fail"><span class="d"></span>Exploited</span>':''}${k.ransomware?'<span class="chip c-fail"><span class="d"></span>Ransomware</span>':''}`,
     body:
-      dsec("Exposure",kvlist([["Affected","this org · "+k.affected],["CVSS",k.cvss.toFixed(1)],["Exploited in wild",k.exploited?"yes — on CISA KEV":"no"],["Remediate by",(od?"overdue · ":"")+fmtDate(k.due)]]))+
+      dsec("Exposure",kvlist([["Affected","this org · "+k.affected],["CVSS",cvssTxt],["Exploited in wild",k.exploited?"yes — on CISA KEV":"no"],[k.due?"Remediate by":"Added to KEV",(od?"overdue · ":"")+(k.due?fmtDate(k.due):(k.added?fmtDate(k.added):"—"))]]))+
       (od?dsec("Overdue",`<div class="note" style="margin:0;border-left-color:var(--fail)">Remediation deadline has <b>passed</b>. Prioritize patching the affected asset.</div>`):""),
     actions:`<button class="btn sm primary" onclick="createTicket('${esc(k.cve)}','high','Remediate '+'${esc(k.cve)}')">Create remediation</button><div style="flex:1"></div>${closeBtn}`});
 };
@@ -2059,26 +2109,42 @@ RENDER.evidencehub = async function(){
 RENDER.threat = async function(){
   const m=main();
   m.innerHTML=viewHead("Threat intel","Known-exploited vulnerabilities (CISA KEV) cross-referenced with your asset inventory, so patching maps straight onto affected controls.","","intelligence / 03");
-  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading intel…</div>`;
-  const[kev]=await Promise.all([load("/threat/kev",D.kev)]);
-  const rows=kev.data||(STATE.demo?D.kev:[]);
-  const overdue=rows.filter(k=>new Date(k.due)<Date.now()).length;CACHE.kev=rows;
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
+  const[kev]=await Promise.all([load("/v1/threat/kev",D.kev)]);
+  const _i=loadIssue(kev,{title:"Couldn't load threat intel"});if(_i){host.innerHTML=_i;return;}
+  const _kd=kev.data;
+  const raw=Array.isArray(_kd)?_kd:((_kd&&Array.isArray(_kd.vulnerabilities))?_kd.vulnerabilities:(STATE.demo?D.kev:[]));
+  // Live CISA KEV items (cve/name/vendor/product/date_added/ransomware) and the demo
+  // shape (cve/name/cvss/exploited/affected/due) are normalised to one internal row.
+  const rows=raw.map(k=>({
+    cve:k.cve, name:k.name||k.product||k.cve,
+    cvss:(typeof k.cvss==="number")?k.cvss:null,
+    affected:k.affected||[k.vendor,k.product].filter(Boolean).join(" · ")||"—",
+    exploited:(k.exploited!==undefined)?k.exploited:true,   // KEV = known-exploited by definition
+    ransomware:/known/i.test(String(k.ransomware||"")),
+    due:k.due||null, added:k.date_added||null,
+  }));
+  CACHE.kev=rows;
+  const withCvss=rows.filter(k=>k.cvss!=null);
+  const maxCvss=withCvss.length?Math.max(...withCvss.map(k=>k.cvss)).toFixed(1):"—";
+  const overdue=rows.filter(k=>k.due&&new Date(k.due)<Date.now()).length;
+  const dueLabel=rows.some(k=>k.due)?"Remediate by":"Added to KEV";
   host.innerHTML=`
   <div class="readouts">
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Exploited in wild</div><div class="v num">${rows.filter(k=>k.exploited).length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Past remediation date</div><div class="v num">${overdue}</div></div>
-    <div class="ro"><div class="k">Max CVSS</div><div class="v num">${Math.max(...rows.map(k=>k.cvss)).toFixed(1)}</div></div>
-    <div class="ro"><div class="k">Assets affected</div><div class="v num">${new Set(rows.map(k=>k.affected)).size}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Known-exploited</div><div class="v num">${rows.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>${rows.some(k=>k.due)?'Past remediation date':'Used in ransomware'}</div><div class="v num">${rows.some(k=>k.due)?overdue:rows.filter(k=>k.ransomware).length}</div></div>
+    <div class="ro"><div class="k">Max CVSS</div><div class="v num">${maxCvss}</div></div>
+    <div class="ro"><div class="k">Assets / products</div><div class="v num">${new Set(rows.map(k=>k.affected)).size}</div></div>
   </div>
   <div class="panel"><div class="panel-h"><h3>Known-exploited vulnerabilities</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
-    <thead><tr><th>CVE</th><th>Name</th><th>CVSS</th><th>Affected</th><th>Exploited</th><th class="right">Remediate by</th></tr></thead>
-    <tbody data-ent="kev">${rows.sort((a,b)=>b.cvss-a.cvss).map(k=>{const od=new Date(k.due)<Date.now();return `<tr>
+    <thead><tr><th>CVE</th><th>Name</th><th>CVSS</th><th>Affected</th><th>Exploited</th><th class="right">${esc(dueLabel)}</th></tr></thead>
+    <tbody data-ent="kev">${rows.slice().sort((a,b)=>(b.cvss||0)-(a.cvss||0)).map(k=>{const od=k.due&&new Date(k.due)<Date.now();return `<tr>
       <td class="id" style="color:var(--focus)">${esc(k.cve)}</td>
-      <td>${esc(k.name)}</td>
-      <td><span class="chip ${k.cvss>=9?'c-fail':k.cvss>=7?'c-warn':'c-focus'}"><span class="d"></span>${k.cvss.toFixed(1)}</span></td>
+      <td>${esc(k.name)}${k.ransomware?' <span class="chip c-fail" style="font-size:9px"><span class="d"></span>ransomware</span>':''}</td>
+      <td>${k.cvss!=null?`<span class="chip ${k.cvss>=9?'c-fail':k.cvss>=7?'c-warn':'c-focus'}"><span class="d"></span>${k.cvss.toFixed(1)}</span>`:'<span style="color:var(--faint)">—</span>'}</td>
       <td class="mono" style="font-size:12px">${esc(k.affected)}</td>
       <td>${k.exploited?'<span class="chip c-fail"><span class="d"></span>Active</span>':'<span class="chip c-dim"><span class="d"></span>No</span>'}</td>
-      <td class="right mono" style="font-size:11px;color:${od?'var(--fail)':'var(--steel)'}">${od?'overdue · ':''}${fmtDate(k.due)}</td></tr>`;}).join("")}</tbody>
+      <td class="right mono" style="font-size:11px;color:${od?'var(--fail)':'var(--steel)'}">${od?'overdue · ':''}${k.due?fmtDate(k.due):(k.added?fmtDate(k.added):'—')}</td></tr>`;}).join("")}</tbody>
   </table></div></div></div>`;
 };
 
@@ -2879,6 +2945,14 @@ function buildNav(){
 /* ===================== ROUTER ===================== */
 function render(){
   if(window._gstop){window._gstop();window._gstop=null;}
+  /* navigating to a different view dismisses any open overlay (drawer, modal,
+     command palette) so it can't orphan on top of the new view */
+  if(window._lastView!==STATE.active){
+    try{closeDrawer();}catch(e){}
+    try{closeSettings();}catch(e){}
+    try{closeCmd();}catch(e){}
+  }
+  window._lastView=STATE.active;
   buildNav();wireDelegation();
   $("#crumb").innerHTML=`comp-lens / <b>${esc(LABELS[STATE.active]||STATE.active)}</b>`;
   const fn=RENDER[STATE.active];
