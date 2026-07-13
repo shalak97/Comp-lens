@@ -175,7 +175,10 @@ def _enforcement_lane() -> Dict[str, Dict[str, Any]]:
 
 def _followthrough_lane(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
     """Did dispatched obligations for a control's violations actually run?"""
-    from app.policy_models import ObligationDispatch
+    try:
+        from app.policy_models import ObligationDispatch
+    except Exception:  # noqa: BLE001 — obligations plane optional
+        return {}
     rows = db.execute(select(ObligationDispatch).where(
         ObligationDispatch.tenant_id == tenant_id)).scalars().all()
     by_ctrl: Dict[str, List[ObligationDispatch]] = {}
