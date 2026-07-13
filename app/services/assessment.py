@@ -13,12 +13,14 @@ full findings history.
 from __future__ import annotations
 
 import logging
+import random
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.connectors.registry import registry
@@ -40,6 +42,20 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGE = 500
 DEFAULT_PAGE = 100
+
+# SQLite (WAL) returns "database is locked" *immediately* — not subject to
+# busy_timeout — when a transaction that already holds a read snapshot races
+# another writer on the read→write upgrade. Rolling back drops the stale
+# snapshot; a fresh attempt then serialises cleanly on the write lock. Retries
+# are bounded with jittered exponential backoff. On PostgreSQL this never fires
+# (it doesn't raise this error), so the wrapper is a no-op there.
+_WRITE_MAX_RETRIES = 6
+_WRITE_BACKOFF_BASE = 0.05
+
+
+def _is_locked_error(exc: OperationalError) -> bool:
+    msg = str(getattr(exc, "orig", None) or exc).lower()
+    return "database is locked" in msg or "database is busy" in msg
 
 
 def _idem_key(req: AssessmentRequest) -> str:
@@ -142,7 +158,27 @@ class AssessmentService:
             logger.exception("notification dispatch failed")
         return finding
 
+    def _retry_on_locked(self, fn):
+        """Run a write closure, retrying transient SQLite BUSY/locked errors.
+
+        Each retry rolls back first so the next attempt starts from a clean
+        transaction (fresh snapshot), which is what lets it acquire the write
+        lock instead of re-racing the upgrade. Non-lock errors propagate at once.
+        """
+        for attempt in range(_WRITE_MAX_RETRIES):
+            try:
+                return fn()
+            except OperationalError as exc:
+                if attempt == _WRITE_MAX_RETRIES - 1 or not _is_locked_error(exc):
+                    raise
+                self.db.rollback()
+                time.sleep(_WRITE_BACKOFF_BASE * (2 ** attempt) * (0.5 + random.random()))
+        raise RuntimeError("unreachable")  # loop always returns or raises
+
     def run_single(self, req: AssessmentRequest) -> Finding:
+        return self._retry_on_locked(lambda: self._run_single_once(req))
+
+    def _run_single_once(self, req: AssessmentRequest) -> Finding:
         key = _idem_key(req)
         existing = self._existing(key)
         if existing:
