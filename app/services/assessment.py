@@ -13,12 +13,13 @@ full findings history.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.connectors.registry import registry
@@ -35,6 +36,16 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGE = 500
 DEFAULT_PAGE = 100
+
+# SQLite serializes writers; under a burst the loser gets "database is locked".
+# Production (PostgreSQL) does not hit this, but we retry a few times with a
+# short backoff so a transient lock is transparent to the caller.
+_WRITE_RETRIES = 6
+_WRITE_BACKOFF = 0.05
+
+
+def _is_locked(exc: OperationalError) -> bool:
+    return "database is locked" in str(exc).lower()
 
 
 def _idem_key(req: AssessmentRequest) -> str:
@@ -96,37 +107,52 @@ class AssessmentService:
         )
 
         ev_meta = None
-        try:
-            with self.db.begin_nested():
-                if telemetry is not None:
-                    th = telemetry_hash(telemetry)
-                    from app.evidence import record_hash as _rec_hash
-                    ev_meta = EvidenceMeta(
-                        evidence_id=evidence_id, tenant_id=tenant_id, run_id=run_id,
-                        control_id=control_id, framework=framework,
-                        telemetry_hash=th,
-                        record_hash=_rec_hash(evidence_id=evidence_id, tenant_id=tenant_id,
-                                              run_id=run_id, control_id=control_id, framework=framework,
-                                              status=status.value, telemetry_hash_value=th),
-                        status=status, object_uri=None,
-                    )
-                    self.db.add(ev_meta)
-                self.db.add(finding)
-                self.db.add(IdempotencyRecord(key=idem_key, tenant_id=tenant_id, finding_id=finding.finding_id))
-                self._upsert_posture(tenant_id=tenant_id, framework=framework, control_id=control_id,
-                                     source_system=source_system, asset_id=asset_id,
-                                     status=status, severity=severity, finding_id=finding.finding_id)
-        except IntegrityError:
-            logger.info("idempotency_race key=%s; returning winner", idem_key)
-            winner = self._existing(idem_key)
-            if winner:
-                return winner
-            raise
+        if telemetry is not None:
+            th = telemetry_hash(telemetry)
+            from app.evidence import record_hash as _rec_hash
+            ev_meta = EvidenceMeta(
+                evidence_id=evidence_id, tenant_id=tenant_id, run_id=run_id,
+                control_id=control_id, framework=framework,
+                telemetry_hash=th,
+                record_hash=_rec_hash(evidence_id=evidence_id, tenant_id=tenant_id,
+                    run_id=run_id, control_id=control_id, framework=framework,
+                    status=status.value, telemetry_hash_value=th),
+                status=status, object_uri=None,
+            )
+
+        # Persist finding + evidence + idempotency + posture atomically. On
+        # SQLite a concurrent writer may raise OperationalError("database is
+        # locked"); retry a few times before giving up. IntegrityError means
+        # another request already claimed this idem_key — return the winner.
+        for attempt in range(_WRITE_RETRIES):
+            try:
+                with self.db.begin_nested():
+                    if ev_meta is not None:
+                        self.db.add(ev_meta)
+                    self.db.add(finding)
+                    self.db.add(IdempotencyRecord(key=idem_key, tenant_id=tenant_id,
+                                                  finding_id=finding.finding_id))
+                    self._upsert_posture(tenant_id=tenant_id, framework=framework,
+                        control_id=control_id, source_system=source_system, asset_id=asset_id,
+                        status=status, severity=severity, finding_id=finding.finding_id)
+                break
+            except IntegrityError:
+                logger.info("idempotency_race key=%s; returning winner", idem_key)
+                winner = self._existing(idem_key)
+                if winner:
+                    return winner
+                raise
+            except OperationalError as exc:
+                if _is_locked(exc) and attempt < _WRITE_RETRIES - 1:
+                    logger.warning("write lock (attempt %d) key=%s; retrying", attempt + 1, idem_key)
+                    time.sleep(_WRITE_BACKOFF * (attempt + 1))
+                    continue
+                raise
 
         if telemetry is not None:
             uri = evidence_store.store(evidence_id=evidence_id, tenant_id=tenant_id, run_id=run_id,
-                                       control_id=control_id, framework=framework,
-                                       status=status.value, telemetry=telemetry)
+                control_id=control_id, framework=framework,
+                status=status.value, telemetry=telemetry)
             if ev_meta is not None:
                 ev_meta.object_uri = uri  # still session-attached; no extra query
 
@@ -220,8 +246,8 @@ class AssessmentService:
         widx = WaiverService(self.db).active_index(tenant_id)
         by_status = {"pass": 0, "fail": 0, "error": 0, "not_applicable": 0, "pending": 0}
         waived = 0
-        risk_exposure = 0.0       # weight of unwaived failing controls
-        max_exposure = 0.0        # weight of all applicable controls
+        risk_exposure = 0.0  # weight of unwaived failing controls
+        max_exposure = 0.0  # weight of all applicable controls
         for control_id, asset, status, severity in rows:
             if scope is not None and control_id not in scope:
                 continue
