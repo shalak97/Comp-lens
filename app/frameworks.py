@@ -8,10 +8,8 @@ texts for a formal audit.
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 # control_id -> { framework: [external control references] }
-CROSSWALK: Dict[str, Dict[str, List[str]]] = {
+CROSSWALK: dict[str, dict[str, list[str]]] = {
     "AC-2-7": {"NIST": ["AC-2(7)"], "ISO27001": ["A.5.15", "A.8.5"], "SOC2": ["CC6.1"], "CIS": ["6.5"]},
     "AC-2-3": {"NIST": ["AC-2(3)"], "ISO27001": ["A.5.16"], "SOC2": ["CC6.1"], "CIS": ["5.3"]},
     "CM-3":   {"NIST": ["CM-3"], "ISO27001": ["A.8.32"], "SOC2": ["CC8.1"], "CIS": ["4.2"]},
@@ -36,11 +34,11 @@ CROSSWALK: Dict[str, Dict[str, List[str]]] = {
 FRAMEWORKS = ["NIST", "ISO27001", "SOC2", "CIS", "ISO42001", "NIST_AI_RMF", "EU_AI_ACT"]
 
 
-def frameworks() -> List[str]:
+def frameworks() -> list[str]:
     return list(FRAMEWORKS)
 
 
-def controls_for_framework(framework: str) -> List[str]:
+def controls_for_framework(framework: str) -> list[str]:
     """Internal control_ids that map to a given framework."""
     fw = framework.upper()
     if fw == "ALL":
@@ -48,5 +46,5 @@ def controls_for_framework(framework: str) -> List[str]:
     return [cid for cid, m in CROSSWALK.items() if any(k.upper() == fw for k in m)]
 
 
-def crosswalk_for(control_id: str) -> Dict[str, List[str]]:
+def crosswalk_for(control_id: str) -> dict[str, list[str]]:
     return CROSSWALK.get(control_id, {})

@@ -10,12 +10,13 @@ to an OPA server and reading the decision back — the interface
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from app.models import ControlStatus, Severity
 
 # An evaluator takes telemetry and returns (status, reason)
-Evaluator = Callable[[Dict[str, Any]], Tuple[ControlStatus, str]]
+Evaluator = Callable[[dict[str, Any]], tuple[ControlStatus, str]]
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ Evaluator = Callable[[Dict[str, Any]], Tuple[ControlStatus, str]]
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _eval_mfa_enforced(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_mfa_enforced(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("mfa_enforced") is True:
         return ControlStatus.PASS, "MFA is enforced for the principal."
     if t.get("mfa_enforced") is False:
@@ -33,7 +34,7 @@ def _eval_mfa_enforced(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
     return ControlStatus.NOT_APPLICABLE, "MFA status unavailable in telemetry."
 
 
-def _eval_no_stale_accounts(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_no_stale_accounts(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     days = t.get("days_since_last_login")
     if days is None:
         return ControlStatus.NOT_APPLICABLE, "Last-login data unavailable."
@@ -42,37 +43,37 @@ def _eval_no_stale_accounts(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
     return ControlStatus.PASS, f"Account active within {days} days."
 
 
-def _eval_branch_protection(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_branch_protection(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("branch_protection_enabled") is True:
         return ControlStatus.PASS, "Default branch is protected."
     return ControlStatus.FAIL, "Default branch protection is disabled."
 
 
-def _eval_secret_scanning(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_secret_scanning(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("secret_scanning_enabled") is True:
         return ControlStatus.PASS, "Secret scanning is enabled."
     return ControlStatus.FAIL, "Secret scanning is disabled."
 
 
-def _eval_encryption_at_rest(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_encryption_at_rest(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("encryption_at_rest") is True:
         return ControlStatus.PASS, "Encryption at rest is enabled."
     return ControlStatus.FAIL, "Encryption at rest is NOT enabled."
 
 
-def _eval_public_access_blocked(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_public_access_blocked(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("public_access_blocked") is True:
         return ControlStatus.PASS, "Public access is blocked."
     return ControlStatus.FAIL, "Resource is publicly accessible."
 
 
-def _eval_logging_enabled(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_logging_enabled(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("logging_enabled") is True:
         return ControlStatus.PASS, "Audit logging is enabled."
     return ControlStatus.FAIL, "Audit logging is disabled."
 
 
-def _eval_patch_level(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_patch_level(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     crit = t.get("critical_vulnerabilities")
     if crit is None:
         return ControlStatus.NOT_APPLICABLE, "Vulnerability data unavailable."
@@ -81,19 +82,19 @@ def _eval_patch_level(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
     return ControlStatus.PASS, "No critical vulnerabilities open."
 
 
-def _eval_change_approval(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_change_approval(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("change_has_approval") is True:
         return ControlStatus.PASS, "Change record has documented approval."
     return ControlStatus.FAIL, "Change record lacks documented approval."
 
 
-def _eval_disk_encryption_host(t: Dict[str, Any]) -> Tuple[ControlStatus, str]:
+def _eval_disk_encryption_host(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     if t.get("disk_encrypted") is True:
         return ControlStatus.PASS, "Host disk encryption active."
     return ControlStatus.FAIL, "Host disk is not encrypted."
 
 
-CONTROL_CATALOG: Dict[str, Dict[str, Any]] = {
+CONTROL_CATALOG: dict[str, dict[str, Any]] = {
     "AC-2-7": {
         "title": "Privileged account MFA enforcement",
         "domain": "Access Control",
@@ -159,7 +160,7 @@ CONTROL_CATALOG: Dict[str, Dict[str, Any]] = {
 
 # ── AI governance controls (ISO 42001 / NIST AI RMF / EU AI Act) ──
 def _flag(field: str, label: str):
-    def _eval(t: Dict[str, Any]):
+    def _eval(t: dict[str, Any]):
         if t.get(field) is True:
             return ControlStatus.PASS, f"{label} is in place."
         if t.get(field) is False:
@@ -186,14 +187,14 @@ for _cid, (_title, _domain, _sev, _field) in _AI_CONTROLS.items():
 class RuleEngine:
     """Built-in deterministic rule catalog (default)."""
 
-    def evaluate(self, control_id: str, telemetry: Dict[str, Any]) -> Tuple[ControlStatus, str, Severity]:
+    def evaluate(self, control_id: str, telemetry: dict[str, Any]) -> tuple[ControlStatus, str, Severity]:
         control = CONTROL_CATALOG.get(control_id)
         if control is None:
             return (ControlStatus.ERROR, f"Unknown control '{control_id}'. Not in catalog.", Severity.INFO)
         status, reason = control["evaluator"](telemetry)
         return status, reason, control["severity"]
 
-    def control_meta(self, control_id: str) -> Dict[str, Any]:
+    def control_meta(self, control_id: str) -> dict[str, Any]:
         return CONTROL_CATALOG.get(control_id, {})
 
 
@@ -212,7 +213,7 @@ class OPAEngine:
         self._url = f"{settings.opa_url.rstrip('/')}/v1/data/{settings.opa_package}/decision"
         self._timeout = settings.request_timeout_seconds
 
-    def evaluate(self, control_id: str, telemetry: Dict[str, Any]) -> Tuple[ControlStatus, str, Severity]:
+    def evaluate(self, control_id: str, telemetry: dict[str, Any]) -> tuple[ControlStatus, str, Severity]:
         import requests
         meta = CONTROL_CATALOG.get(control_id, {})
         severity = meta.get("severity", Severity.MEDIUM)
@@ -231,7 +232,7 @@ class OPAEngine:
         reason = result.get("reason", "OPA decision")
         return status, reason, severity
 
-    def control_meta(self, control_id: str) -> Dict[str, Any]:
+    def control_meta(self, control_id: str) -> dict[str, Any]:
         return CONTROL_CATALOG.get(control_id, {})
 
 

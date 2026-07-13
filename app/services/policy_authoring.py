@@ -9,8 +9,8 @@ way the draft is PENDING and enforces nothing until a human approves it.
 
 from __future__ import annotations
 
+import builtins
 import re
-from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.models import PolicyDraft, PolicyDraftRequest
 
 # telemetry field -> keywords that imply it
-_FIELD_KEYWORDS: Dict[str, List[str]] = {
+_FIELD_KEYWORDS: dict[str, list[str]] = {
     "mfa_enforced": ["mfa", "multi-factor", "multi factor", "two-factor", "2fa"],
     "encryption_at_rest": ["encrypt", "encryption", "at rest"],
     "public_access_blocked": ["public access", "publicly", "not public", "no public"],
@@ -38,7 +38,7 @@ _FIELD_KEYWORDS: Dict[str, List[str]] = {
 _NUMERIC_FIELDS = {"critical_vulnerabilities"}
 
 
-def _best_field(description: str) -> Tuple[Optional[str], float]:
+def _best_field(description: str) -> tuple[str | None, float]:
     text = description.lower()
     best, best_hits = None, 0
     for field, kws in _FIELD_KEYWORDS.items():
@@ -60,7 +60,7 @@ def _threshold(description: str) -> int:
     return 0
 
 
-def compile_to_rego(description: str, control_id: str) -> Tuple[str, Optional[str], float]:
+def compile_to_rego(description: str, control_id: str) -> tuple[str, str | None, float]:
     field, confidence = _best_field(description)
     if field is None:
         rego = ("package complens\n\n"
@@ -96,7 +96,7 @@ class PolicyAuthoringService:
         self.db.flush()
         return d
 
-    def decide(self, tenant_id: str, draft_id: str, approve: bool) -> Optional[PolicyDraft]:
+    def decide(self, tenant_id: str, draft_id: str, approve: bool) -> PolicyDraft | None:
         d = self.db.get(PolicyDraft, draft_id)
         if not d or d.tenant_id != tenant_id:
             return None
@@ -104,7 +104,7 @@ class PolicyAuthoringService:
         self.db.flush()
         return d
 
-    def list(self, tenant_id: str) -> List[PolicyDraft]:
+    def list(self, tenant_id: str) -> builtins.list[PolicyDraft]:
         return list(self.db.execute(
             select(PolicyDraft).where(PolicyDraft.tenant_id == tenant_id)
             .order_by(PolicyDraft.created_at.desc())

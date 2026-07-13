@@ -13,12 +13,12 @@ import json
 import os
 import re
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import EvidenceDocument, EvidenceConceptHit
+from app.models import EvidenceConceptHit, EvidenceDocument
 from app.services import framework_catalog as catalog
 from app.services import llm_client
 
@@ -26,13 +26,13 @@ _LEX_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "co
 
 
 @lru_cache(maxsize=1)
-def lexicon() -> List[Dict[str, Any]]:
+def lexicon() -> list[dict[str, Any]]:
     with open(_LEX_PATH, encoding="utf-8") as fh:
         return json.load(fh)
 
 
 @lru_cache(maxsize=1)
-def _lex_index() -> Dict[str, Dict[str, Any]]:
+def _lex_index() -> dict[str, dict[str, Any]]:
     return {c["id"]: c for c in lexicon()}
 
 
@@ -46,13 +46,13 @@ def verify_quote(quote: str, doc_text: str) -> bool:
     return len(q) >= 8 and q in _norm(doc_text)
 
 
-def _sentences(text: str) -> List[str]:
+def _sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if s.strip()]
 
 
-def lexicon_detect(doc_text: str) -> List[Dict[str, Any]]:
+def lexicon_detect(doc_text: str) -> list[dict[str, Any]]:
     """Deterministic fallback: find concepts by whole-word alias match, quote the containing sentence."""
-    hits: List[Dict[str, Any]] = []
+    hits: list[dict[str, Any]] = []
     sents = _sentences(doc_text)
     low_sents = [s.lower() for s in sents]
     for c in lexicon():
@@ -74,7 +74,7 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def extract(doc_text: str) -> Tuple[str, List[Dict[str, Any]]]:
+def extract(doc_text: str) -> tuple[str, list[dict[str, Any]]]:
     """Return (method, verified_hits). method in {'llm','lexicon'}."""
     valid_ids = set(_lex_index())
     method = "lexicon"
@@ -85,7 +85,7 @@ def extract(doc_text: str) -> Tuple[str, List[Dict[str, Any]]]:
         raw = lexicon_detect(doc_text)
     # validate: known concept id + verbatim quote
     seen = set()
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for h in raw:
         cid = h.get("concept_id")
         if cid not in valid_ids or cid in seen:
@@ -99,11 +99,11 @@ def extract(doc_text: str) -> Tuple[str, List[Dict[str, Any]]]:
     return method, out
 
 
-def build_graph(docs: List[EvidenceDocument], hits: List[EvidenceConceptHit],
-                framework: Optional[str] = None) -> Dict[str, Any]:
+def build_graph(docs: list[EvidenceDocument], hits: list[EvidenceConceptHit],
+                framework: str | None = None) -> dict[str, Any]:
     lex = _lex_index()
-    nodes: Dict[str, Dict[str, Any]] = {}
-    edges: List[Dict[str, Any]] = []
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: list[dict[str, Any]] = []
 
     def add_node(nid, ntype, label, meta=None):
         if nid not in nodes:
@@ -164,7 +164,7 @@ class EvidenceService:
         self.db = db
 
     def add_document(self, tenant_id: str, name: str, content: str,
-                     source_type: str = "text") -> Dict[str, Any]:
+                     source_type: str = "text") -> dict[str, Any]:
         chash = content_hash(content)
         existing = self.db.execute(
             select(EvidenceDocument).where(EvidenceDocument.tenant_id == tenant_id,
@@ -188,13 +188,14 @@ class EvidenceService:
             self.db.add(EvidenceConceptHit(tenant_id=tenant_id, doc_id=doc.doc_id,
                         concept_id=h["concept_id"], quote=h["quote"],
                         confidence=h["confidence"], method=h["method"]))
-        self.db.commit(); self.db.refresh(doc)
+        self.db.commit()
+        self.db.refresh(doc)
         return {"doc_id": doc.doc_id, "name": doc.name, "method": method,
                 "concepts_found": len(hits), "char_count": doc.char_count,
                 "hits": [{"concept_id": h["concept_id"], "confidence": h["confidence"],
                           "quote": h["quote"]} for h in hits]}
 
-    def list_documents(self, tenant_id: str) -> List[Dict[str, Any]]:
+    def list_documents(self, tenant_id: str) -> list[dict[str, Any]]:
         docs = self.db.execute(select(EvidenceDocument).where(
             EvidenceDocument.tenant_id == tenant_id)).scalars().all()
         out = []
@@ -207,7 +208,7 @@ class EvidenceService:
                         "created_at": d.created_at.isoformat() if d.created_at else None})
         return out
 
-    def graph(self, tenant_id: str, framework: Optional[str] = None) -> Dict[str, Any]:
+    def graph(self, tenant_id: str, framework: str | None = None) -> dict[str, Any]:
         docs = self.db.execute(select(EvidenceDocument).where(
             EvidenceDocument.tenant_id == tenant_id)).scalars().all()
         hits = self.db.execute(select(EvidenceConceptHit).where(
@@ -215,7 +216,7 @@ class EvidenceService:
         return build_graph(list(docs), list(hits), framework)
 
     def confirm_hit(self, hit_id: str, confirmed: bool = True,
-                    auto_attest: bool = False, approver: Optional[str] = None) -> Dict[str, Any]:
+                    auto_attest: bool = False, approver: str | None = None) -> dict[str, Any]:
         hit = self.db.get(EvidenceConceptHit, hit_id)
         if not hit:
             raise ValueError("hit not found")

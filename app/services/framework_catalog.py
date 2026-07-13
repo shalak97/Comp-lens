@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 import os
-from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from functools import cache, lru_cache
+from typing import Any
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "frameworks")
 
@@ -21,8 +21,8 @@ FRAMEWORKS = {
 }
 
 
-@lru_cache(maxsize=None)
-def _load(framework: str) -> List[Dict[str, Any]]:
+@cache
+def _load(framework: str) -> list[dict[str, Any]]:
     meta = FRAMEWORKS.get(framework)
     if not meta:
         return []
@@ -43,7 +43,7 @@ def _automated_ids() -> set:
         return set()
 
 
-def frameworks() -> List[Dict[str, Any]]:
+def frameworks() -> list[dict[str, Any]]:
     out = []
     for key, meta in FRAMEWORKS.items():
         ctrls = _load(key)
@@ -53,7 +53,7 @@ def frameworks() -> List[Dict[str, Any]]:
     return out
 
 
-def controls(framework: str, family: Optional[str] = None) -> List[Dict[str, Any]]:
+def controls(framework: str, family: str | None = None) -> list[dict[str, Any]]:
     auto = _automated_ids()
     rows = _load(framework)
     if family:
@@ -62,16 +62,16 @@ def controls(framework: str, family: Optional[str] = None) -> List[Dict[str, Any
     return [{**c, "automated": c["id"] in auto} for c in rows]
 
 
-def families(framework: str) -> List[Dict[str, Any]]:
+def families(framework: str) -> list[dict[str, Any]]:
     rows = _load(framework)
-    fams: Dict[str, Dict[str, Any]] = {}
+    fams: dict[str, dict[str, Any]] = {}
     for c in rows:
         f = fams.setdefault(c["family"], {"family": c["family"], "family_id": c.get("family_id"), "count": 0})
         f["count"] += 1
     return sorted(fams.values(), key=lambda x: x["family_id"] or x["family"])
 
 
-def get(framework: str, control_id: str) -> Optional[Dict[str, Any]]:
+def get(framework: str, control_id: str) -> dict[str, Any] | None:
     for c in _load(framework):
         if c["id"] == control_id:
             return {**c, "automated": control_id in _automated_ids()}

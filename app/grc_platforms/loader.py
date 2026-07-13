@@ -10,14 +10,13 @@ the shared standards crosswalk does the control translation. This is the
 """
 from __future__ import annotations
 
-import os
 import glob
-from typing import Dict
+import os
 
 from app.grc_platforms.base import PlatformProfile
 
 
-def _builtin() -> Dict[str, PlatformProfile]:
+def _builtin() -> dict[str, PlatformProfile]:
     from app.grc_platforms.profiles import ALL_PROFILES
     return dict(ALL_PROFILES)
 
@@ -27,10 +26,10 @@ def _yaml_dir() -> str:
         os.path.dirname(__file__), "profiles_yaml")
 
 
-def load_yaml_profiles(directory: str = None) -> Dict[str, PlatformProfile]:
+def load_yaml_profiles(directory: str = None) -> dict[str, PlatformProfile]:
     """Parse every *.yaml/*.yml in the profile directory into PlatformProfiles."""
     directory = directory or _yaml_dir()
-    out: Dict[str, PlatformProfile] = {}
+    out: dict[str, PlatformProfile] = {}
     if not os.path.isdir(directory):
         return out
     try:
@@ -51,7 +50,7 @@ def load_yaml_profiles(directory: str = None) -> Dict[str, PlatformProfile]:
     return out
 
 
-def load_all_profiles() -> Dict[str, PlatformProfile]:
+def load_all_profiles() -> dict[str, PlatformProfile]:
     """Built-in profiles, with YAML profiles layered on top (YAML can override)."""
     profiles = _builtin()
     profiles.update(load_yaml_profiles())

@@ -9,8 +9,8 @@ determination becomes a `finding`.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,7 +20,7 @@ from app.services import evidence_policy
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _ctrl_to_oscal(control_id: str) -> str:
@@ -28,7 +28,7 @@ def _ctrl_to_oscal(control_id: str) -> str:
     return control_id.lower().replace("(", ".").replace(")", "")
 
 
-def export_assessment_results(db: Session, tenant_id: str, framework: str) -> Dict[str, Any]:
+def export_assessment_results(db: Session, tenant_id: str, framework: str) -> dict[str, Any]:
     docs = {d.doc_id: d for d in db.execute(select(EvidenceDocument).where(
         EvidenceDocument.tenant_id == tenant_id)).scalars().all()}
     hits = list(db.execute(select(EvidenceConceptHit).where(
@@ -37,8 +37,8 @@ def export_assessment_results(db: Session, tenant_id: str, framework: str) -> Di
         ControlAttestation.tenant_id == tenant_id,
         ControlAttestation.framework == framework)).scalars().all())
 
-    observations: List[Dict[str, Any]] = []
-    hit_obs: Dict[str, str] = {}
+    observations: list[dict[str, Any]] = []
+    hit_obs: dict[str, str] = {}
     for h in hits:
         oid = str(uuid.uuid4())
         hit_obs[h.id] = oid
@@ -65,7 +65,7 @@ def export_assessment_results(db: Session, tenant_id: str, framework: str) -> Di
     candidate = {a.control_id for a in atts}
     # derive controls that any hit concept maps to (via the lexicon)
     from app.services import evidence_graph as evg
-    concept_to_controls: Dict[str, list] = {}
+    concept_to_controls: dict[str, list] = {}
     for c in evg.lexicon():
         for m in c.get("controls", []):
             if m["framework"] == framework:
@@ -74,7 +74,7 @@ def export_assessment_results(db: Session, tenant_id: str, framework: str) -> Di
         for cid in concept_to_controls.get(h.concept_id, []):
             candidate.add(cid)
 
-    findings: List[Dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
     for cid in sorted(candidate):
         decision = evidence_policy.evaluate(db, tenant_id, framework, cid)
         rel_obs = [hit_obs[h.id] for h in hits

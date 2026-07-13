@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timezone
-from typing import List
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -22,7 +21,7 @@ class ReportService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _findings(self, tenant_id: str) -> List[Finding]:
+    def _findings(self, tenant_id: str) -> list[Finding]:
         return AssessmentService(self.db).list_findings(tenant_id, limit=500)
 
     def csv_bytes(self, tenant_id: str) -> bytes:
@@ -46,6 +45,7 @@ class ReportService:
         This is a lightweight, recognizable subset — not a full validated SSP.
         """
         import uuid as _uuid
+
         from app.frameworks import crosswalk_for
         findings = self._findings(tenant_id)
         observations, findings_out = [], []
@@ -82,8 +82,7 @@ class ReportService:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
-                                        Paragraph, Spacer)
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
         findings = self._findings(tenant_id)
         summary = AssessmentService(self.db).compliance_summary(tenant_id)
@@ -94,7 +93,7 @@ class ReportService:
         story = []
         story.append(Paragraph("Comp-Lens Compliance Report", styles["Title"]))
         story.append(Paragraph(f"Tenant: {tenant_id}", styles["Normal"]))
-        story.append(Paragraph(f"Generated: {datetime.now(timezone.utc).isoformat()}", styles["Normal"]))
+        story.append(Paragraph(f"Generated: {datetime.now(UTC).isoformat()}", styles["Normal"]))
         story.append(Spacer(1, 12))
         story.append(Paragraph(
             f"Compliance score: <b>{summary['compliance_score']}%</b> "

@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
-from sqlalchemy import (JSON, Boolean, DateTime, Enum, Float, Index, Integer, String,
-                        Text, UniqueConstraint)
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -20,28 +30,44 @@ def _uuid() -> str:
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ── Enums ──
-class ControlStatus(str, enum.Enum):
-    PASS = "pass"; FAIL = "fail"; ERROR = "error"; NOT_APPLICABLE = "not_applicable"; PENDING = "pending"
+class ControlStatus(enum.StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    ERROR = "error"
+    NOT_APPLICABLE = "not_applicable"
+    PENDING = "pending"
 
 
-class Severity(str, enum.Enum):
-    CRITICAL = "critical"; HIGH = "high"; MEDIUM = "medium"; LOW = "low"; INFO = "info"
+class Severity(enum.StrEnum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
 
 
-class JobStatus(str, enum.Enum):
-    QUEUED = "queued"; RUNNING = "running"; SUCCEEDED = "succeeded"; FAILED = "failed"
+class JobStatus(enum.StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
-class Lifecycle(str, enum.Enum):
-    OPEN = "open"; IN_PROGRESS = "in_progress"; RESOLVED = "resolved"; RISK_ACCEPTED = "risk_accepted"
+class Lifecycle(enum.StrEnum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    RISK_ACCEPTED = "risk_accepted"
 
 
-class ExceptionStatus(str, enum.Enum):
-    ACTIVE = "active"; REVOKED = "revoked"; EXPIRED = "expired"
+class ExceptionStatus(enum.StrEnum):
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
 
 
 # ── ORM models ──
@@ -56,14 +82,14 @@ class Finding(Base):
     framework: Mapped[str] = mapped_column(String(64))
     control_id: Mapped[str] = mapped_column(String(128), index=True)
     source_system: Mapped[str] = mapped_column(String(64))
-    asset_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     status: Mapped[ControlStatus] = mapped_column(Enum(ControlStatus), index=True)
     severity: Mapped[Severity] = mapped_column(Enum(Severity), default=Severity.MEDIUM)
     lifecycle: Mapped[Lifecycle] = mapped_column(Enum(Lifecycle), default=Lifecycle.OPEN, index=True)
-    assigned_to: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    remediation: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    assigned_to: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remediation: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
@@ -88,10 +114,10 @@ class Posture(Base):
     tenant_id: Mapped[str] = mapped_column(String(128))
     control_id: Mapped[str] = mapped_column(String(128))
     source_system: Mapped[str] = mapped_column(String(64))
-    asset_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     asset_key: Mapped[str] = mapped_column(String(256), default="")
     status: Mapped[ControlStatus] = mapped_column(Enum(ControlStatus))
-    prev_status: Mapped[Optional[ControlStatus]] = mapped_column(Enum(ControlStatus), nullable=True)
+    prev_status: Mapped[ControlStatus | None] = mapped_column(Enum(ControlStatus), nullable=True)
     severity: Mapped[Severity] = mapped_column(Enum(Severity), default=Severity.MEDIUM)
     last_finding_id: Mapped[str] = mapped_column(String(36))
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -106,9 +132,9 @@ class EvidenceMeta(Base):
     control_id: Mapped[str] = mapped_column(String(128))
     framework: Mapped[str] = mapped_column(String(64))
     telemetry_hash: Mapped[str] = mapped_column(String(128))
-    record_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    record_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[ControlStatus] = mapped_column(Enum(ControlStatus))
-    object_uri: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    object_uri: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
@@ -129,12 +155,12 @@ class Waiver(Base):
     waiver_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     control_id: Mapped[str] = mapped_column(String(128), index=True)
-    asset_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)  # null = all assets
+    asset_id: Mapped[str | None] = mapped_column(String(256), nullable=True)  # null = all assets
     reason: Mapped[str] = mapped_column(Text)
     approver: Mapped[str] = mapped_column(String(128))
     status: Mapped[ExceptionStatus] = mapped_column(Enum(ExceptionStatus), default=ExceptionStatus.ACTIVE)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Schedule(Base):
@@ -146,7 +172,7 @@ class Schedule(Base):
     interval_minutes: Mapped[int] = mapped_column(Integer, default=1440)
     controls: Mapped[list] = mapped_column(JSON, default=list)  # list of assessment request dicts
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -159,7 +185,7 @@ class AssetRecord(Base):
     asset_id: Mapped[str] = mapped_column(String(256), index=True)
     asset_type: Mapped[str] = mapped_column(String(64))
     source_system: Mapped[str] = mapped_column(String(64), index=True)
-    owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
     criticality: Mapped[str] = mapped_column(String(32), default="medium")
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -185,11 +211,11 @@ class ConnectorSyncState(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True, default="default")
     connector_key: Mapped[str] = mapped_column(String(64), index=True)
-    last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(24), default="never")
     mode: Mapped[str] = mapped_column(String(16), default="demo")
     evidence_count: Mapped[int] = mapped_column(Integer, default=0)
-    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (UniqueConstraint("tenant_id", "connector_key", name="uq_sync_tenant_connector"),)
 
 
@@ -215,43 +241,60 @@ class AssessmentRequest(BaseModel):
     framework: str = Field(default="NIST")
     control_id: str
     source_system: str
-    asset_id: Optional[str] = None
-    params: Dict[str, Any] = Field(default_factory=dict)
-    idempotency_key: Optional[str] = None
+    asset_id: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str | None = None
 
 
 class BatchAssessmentRequest(BaseModel):
     tenant_id: str = Field(default="default")
-    controls: List[AssessmentRequest]
+    controls: list[AssessmentRequest]
 
 
 class FindingOut(BaseModel):
-    finding_id: str; tenant_id: str; run_id: str; framework: str; control_id: str
-    source_system: str; asset_id: Optional[str]; status: ControlStatus; severity: Severity
-    lifecycle: Lifecycle; assigned_to: Optional[str]; owner: Optional[str]
-    description: Optional[str]; remediation: Optional[dict]; evidence_ids: List[str]
+    finding_id: str
+    tenant_id: str
+    run_id: str
+    framework: str
+    control_id: str
+    source_system: str
+    asset_id: str | None
+    status: ControlStatus
+    severity: Severity
+    lifecycle: Lifecycle
+    assigned_to: str | None
+    owner: str | None
+    description: str | None
+    remediation: dict | None
+    evidence_ids: list[str]
     created_at: datetime
     model_config = {"from_attributes": True}
 
 
 class FindingUpdate(BaseModel):
-    lifecycle: Optional[Lifecycle] = None
-    assigned_to: Optional[str] = None
+    lifecycle: Lifecycle | None = None
+    assigned_to: str | None = None
 
 
 class WaiverRequest(BaseModel):
     tenant_id: str = Field(default="default")
     control_id: str
-    asset_id: Optional[str] = None
+    asset_id: str | None = None
     reason: str
     approver: str
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
 
 
 class WaiverOut(BaseModel):
-    waiver_id: str; tenant_id: str; control_id: str; asset_id: Optional[str]
-    reason: str; approver: str; status: ExceptionStatus
-    created_at: datetime; expires_at: Optional[datetime]
+    waiver_id: str
+    tenant_id: str
+    control_id: str
+    asset_id: str | None
+    reason: str
+    approver: str
+    status: ExceptionStatus
+    created_at: datetime
+    expires_at: datetime | None
     model_config = {"from_attributes": True}
 
 
@@ -259,13 +302,18 @@ class ScheduleRequest(BaseModel):
     tenant_id: str = Field(default="default")
     name: str
     interval_minutes: int = Field(default=1440, ge=1)
-    controls: List[AssessmentRequest]
+    controls: list[AssessmentRequest]
     enabled: bool = True
 
 
 class ScheduleOut(BaseModel):
-    schedule_id: str; tenant_id: str; name: str; interval_minutes: int
-    enabled: bool; last_run_at: Optional[datetime]; next_run_at: datetime
+    schedule_id: str
+    tenant_id: str
+    name: str
+    interval_minutes: int
+    enabled: bool
+    last_run_at: datetime | None
+    next_run_at: datetime
     model_config = {"from_attributes": True}
 
 
@@ -274,25 +322,25 @@ class BulkAssessRequest(BaseModel):
     framework: str = Field(default="NIST")
     control_id: str
     source_system: str
-    params: Dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExternalFinding(BaseModel):
     """A pre-evaluated finding from an external scanner."""
     control_id: str
     source_system: str = "EXTERNAL"
-    asset_id: Optional[str] = None
+    asset_id: str | None = None
     status: ControlStatus
     severity: Severity = Severity.MEDIUM
     framework: str = "NIST"
-    description: Optional[str] = None
-    external_id: Optional[str] = None
-    raw: Dict[str, Any] = Field(default_factory=dict)
+    description: str | None = None
+    external_id: str | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
 
 
 class IngestRequest(BaseModel):
     tenant_id: str = Field(default="default")
-    items: List[ExternalFinding]
+    items: list[ExternalFinding]
 
 
 # ── AI governance (ISO 42001 / NIST AI RMF / EU AI Act) ──
@@ -303,7 +351,7 @@ class AISystem(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     name: Mapped[str] = mapped_column(String(256))
-    owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
     risk_tier: Mapped[str] = mapped_column(String(32), default="limited")  # high|limited|minimal
     impact_assessment: Mapped[bool] = mapped_column(Boolean, default=False)
     data_governance: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -335,7 +383,7 @@ class PolicyDraft(Base):
     description: Mapped[str] = mapped_column(Text)
     control_id: Mapped[str] = mapped_column(String(128))
     rego: Mapped[str] = mapped_column(Text)
-    telemetry_field: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    telemetry_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
     confidence: Mapped[float] = mapped_column(default=0.0)
     status: Mapped[str] = mapped_column(String(32), default="pending")  # pending|approved|rejected
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -345,7 +393,7 @@ class PolicyDraft(Base):
 class AISystemRequest(BaseModel):
     tenant_id: str = Field(default="default")
     name: str
-    owner: Optional[str] = None
+    owner: str | None = None
     risk_tier: str = "limited"
     impact_assessment: bool = False
     data_governance: bool = False
@@ -359,10 +407,10 @@ class AISystemRequest(BaseModel):
 class PolicyDraftRequest(BaseModel):
     tenant_id: str = Field(default="default")
     description: str
-    control_id: Optional[str] = None
+    control_id: str | None = None
 
 
-class AttestationStatus(str, enum.Enum):
+class AttestationStatus(enum.StrEnum):
     compliant = "compliant"
     non_compliant = "non_compliant"
     not_applicable = "not_applicable"
@@ -383,10 +431,10 @@ class ControlAttestation(Base):
     framework: Mapped[str] = mapped_column(String(64), index=True)
     control_id: Mapped[str] = mapped_column(String(128), index=True)
     status: Mapped[AttestationStatus] = mapped_column(Enum(AttestationStatus), default=AttestationStatus.not_assessed)
-    owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    approver: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    evidence_ref: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    approver: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
 
@@ -400,17 +448,17 @@ class EvidenceDocument(Base):
     doc_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     name: Mapped[str] = mapped_column(String(512))
-    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     char_count: Mapped[int] = mapped_column(Integer, default=0)
     source_type: Mapped[str] = mapped_column(String(32), default="text")
     status: Mapped[str] = mapped_column(String(32), default="pending")
-    method: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
-    model: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    prompt_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    signature: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
@@ -443,27 +491,24 @@ class RoutingDecision(Base):
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     framework: Mapped[str] = mapped_column(String(64))
     control_id: Mapped[str] = mapped_column(String(128), index=True)
-    asset_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    asset_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    asset_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     plane: Mapped[str] = mapped_column(String(64))
     strategy_type: Mapped[str] = mapped_column(String(32))
-    module: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    module: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     executed: Mapped[bool] = mapped_column(Boolean, default=False)
     dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
     skipped: Mapped[list] = mapped_column(JSON, default=list)
-    finding_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    finding_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 # GRC Risk Register + TPRM (imported so Base registers tables)
-from app.grc_tprm_models import Risk, Vendor  # noqa: E402,F401
-
+from app.ai_governance_models import AISystemPET  # noqa: E402,F401
 
 # Audit management
 from app.audit_models import Audit, AuditControl, EvidenceRequest  # noqa: E402,F401
-
-from app.ai_governance_models import AISystemPET  # noqa: E402,F401
-
 from app.grc_platforms.models import GRCAttestation  # noqa: E402,F401
+from app.grc_tprm_models import Risk, Vendor  # noqa: E402,F401

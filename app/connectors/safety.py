@@ -24,7 +24,7 @@ Each layer fails closed: when in doubt, demo. Decisions are explained via
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any
 
 KILL_SWITCH_ENV = "LIVE_CONNECTORS_ENABLED"
 ALLOWLIST_ENV = "LIVE_CONNECTORS_ALLOWLIST"
@@ -53,7 +53,7 @@ def _allowlist() -> set:
     return {k.strip().upper() for k in raw.split(",") if k.strip()}
 
 
-def live_allowed(connector_key: str, auth_method: str | None = None) -> Dict[str, Any]:
+def live_allowed(connector_key: str, auth_method: str | None = None) -> dict[str, Any]:
     """Decide whether `connector_key` may make live calls. Fails closed.
 
     Synthetic connectors (auth_method == "none") have no external API and are
@@ -93,7 +93,7 @@ def assert_read_only(method_name: str) -> None:
         f"connector method '{method_name}' is not on the safe-read allowlist")
 
 
-def safety_state() -> Dict[str, Any]:
+def safety_state() -> dict[str, Any]:
     """Snapshot for the API/UI — never includes secrets."""
     on = kill_switch_on()
     allow = sorted(_allowlist())

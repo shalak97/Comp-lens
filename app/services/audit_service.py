@@ -1,27 +1,36 @@
 """Audit management service: lifecycle, checklist, PBC requests, export package."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+import builtins
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.audit_models import (Audit, AuditControl, EvidenceRequest, AuditIn, AuditPatch,
-                              ControlReviewPatch, EvidenceRequestIn, EvidenceRequestPatch)
-from app.policy.engine import CONTROL_CATALOG
+from app.audit_models import (
+    Audit,
+    AuditControl,
+    AuditIn,
+    AuditPatch,
+    ControlReviewPatch,
+    EvidenceRequest,
+    EvidenceRequestIn,
+    EvidenceRequestPatch,
+)
 from app.frameworks import crosswalk_for
+from app.policy.engine import CONTROL_CATALOG
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-def _iso(d: Optional[datetime]) -> Optional[str]:
+def _iso(d: datetime | None) -> str | None:
     return d.isoformat() if d else None
 
 
-def _controls_for_framework(framework: str) -> List[Dict[str, str]]:
+def _controls_for_framework(framework: str) -> list[dict[str, str]]:
     """Which controls are in scope for this framework, from the live catalog."""
     fw = framework.upper().replace(" ", "").replace("-", "")
     out = []
@@ -39,7 +48,7 @@ class AuditService:
         self.db = db
 
     # ── audit CRUD + lifecycle ──
-    def _ser(self, a: Audit, with_progress: bool = True) -> Dict[str, Any]:
+    def _ser(self, a: Audit, with_progress: bool = True) -> dict[str, Any]:
         d = {"id": a.id, "name": a.name, "framework": a.framework,
              "auditor": a.auditor, "status": a.status,
              "period_start": _iso(a.period_start), "period_end": _iso(a.period_end),
@@ -48,7 +57,7 @@ class AuditService:
             d.update(self._progress(a.id, a.tenant_id))
         return d
 
-    def _progress(self, audit_id: str, tenant_id: str) -> Dict[str, Any]:
+    def _progress(self, audit_id: str, tenant_id: str) -> dict[str, Any]:
         ctrls = self.db.execute(select(AuditControl).where(
             AuditControl.audit_id == audit_id)).scalars().all()
         reqs = self.db.execute(select(EvidenceRequest).where(
@@ -64,22 +73,24 @@ class AuditService:
                 "approval_pct": round(100 * approved / total) if total else 0,
                 "evidence_requests_total": len(reqs), "evidence_requests_open": open_reqs}
 
-    def list(self, tenant_id: str) -> List[Dict[str, Any]]:
+    def list(self, tenant_id: str) -> builtins.list[dict[str, Any]]:
         rows = self.db.execute(select(Audit).where(Audit.tenant_id == tenant_id)
                                .order_by(Audit.created_at.desc())).scalars().all()
         return [self._ser(a) for a in rows]
 
-    def get(self, tenant_id: str, audit_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, tenant_id: str, audit_id: str) -> dict[str, Any] | None:
         a = self.db.get(Audit, audit_id)
         if not a or a.tenant_id != tenant_id:
             return None
         return self._ser(a)
 
-    def create(self, tenant_id: str, data: AuditIn) -> Dict[str, Any]:
+    def create(self, tenant_id: str, data: AuditIn) -> dict[str, Any]:
         a = Audit(tenant_id=tenant_id, name=data.name, framework=data.framework,
                   period_start=data.period_start, period_end=data.period_end,
                   auditor=data.auditor, status="planning")
-        self.db.add(a); self.db.commit(); self.db.refresh(a)
+        self.db.add(a)
+        self.db.commit()
+        self.db.refresh(a)
         # auto-build the control checklist for the framework
         self._seed_controls(a)
         return self._ser(a)
@@ -92,7 +103,7 @@ class AuditService:
         self.db.commit()
         self.refresh_posture(a.tenant_id, a.id)
 
-    def update(self, tenant_id: str, audit_id: str, patch: AuditPatch) -> Optional[Dict[str, Any]]:
+    def update(self, tenant_id: str, audit_id: str, patch: AuditPatch) -> dict[str, Any] | None:
         a = self.db.get(Audit, audit_id)
         if not a or a.tenant_id != tenant_id:
             return None
@@ -101,7 +112,8 @@ class AuditService:
                 v = v.value
             setattr(a, k, v)
         a.updated_at = _now()
-        self.db.commit(); self.db.refresh(a)
+        self.db.commit()
+        self.db.refresh(a)
         return self._ser(a)
 
     def delete(self, tenant_id: str, audit_id: str) -> bool:
@@ -111,13 +123,14 @@ class AuditService:
         for model in (AuditControl, EvidenceRequest):
             for row in self.db.execute(select(model).where(model.audit_id == audit_id)).scalars().all():
                 self.db.delete(row)
-        self.db.delete(a); self.db.commit()
+        self.db.delete(a)
+        self.db.commit()
         return True
 
     # ── live posture: pull current pass/fail into each control's auto_status ──
-    def refresh_posture(self, tenant_id: str, audit_id: str) -> Dict[str, Any]:
+    def refresh_posture(self, tenant_id: str, audit_id: str) -> dict[str, Any]:
         """Best-effort: map current findings onto the audit's controls."""
-        latest: Dict[str, str] = {}
+        latest: dict[str, str] = {}
         try:
             from app.middleware_models import StoredEvent
             evs = self.db.execute(select(StoredEvent).where(StoredEvent.tenant_id == tenant_id)
@@ -137,7 +150,7 @@ class AuditService:
         return {"controls": len(ctrls), "updated": updated}
 
     # ── checklist ──
-    def list_controls(self, tenant_id: str, audit_id: str) -> List[Dict[str, Any]]:
+    def list_controls(self, tenant_id: str, audit_id: str) -> builtins.list[dict[str, Any]]:
         rows = self.db.execute(select(AuditControl).where(
             AuditControl.audit_id == audit_id, AuditControl.tenant_id == tenant_id)
             .order_by(AuditControl.control_id)).scalars().all()
@@ -148,7 +161,7 @@ class AuditService:
                  "frameworks": crosswalk_for(c.control_id)} for c in rows]
 
     def review_control(self, tenant_id: str, control_row_id: str,
-                       patch: ControlReviewPatch) -> Optional[Dict[str, Any]]:
+                       patch: ControlReviewPatch) -> dict[str, Any] | None:
         c = self.db.get(AuditControl, control_row_id)
         if not c or c.tenant_id != tenant_id:
             return None
@@ -157,32 +170,35 @@ class AuditService:
                 v = v.value
             setattr(c, k, v)
         c.updated_at = _now()
-        self.db.commit(); self.db.refresh(c)
+        self.db.commit()
+        self.db.refresh(c)
         return {"id": c.id, "control_id": c.control_id, "review_state": c.review_state,
                 "owner": c.owner, "reviewer_note": c.reviewer_note}
 
     # ── evidence requests (PBC list) ──
-    def list_requests(self, tenant_id: str, audit_id: str) -> List[Dict[str, Any]]:
+    def list_requests(self, tenant_id: str, audit_id: str) -> builtins.list[dict[str, Any]]:
         rows = self.db.execute(select(EvidenceRequest).where(
             EvidenceRequest.audit_id == audit_id, EvidenceRequest.tenant_id == tenant_id)
             .order_by(EvidenceRequest.created_at.desc())).scalars().all()
         return [self._ser_req(r) for r in rows]
 
-    def _ser_req(self, r: EvidenceRequest) -> Dict[str, Any]:
+    def _ser_req(self, r: EvidenceRequest) -> dict[str, Any]:
         return {"id": r.id, "control_id": r.control_id, "title": r.title,
                 "description": r.description, "assignee": r.assignee, "state": r.state,
                 "response_note": r.response_note, "evidence_ref": r.evidence_ref,
                 "due_date": _iso(r.due_date), "created_at": _iso(r.created_at)}
 
-    def create_request(self, tenant_id: str, audit_id: str, data: EvidenceRequestIn) -> Dict[str, Any]:
+    def create_request(self, tenant_id: str, audit_id: str, data: EvidenceRequestIn) -> dict[str, Any]:
         r = EvidenceRequest(audit_id=audit_id, tenant_id=tenant_id, title=data.title,
                             control_id=data.control_id, description=data.description,
                             assignee=data.assignee, due_date=data.due_date, state="open")
-        self.db.add(r); self.db.commit(); self.db.refresh(r)
+        self.db.add(r)
+        self.db.commit()
+        self.db.refresh(r)
         return self._ser_req(r)
 
     def update_request(self, tenant_id: str, req_id: str,
-                       patch: EvidenceRequestPatch) -> Optional[Dict[str, Any]]:
+                       patch: EvidenceRequestPatch) -> dict[str, Any] | None:
         r = self.db.get(EvidenceRequest, req_id)
         if not r or r.tenant_id != tenant_id:
             return None
@@ -191,18 +207,20 @@ class AuditService:
                 v = v.value
             setattr(r, k, v)
         r.updated_at = _now()
-        self.db.commit(); self.db.refresh(r)
+        self.db.commit()
+        self.db.refresh(r)
         return self._ser_req(r)
 
     def delete_request(self, tenant_id: str, req_id: str) -> bool:
         r = self.db.get(EvidenceRequest, req_id)
         if not r or r.tenant_id != tenant_id:
             return False
-        self.db.delete(r); self.db.commit()
+        self.db.delete(r)
+        self.db.commit()
         return True
 
     # ── the auditor-ready export package ──
-    def export_package(self, tenant_id: str, audit_id: str) -> Optional[Dict[str, Any]]:
+    def export_package(self, tenant_id: str, audit_id: str) -> dict[str, Any] | None:
         a = self.db.get(Audit, audit_id)
         if not a or a.tenant_id != tenant_id:
             return None

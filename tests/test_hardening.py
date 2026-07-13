@@ -1,5 +1,6 @@
 """Production hardening: rate limiting, security headers, request ids, errors."""
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -59,6 +60,7 @@ def test_rate_limiting():
     # Build an isolated app with a tiny limit — never mutate the shared module,
     # so this test can't contaminate the rest of the suite.
     from fastapi import FastAPI
+
     from app.hardening import RateLimitMiddleware
     mini = FastAPI()
     mini.add_middleware(RateLimitMiddleware, max_requests=4, window_seconds=60,

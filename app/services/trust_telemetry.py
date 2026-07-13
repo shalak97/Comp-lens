@@ -30,20 +30,20 @@ is always reported. All weights live in the same tunable TrustPolicy family
 """
 from __future__ import annotations
 
+import contextlib
 import re
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.grc_platforms.trust_telemetry import (DEFAULT_POLICY, GRCTrustTelemetry,
-                                                TrustPolicy, _band)
+from app.grc_platforms.trust_telemetry import DEFAULT_POLICY, GRCTrustTelemetry, TrustPolicy, _band
 
 _CONTROL_RE = re.compile(r"^([A-Z]{1,4}-\d+(?:\.\d+)?|CC\d+\.\d+)")
 
 # Lane weights (fractions of the composite; renormalised over present lanes).
-DEFAULT_LANE_WEIGHTS: Dict[str, float] = {
+DEFAULT_LANE_WEIGHTS: dict[str, float] = {
     "native": 0.30,
     "inherited": 0.20,
     "policy": 0.25,
@@ -59,27 +59,25 @@ _DRIFT_WINDOW_DAYS = 14
 def _aware(dt):
     if dt is None:
         return None
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
 
 
 def _now():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-def _lane_weights(policy_overrides: Optional[dict]) -> Dict[str, float]:
+def _lane_weights(policy_overrides: dict | None) -> dict[str, float]:
     w = dict(DEFAULT_LANE_WEIGHTS)
     if policy_overrides and isinstance(policy_overrides.get("lane_weights"), dict):
         for k, v in policy_overrides["lane_weights"].items():
             if k in w:
-                try:
+                with contextlib.suppress(TypeError, ValueError):
                     w[k] = max(0.0, float(v))
-                except (TypeError, ValueError):
-                    pass
     return w
 
 
 # ─────────────────────────── lane collectors ───────────────────────────
-def _native_lane(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
+def _native_lane(db: Session, tenant_id: str) -> dict[str, dict[str, Any]]:
     """control_id -> {score, detail} from connector evidence health."""
     from app.services.trust_graph import _connector_health, _control_strength
     conns = _connector_health(db, tenant_id)
@@ -95,7 +93,7 @@ def _native_lane(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _inherited_lane(db: Session, tenant_id: str, pol: TrustPolicy) -> Dict[str, Dict[str, Any]]:
+def _inherited_lane(db: Session, tenant_id: str, pol: TrustPolicy) -> dict[str, dict[str, Any]]:
     out = {}
     for c in GRCTrustTelemetry(db, pol).by_control(tenant_id):
         out[c["control_id"]] = {"score": c["trust"] / 100.0,
@@ -104,7 +102,7 @@ def _inherited_lane(db: Session, tenant_id: str, pol: TrustPolicy) -> Dict[str, 
     return out
 
 
-def _policy_lane(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
+def _policy_lane(db: Session, tenant_id: str) -> dict[str, dict[str, Any]]:
     """Posture rows written by the policy-as-code path, decayed by age."""
     from app.models import Posture
     rows = db.execute(select(Posture).where(
@@ -134,7 +132,7 @@ def _policy_lane(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _enforcement_lane() -> Dict[str, Dict[str, Any]]:
+def _enforcement_lane() -> dict[str, dict[str, Any]]:
     """control_id -> runtime-proof score from the live PEP/PDP counters.
 
     enforce mode, traffic flowing, nothing denied unexpectedly -> ~1.0
@@ -148,7 +146,7 @@ def _enforcement_lane() -> Dict[str, Dict[str, Any]]:
         cfg = _systems_config()
     except Exception:  # noqa: BLE001 — enforcement plane optional
         return {}
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for host, c in cfg.items():
         m = _CONTROL_RE.match(c.get("policy_id", "") or "")
         if not m:
@@ -173,15 +171,21 @@ def _enforcement_lane() -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _followthrough_lane(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
-    """Did dispatched obligations for a control's violations actually run?"""
+def _followthrough_lane(db: Session, tenant_id: str) -> dict[str, dict[str, Any]]:
+    """Did dispatched obligations for a control's violations actually run?
+
+    Optional plane: the obligations ledger may not be imported OR its table may
+    not exist yet (no migration in some deployments), so any failure degrades to
+    an absent lane rather than breaking the whole composite.
+    """
     try:
         from app.policy_models import ObligationDispatch
-    except Exception:  # noqa: BLE001 — obligations plane optional
+        rows = db.execute(select(ObligationDispatch).where(
+            ObligationDispatch.tenant_id == tenant_id)).scalars().all()
+    except Exception:  # noqa: BLE001 — obligations plane optional (module or table absent)
+        db.rollback()
         return {}
-    rows = db.execute(select(ObligationDispatch).where(
-        ObligationDispatch.tenant_id == tenant_id)).scalars().all()
-    by_ctrl: Dict[str, List[ObligationDispatch]] = {}
+    by_ctrl: dict[str, list[ObligationDispatch]] = {}
     for r in rows:
         if r.control_id:
             by_ctrl.setdefault(r.control_id, []).append(r)
@@ -194,20 +198,25 @@ def _followthrough_lane(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]
     return out
 
 
-def _drift_signal(db: Session, tenant_id: str) -> Dict[str, Any]:
-    """Tenant-level: recent external changes detected by the crawlers."""
+def _drift_signal(db: Session, tenant_id: str) -> dict[str, Any]:
+    """Tenant-level: recent external changes detected by the crawlers.
+
+    Optional plane (see _followthrough_lane): missing module or table degrades to
+    "no drift" instead of failing the composite.
+    """
     try:
         from app.crawler_models import CrawlResult, CrawlTarget
-    except Exception:  # noqa: BLE001
+        cutoff = _now() - timedelta(days=_DRIFT_WINDOW_DAYS)
+        rows = db.execute(select(CrawlResult).where(
+            CrawlResult.tenant_id == tenant_id,
+            CrawlResult.status == "changed").order_by(desc(CrawlResult.fetched_at)).limit(50)
+        ).scalars().all()
+        targets = {t.id: t for t in db.execute(select(CrawlTarget).where(
+            CrawlTarget.tenant_id == tenant_id)).scalars().all()}
+    except Exception:  # noqa: BLE001 — crawler plane optional (module or table absent)
+        db.rollback()
         return {"recent_changes": 0}
-    cutoff = _now() - timedelta(days=_DRIFT_WINDOW_DAYS)
-    rows = db.execute(select(CrawlResult).where(
-        CrawlResult.tenant_id == tenant_id,
-        CrawlResult.status == "changed").order_by(desc(CrawlResult.fetched_at)).limit(50)
-    ).scalars().all()
     recent = [r for r in rows if _aware(r.fetched_at) and _aware(r.fetched_at) >= cutoff]
-    targets = {t.id: t for t in db.execute(select(CrawlTarget).where(
-        CrawlTarget.tenant_id == tenant_id)).scalars().all()}
     detail = []
     for r in recent[:10]:
         t = targets.get(r.target_id)
@@ -219,8 +228,8 @@ def _drift_signal(db: Session, tenant_id: str) -> Dict[str, Any]:
 
 
 # ─────────────────────────── fusion ───────────────────────────
-def unified_trust(db: Session, tenant_id: str, pol: Optional[TrustPolicy] = None,
-                   policy_overrides: Optional[dict] = None) -> Dict[str, Any]:
+def unified_trust(db: Session, tenant_id: str, pol: TrustPolicy | None = None,
+                   policy_overrides: dict | None = None) -> dict[str, Any]:
     pol = pol or DEFAULT_POLICY
     weights = _lane_weights(policy_overrides)
 
@@ -231,7 +240,7 @@ def unified_trust(db: Session, tenant_id: str, pol: Optional[TrustPolicy] = None
         "enforcement": _enforcement_lane(),
         "followthrough": _followthrough_lane(db, tenant_id),
     }
-    all_controls = sorted(set().union(*[set(l.keys()) for l in lanes.values()]))
+    all_controls = sorted(set().union(*[set(lane.keys()) for lane in lanes.values()]))
 
     controls = []
     for cid in all_controls:
@@ -255,7 +264,7 @@ def unified_trust(db: Session, tenant_id: str, pol: Optional[TrustPolicy] = None
         "band": _band(avg, pol) if avg is not None else None,
         "controls_scored": len(controls),
         "lane_weights": weights,
-        "lanes_available": {n: len(l) for n, l in lanes.items()},
+        "lanes_available": {n: len(lane) for n, lane in lanes.items()},
         "drift": drift,
         "weakest": controls[:5],
         "controls": controls,

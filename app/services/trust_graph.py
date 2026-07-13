@@ -18,8 +18,8 @@ so it is safe to call on every request.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +28,7 @@ from app.grc_tprm_models import Risk, Vendor
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # How much a fully-evidenced, healthy control reduces the inherent risk it maps to.
@@ -36,11 +36,11 @@ _MAX_MITIGATION = 0.6           # at best, residual = 40% of inherent
 _STALE_DAYS = 30                # evidence older than this counts as degraded
 
 
-def _connector_health(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
+def _connector_health(db: Session, tenant_id: str) -> dict[str, dict[str, Any]]:
     """key -> {mode, synced_at, fresh, controls:set, vendor} from live sync state."""
     from app.connectors import catalog as ccat
     from app.connectors import framework as cfw
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for c in ccat.all_connectors():
         try:
             st = cfw.status_one(db, c, tenant_id)
@@ -55,7 +55,7 @@ def _connector_health(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
             try:
                 dt = datetime.fromisoformat(synced)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 fresh = (_now() - dt) < timedelta(days=_STALE_DAYS)
             except (ValueError, TypeError):
                 fresh = False
@@ -68,7 +68,7 @@ def _connector_health(db: Session, tenant_id: str) -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def _control_strength(control_id: str, conns: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def _control_strength(control_id: str, conns: dict[str, dict[str, Any]]) -> dict[str, Any]:
     """How well-evidenced is a control, from connector telemetry? 0..1 strength."""
     backing = [c for c in conns.values() if control_id in c["controls"]]
     if not backing:
@@ -94,13 +94,13 @@ class TrustGraphService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _risks(self, tenant_id: str) -> List[Risk]:
+    def _risks(self, tenant_id: str) -> list[Risk]:
         return self.db.execute(select(Risk).where(Risk.tenant_id == tenant_id)).scalars().all()
 
-    def _vendors(self, tenant_id: str) -> List[Vendor]:
+    def _vendors(self, tenant_id: str) -> list[Vendor]:
         return self.db.execute(select(Vendor).where(Vendor.tenant_id == tenant_id)).scalars().all()
 
-    def computed_residual(self, risk: Risk, conns: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def computed_residual(self, risk: Risk, conns: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Derive a live residual score for a risk from the strength of the
         control that mitigates it. Falls back to inherent when no control linked."""
         inherent = risk.likelihood * risk.impact
@@ -115,7 +115,7 @@ class TrustGraphService:
                 "telemetry": f"control {risk.linked_control}: {cs['reason']}",
                 "backed_by": cs["backed_by"]}
 
-    def vendor_live_posture(self, vendor: Vendor, conns: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def vendor_live_posture(self, vendor: Vendor, conns: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """A vendor tied to a connector inherits that connector's live posture."""
         if not vendor.linked_connector_key or vendor.linked_connector_key not in conns:
             return {"linked": False, "signal": "no connector linked",
@@ -128,13 +128,13 @@ class TrustGraphService:
                            else "connected but stale" if c["live"]
                            else "linked but not synced")}
 
-    def graph(self, tenant_id: str) -> Dict[str, Any]:
+    def graph(self, tenant_id: str) -> dict[str, Any]:
         """Full node+edge graph of connector→control→risk + vendor links."""
         conns = _connector_health(self.db, tenant_id)
         risks = self._risks(tenant_id)
         vendors = self._vendors(tenant_id)
-        nodes: List[Dict[str, Any]] = []
-        edges: List[Dict[str, Any]] = []
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
 
         # vendor nodes
         for v in vendors:
@@ -187,7 +187,7 @@ class TrustGraphService:
                           "live_connectors": sum(1 for c in conns.values() if c["live"]),
                           "unevidenced_controls": sum(1 for n in nodes if n["type"] == "control" and n["status"] == "unevidenced")}}
 
-    def risk_telemetry(self, tenant_id: str) -> List[Dict[str, Any]]:
+    def risk_telemetry(self, tenant_id: str) -> list[dict[str, Any]]:
         """Per-risk: inherent vs live-computed residual, with the telemetry trail."""
         conns = _connector_health(self.db, tenant_id)
         out = []

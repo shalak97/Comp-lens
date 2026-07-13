@@ -1,12 +1,17 @@
 """Tests for AI-governance domain, Merkle transparency log, NL->policy, forecast."""
 from __future__ import annotations
+
 import os
+
 os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_v16.db")
 os.environ.setdefault("EVIDENCE_LOCAL_PATH", "./test_v16_ev")
 
+from datetime import UTC
+
 import pytest
 from fastapi.testclient import TestClient
+
 from app.database import init_db
 
 
@@ -73,13 +78,15 @@ def test_merkle_detects_tamper(client):
     anchor = client.post("/evidence/anchor?tenant_id=mk2").json()
     old_root = anchor["root"]
     # tamper a record_hash after anchoring
+    from sqlalchemy import select
+
     from app.database import SessionLocal
     from app.models import EvidenceMeta
-    from sqlalchemy import select
     db = SessionLocal()
     e = db.execute(select(EvidenceMeta).where(EvidenceMeta.tenant_id == "mk2")).scalars().first()
     e.record_hash = "f" * 64
-    db.commit(); db.close()
+    db.commit()
+    db.close()
     # re-anchor -> root changes, proving the log was altered
     new_anchor = client.post("/evidence/anchor?tenant_id=mk2").json()
     assert new_anchor["root"] != old_root
@@ -124,17 +131,18 @@ def test_policy_draft_mfa_and_numeric(client):
 # ── 4. Predictive forecast ──
 def test_forecast_declining_trend(client):
     # build a declining snapshot series by capturing after worsening posture
-    import time
+    from datetime import datetime, timedelta
+
     from app.database import SessionLocal
     from app.models import ComplianceSnapshot
-    from datetime import datetime, timezone, timedelta
     db = SessionLocal()
-    base = datetime.now(timezone.utc) - timedelta(days=5)
+    base = datetime.now(UTC) - timedelta(days=5)
     for i, score in enumerate([95.0, 90.0, 85.0, 80.0, 75.0]):
         db.add(ComplianceSnapshot(tenant_id="fc", framework="ALL", score=score,
                                   total=10, passed=int(score/10), failed=10-int(score/10),
                                   captured_at=base + timedelta(days=i)))
-    db.commit(); db.close()
+    db.commit()
+    db.close()
     f = client.get("/forecast?tenant_id=fc&horizon_days=10&threshold=70").json()
     assert f["insufficient_data"] is False
     assert f["trend"] == "declining"

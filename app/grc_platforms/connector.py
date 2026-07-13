@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Any
 
-from app.grc_platforms.base import GRCPlatformConnector, PlatformProfile
 from app.connectors.base import ConnectorError
+from app.grc_platforms.base import GRCPlatformConnector, PlatformProfile
 
 try:
     from app.connectors.http_client import ResilientClient
@@ -37,7 +37,7 @@ class LiveGRCConnector(GRCPlatformConnector):
             return {"Accept": "application/json"}
         return {"Accept": "application/json"}
 
-    def _authed_get(self, path: str, cursor: Optional[str] = None) -> Any:
+    def _authed_get(self, path: str, cursor: str | None = None) -> Any:
         if not self._client:
             raise ConnectorError(f"{self.profile.platform}: HTTP client unavailable")
         url = self.profile.base_url + path

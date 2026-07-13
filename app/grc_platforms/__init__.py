@@ -13,7 +13,7 @@ re-express them as Comp-Lens trust telemetry. The two sets never compete for the
 same evidence lane; when both attest a control, the trust graph shows them as
 separate, independently-labeled attestations.
 """
-from app.grc_platforms.base import GRCPlatformConnector, PlatformProfile, ControlAttestation
+from app.grc_platforms.base import ControlAttestation, GRCPlatformConnector, PlatformProfile
 from app.grc_platforms.registry import GRC_PLATFORM_REGISTRY, get_grc_connector
 
 __all__ = ["GRCPlatformConnector", "PlatformProfile", "ControlAttestation",

@@ -12,8 +12,8 @@ and return whole days since then).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 _DEFAULT_TRUTHY = {"y", "yes", "true", "1", "t", "enabled", "on"}
 
@@ -40,16 +40,16 @@ def _days_since(val: Any):
         except ValueError:
             # try common epoch (seconds) integer
             try:
-                dt = datetime.fromtimestamp(float(s), tz=timezone.utc)
+                dt = datetime.fromtimestamp(float(s), tz=UTC)
             except (ValueError, OSError):
                 return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - dt).days
+        dt = dt.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - dt).days
 
 
-def normalize(raw: Dict[str, Any], field_map: Dict[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+def normalize(raw: dict[str, Any], field_map: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     for norm_field, spec in field_map.items():
         if isinstance(spec, str):
             src_key, coerce, truthy = spec, None, None

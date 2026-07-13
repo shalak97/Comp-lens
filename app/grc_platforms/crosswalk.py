@@ -18,7 +18,6 @@ starting points — validate against your own control set on first connection.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
 
 
 @dataclass
@@ -67,12 +66,12 @@ _CIS = {
     "8.1": Mapping("AU-2", "heuristic", "audit log management"),
 }
 
-CROSSWALKS: Dict[str, Dict[str, Mapping]] = {
+CROSSWALKS: dict[str, dict[str, Mapping]] = {
     "SOC2": _SOC2, "ISO27001": _ISO27001, "CIS": _CIS,
 }
 
 
-def resolve(framework: str, control_ref: str) -> Optional[Mapping]:
+def resolve(framework: str, control_ref: str) -> Mapping | None:
     """Translate a platform's (framework, control_ref) to a Comp-Lens mapping."""
     fw = CROSSWALKS.get((framework or "").upper())
     if not fw:
@@ -80,7 +79,7 @@ def resolve(framework: str, control_ref: str) -> Optional[Mapping]:
     return fw.get((control_ref or "").strip())
 
 
-def resolve_best(control_ref: str, frameworks=None) -> Tuple[Optional[Mapping], Optional[str]]:
+def resolve_best(control_ref: str, frameworks=None) -> tuple[Mapping | None, str | None]:
     """Resolve a control ref across one or more candidate frameworks.
 
     Returns (mapping, framework_used). Tries the declared frameworks first, then
@@ -109,6 +108,6 @@ def resolve_best(control_ref: str, frameworks=None) -> Tuple[Optional[Mapping], 
     return None, None
 
 
-def register_crosswalk(framework: str, mapping: Dict[str, Mapping]) -> None:
+def register_crosswalk(framework: str, mapping: dict[str, Mapping]) -> None:
     """Allow a YAML profile or extension to contribute a new framework crosswalk."""
     CROSSWALKS[framework.upper()] = mapping

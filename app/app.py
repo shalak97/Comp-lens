@@ -21,31 +21,33 @@ evidence ledger in production. No auth here: in production require mTLS or a
 bearer token from each PDP (see README).
 """
 from __future__ import annotations
-import gzip, hashlib, io, json, tarfile, time, os
-from collections import deque, defaultdict
-from datetime import datetime, timezone
-from pathlib import Path
-from fastapi import FastAPI, Request, Response, HTTPException
+
+import contextlib
+import gzip
+import hashlib
+import io
+import json
+import tarfile
+import time
+from datetime import datetime
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
-POLICY_DIR = Path(os.environ.get("COMPLENS_POLICY_DIR", Path(__file__).parent / "policy"))
-MAX_DECISIONS = 5000
+# The ingestion core (in-memory store + decision-log parser) lives in
+# app.services.enforcement so the platform's trust telemetry reads the same
+# live counters this control plane populates — one source of truth.
+from app.services.enforcement import (
+    BOOT,
+    DECISIONS,
+    PEPS,
+    POLICY_DIR,
+    SYS_COUNTERS,
+    _ingest_entry,
+    _systems_config,
+)
 
 app = FastAPI(title="Comp-Lens Enforcement Control Plane")
-
-# ----------------------------------------------------------------------------
-# In-memory evidence store
-# ----------------------------------------------------------------------------
-DECISIONS: deque = deque(maxlen=MAX_DECISIONS)        # newest appended right
-PEPS: dict[str, dict] = {}                            # data-plane node -> liveness
-SYS_COUNTERS: dict[str, dict] = defaultdict(lambda: {"requests": 0, "allow": 0,
-                                                     "denied": 0, "would_block": 0,
-                                                     "last_seen": None})
-BOOT = time.time()
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 # ----------------------------------------------------------------------------
@@ -87,74 +89,18 @@ def get_bundle():
 
 # ----------------------------------------------------------------------------
 # Decision-log sink: OPA POSTs gzipped JSON arrays here. Each entry becomes a
-# decision record (evidence). We keep only the authz entrypoint.
+# decision record (evidence) via app.services.enforcement._ingest_entry.
 # ----------------------------------------------------------------------------
-def _coerce_bool(v) -> bool:
-    return str(v).lower() == "true"
-
-
-def _ingest_entry(e: dict) -> dict | None:
-    if e.get("path") not in ("envoy/authz/allow", "envoy/authz"):
-        return None
-    result = e.get("result") or {}
-    if not isinstance(result, dict):
-        return None
-    h = result.get("headers") or {}
-    inp = (((e.get("input") or {}).get("attributes") or {}).get("request") or {}).get("http") or {}
-    bundles = e.get("bundles") or {}
-    rev = (bundles.get("complens") or {}).get("revision") or ""
-    labels = e.get("labels") or {}
-    node = labels.get("system") or labels.get("id") or "pdp"
-
-    rec = {
-        "ts": e.get("timestamp") or now_iso(),
-        "decision_id": e.get("decision_id", ""),
-        "system": h.get("x-complens-system") or inp.get("host") or "unknown",
-        "method": inp.get("method", ""),
-        "path": inp.get("path", ""),
-        "subject": h.get("x-complens-subject", "anonymous"),
-        "mode": h.get("x-complens-mode", "shadow"),
-        "policy": h.get("x-complens-policy", "unconfigured"),
-        "enforced_allow": bool(result.get("allowed", True)),
-        "would_allow": _coerce_bool(h.get("x-complens-would-allow", "true")),
-        "would_block": _coerce_bool(h.get("x-complens-would-block", "false")),
-        "reason": h.get("x-complens-reason", ""),
-        "revision": rev,
-        "node": node,
-    }
-
-    # liveness + counters
-    p = PEPS.setdefault(node, {"node": node, "first_seen": now_iso(), "decisions": 0})
-    p["last_seen"] = now_iso()
-    p["revision"] = rev
-    p["decisions"] += 1
-
-    c = SYS_COUNTERS[rec["system"]]
-    c["requests"] += 1
-    c["last_seen"] = rec["ts"]
-    if rec["enforced_allow"]:
-        c["allow"] += 1
-    else:
-        c["denied"] += 1
-    if rec["would_block"]:
-        c["would_block"] += 1
-
-    DECISIONS.append(rec)
-    return rec
-
-
 @app.post("/enforcement/logs")
 async def decision_logs(request: Request):
     raw = await request.body()
     if request.headers.get("content-encoding", "").lower() == "gzip" or raw[:2] == b"\x1f\x8b":
-        try:
+        with contextlib.suppress(OSError):
             raw = gzip.decompress(raw)
-        except OSError:
-            pass
     try:
         payload = json.loads(raw or b"[]")
-    except json.JSONDecodeError:
-        raise HTTPException(400, "invalid decision log payload")
+    except json.JSONDecodeError as e:
+        raise HTTPException(400, "invalid decision log payload") from e
     entries = payload if isinstance(payload, list) else [payload]
     ingested = sum(1 for e in entries if _ingest_entry(e) is not None)
     return {"received": len(entries), "ingested": ingested}
@@ -163,10 +109,6 @@ async def decision_logs(request: Request):
 # ----------------------------------------------------------------------------
 # Dashboard read APIs
 # ----------------------------------------------------------------------------
-def _systems_config() -> dict:
-    return json.loads((POLICY_DIR / "data.json").read_text()).get("systems", {})
-
-
 @app.get("/enforcement/status")
 def status():
     cfg = _systems_config()
@@ -178,7 +120,7 @@ def status():
             totals[k] += c.get(k, 0)
     live_cut = time.time() - 120
     peps = []
-    for n, p in PEPS.items():
+    for _n, p in PEPS.items():
         last = p.get("last_seen")
         online = bool(last and datetime.fromisoformat(last).timestamp() > live_cut)
         peps.append({**p, "online": online})

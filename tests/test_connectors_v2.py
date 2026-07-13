@@ -20,7 +20,7 @@ def client():
 # ── catalog & registry ────────────────────────────────────────────────────────
 
 def test_catalog_has_all_categories(client):
-    from app.connectors.catalog import all_connectors, CATEGORIES
+    from app.connectors.catalog import CATEGORIES, all_connectors
     cats = {c["category"] for c in all_connectors()}
     assert cats == set(CATEGORIES)
 
@@ -61,8 +61,8 @@ def test_demo_evidence_deterministic(client):
 
 def test_normalized_evidence_has_control_mappings(client):
     from app.connectors.catalog import get
-    from app.connectors.framework import _normalize
     from app.connectors.evidence_profiles import demo_evidence
+    from app.connectors.framework import _normalize
     c = get("OKTA")
     norm = _normalize(c, demo_evidence(c), "demo")
     assert all(n["controls"] for n in norm)
@@ -102,7 +102,6 @@ def test_connectors_catalog_category_filter(client):
 def test_connectors_status_masks_secrets(client):
     r = client.get("/connectors/status")
     assert r.status_code == 200
-    body = r.text
     # env var NAMES may appear; obviously secret-looking values must not
     for s in r.json():
         assert "value" not in s.get("credentials", {})

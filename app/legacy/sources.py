@@ -38,7 +38,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.config import settings
 
@@ -52,24 +52,24 @@ class LegacySource:
     name: str
     type: str
     url: str
-    field_map: Dict[str, Any] = field(default_factory=dict)
+    field_map: dict[str, Any] = field(default_factory=dict)
     # sql
-    query: Optional[str] = None
-    discovery_query: Optional[str] = None
-    key_column: Optional[str] = None
+    query: str | None = None
+    discovery_query: str | None = None
+    key_column: str | None = None
     # file
     format: str = "csv"            # csv | json | fixed
-    fields: Optional[list] = None  # for fixed-width: [{"name","start","length"}]
+    fields: list | None = None  # for fixed-width: [{"name","start","length"}]
     # soap
-    soap_action: Optional[str] = None
-    template: Optional[str] = None
-    field_paths: Optional[Dict[str, str]] = None
-    namespaces: Optional[Dict[str, str]] = None
+    soap_action: str | None = None
+    template: str | None = None
+    field_paths: dict[str, str] | None = None
+    namespaces: dict[str, str] | None = None
     # ldap
-    bind_dn: Optional[str] = None
-    bind_pw: Optional[str] = None
-    base_dn: Optional[str] = None
-    filter: Optional[str] = None
+    bind_dn: str | None = None
+    bind_pw: str | None = None
+    base_dn: str | None = None
+    filter: str | None = None
 
 
 def _raw_config() -> list:
@@ -87,8 +87,8 @@ def _raw_config() -> list:
 
 
 @lru_cache
-def _load() -> Dict[str, LegacySource]:
-    out: Dict[str, LegacySource] = {}
+def _load() -> dict[str, LegacySource]:
+    out: dict[str, LegacySource] = {}
     for raw in _raw_config():
         t = str(raw.get("type", "")).lower()
         if t not in VALID_TYPES:
@@ -110,10 +110,10 @@ def reload_sources() -> None:
     _load.cache_clear()
 
 
-def get_source(name: str) -> Optional[LegacySource]:
+def get_source(name: str) -> LegacySource | None:
     return _load().get(name)
 
 
-def list_sources() -> List[Dict[str, str]]:
+def list_sources() -> list[dict[str, str]]:
     # names + types only — never expose connection strings or credentials
     return [{"name": s.name, "type": s.type} for s in _load().values()]

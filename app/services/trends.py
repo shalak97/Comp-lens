@@ -9,19 +9,19 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ComplianceSnapshot, Finding, Posture
+from app.models import ComplianceSnapshot, Posture
 
 
 class TrendService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def snapshot(self, tenant_id: str, summary: Dict[str, Any], framework: str = "ALL") -> ComplianceSnapshot:
+    def snapshot(self, tenant_id: str, summary: dict[str, Any], framework: str = "ALL") -> ComplianceSnapshot:
         snap = ComplianceSnapshot(
             tenant_id=tenant_id, framework=framework, score=summary["compliance_score"],
             total=summary["total"], passed=summary["by_status"]["pass"],
@@ -31,7 +31,7 @@ class TrendService:
         self.db.flush()
         return snap
 
-    def trends(self, tenant_id: str, limit: int = 90) -> List[Dict[str, Any]]:
+    def trends(self, tenant_id: str, limit: int = 90) -> list[dict[str, Any]]:
         rows = self.db.execute(
             select(ComplianceSnapshot).where(ComplianceSnapshot.tenant_id == tenant_id)
             .order_by(ComplianceSnapshot.captured_at.desc()).limit(limit)
@@ -40,7 +40,7 @@ class TrendService:
                  "total": r.total, "passed": r.passed, "failed": r.failed}
                 for r in reversed(rows)]
 
-    def drift(self, tenant_id: str) -> Dict[str, Any]:
+    def drift(self, tenant_id: str) -> dict[str, Any]:
         # Posture already tracks prev_status vs status per asset — drift is a
         # single point read, no log scan or in-memory history needed.
         rows = self.db.execute(

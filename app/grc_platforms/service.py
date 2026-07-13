@@ -1,18 +1,16 @@
 """GRC-platform sync service — ingest attestations and surface multi-source trust."""
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.grc_platforms.registry import get_grc_connector, GRC_PLATFORM_REGISTRY
 from app.grc_platforms.models import GRCAttestation
+from app.grc_platforms.registry import GRC_PLATFORM_REGISTRY, get_grc_connector
 
 
-def sync_platform(db: Session, tenant_id: str, platform: str) -> Dict[str, Any]:
+def sync_platform(db: Session, tenant_id: str, platform: str) -> dict[str, Any]:
     """Pull a GRC platform's results and persist them as attestations (idempotent)."""
     conn = get_grc_connector(platform)  # raises if not configured
     attestations = conn.bulk_ingest()
@@ -36,21 +34,23 @@ def sync_platform(db: Session, tenant_id: str, platform: str) -> Dict[str, Any]:
             "note": "inherited attestations stored in their own lane (source_kind=grc_platform)"}
 
 
-def sync_status(db: Session, tenant_id: str) -> Dict[str, Any]:
+def sync_status(db: Session, tenant_id: str) -> dict[str, Any]:
     rows = db.execute(select(GRCAttestation).where(
         GRCAttestation.tenant_id == tenant_id)).scalars().all()
-    by_platform: Dict[str, Dict[str, Any]] = {}
+    by_platform: dict[str, dict[str, Any]] = {}
     for r in rows:
         p = by_platform.setdefault(r.platform, {"total": 0, "pass": 0, "fail": 0, "mapped": 0})
         p["total"] += 1
         p["mapped"] += 1 if r.comp_lens_control_id else 0
-        if r.status == "pass": p["pass"] += 1
-        if r.status == "fail": p["fail"] += 1
+        if r.status == "pass":
+            p["pass"] += 1
+        if r.status == "fail":
+            p["fail"] += 1
     return {"available_platforms": GRC_PLATFORM_REGISTRY,
             "connected": list(by_platform.keys()), "by_platform": by_platform}
 
 
-def multi_source_attestation(db: Session, tenant_id: str) -> Dict[str, Any]:
+def multi_source_attestation(db: Session, tenant_id: str) -> dict[str, Any]:
     """The USP view: which controls are attested by multiple independent sources.
 
     Inherited (GRC-platform) attestations are deliberately kept in a SEPARATE lane
@@ -60,7 +60,7 @@ def multi_source_attestation(db: Session, tenant_id: str) -> Dict[str, Any]:
     rows = db.execute(select(GRCAttestation).where(
         GRCAttestation.tenant_id == tenant_id,
         GRCAttestation.comp_lens_control_id.isnot(None))).scalars().all()
-    by_control: Dict[str, List[Dict[str, Any]]] = {}
+    by_control: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
         by_control.setdefault(r.comp_lens_control_id, []).append(
             {"source": r.platform, "kind": "grc_platform", "status": r.status,

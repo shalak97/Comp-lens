@@ -13,20 +13,27 @@ full findings history.
 from __future__ import annotations
 
 import logging
+import random
+import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.connectors.registry import registry
 from app.evidence import evidence_store, telemetry_hash
 from app.frameworks import controls_for_framework
 from app.models import (
-    AssessmentRequest, ControlStatus, EvidenceMeta, Finding, IdempotencyRecord,
-    Posture, Severity,
+    AssessmentRequest,
+    ControlStatus,
+    EvidenceMeta,
+    Finding,
+    IdempotencyRecord,
+    Posture,
+    Severity,
 )
 from app.policy.engine import policy_engine
 from app.services.waivers import WaiverService
@@ -35,6 +42,20 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGE = 500
 DEFAULT_PAGE = 100
+
+# SQLite (WAL) returns "database is locked" *immediately* — not subject to
+# busy_timeout — when a transaction that already holds a read snapshot races
+# another writer on the read→write upgrade. Rolling back drops the stale
+# snapshot; a fresh attempt then serialises cleanly on the write lock. Retries
+# are bounded with jittered exponential backoff. On PostgreSQL this never fires
+# (it doesn't raise this error), so the wrapper is a no-op there.
+_WRITE_MAX_RETRIES = 6
+_WRITE_BACKOFF_BASE = 0.05
+
+
+def _is_locked_error(exc: OperationalError) -> bool:
+    msg = str(getattr(exc, "orig", None) or exc).lower()
+    return "database is locked" in msg or "database is busy" in msg
 
 
 def _idem_key(req: AssessmentRequest) -> str:
@@ -47,7 +68,7 @@ class AssessmentService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _existing(self, key: str) -> Optional[Finding]:
+    def _existing(self, key: str) -> Finding | None:
         rec = self.db.get(IdempotencyRecord, key)
         return self.db.get(Finding, rec.finding_id) if rec else None
 
@@ -65,7 +86,7 @@ class AssessmentService:
             p.status = status
             p.severity = severity
             p.last_finding_id = finding_id
-            p.updated_at = datetime.now(timezone.utc)
+            p.updated_at = datetime.now(UTC)
         else:
             self.db.add(Posture(
                 tenant_id=tenant_id, control_id=control_id, source_system=source_system.upper(),
@@ -74,9 +95,9 @@ class AssessmentService:
             ))
 
     def _commit_finding(self, *, tenant_id, framework, control_id, source_system, asset_id,
-                        status: ControlStatus, severity: Severity, reason: Optional[str],
-                        idem_key: str, telemetry: Optional[Dict[str, Any]] = None,
-                        owner: Optional[str] = None) -> Finding:
+                        status: ControlStatus, severity: Severity, reason: str | None,
+                        idem_key: str, telemetry: dict[str, Any] | None = None,
+                        owner: str | None = None) -> Finding:
         existing = self._existing(idem_key)
         if existing:
             return existing
@@ -137,7 +158,27 @@ class AssessmentService:
             logger.exception("notification dispatch failed")
         return finding
 
+    def _retry_on_locked(self, fn):
+        """Run a write closure, retrying transient SQLite BUSY/locked errors.
+
+        Each retry rolls back first so the next attempt starts from a clean
+        transaction (fresh snapshot), which is what lets it acquire the write
+        lock instead of re-racing the upgrade. Non-lock errors propagate at once.
+        """
+        for attempt in range(_WRITE_MAX_RETRIES):
+            try:
+                return fn()
+            except OperationalError as exc:
+                if attempt == _WRITE_MAX_RETRIES - 1 or not _is_locked_error(exc):
+                    raise
+                self.db.rollback()
+                time.sleep(_WRITE_BACKOFF_BASE * (2 ** attempt) * (0.5 + random.random()))
+        raise RuntimeError("unreachable")  # loop always returns or raises
+
     def run_single(self, req: AssessmentRequest) -> Finding:
+        return self._retry_on_locked(lambda: self._run_single_once(req))
+
+    def _run_single_once(self, req: AssessmentRequest) -> Finding:
         key = _idem_key(req)
         existing = self._existing(key)
         if existing:
@@ -154,10 +195,10 @@ class AssessmentService:
             reason=reason, idem_key=key, telemetry=telemetry, owner=telemetry.get("owner"))
 
     def record_external_finding(self, *, tenant_id: str, framework: str, control_id: str,
-                                source_system: str, asset_id: Optional[str], status: ControlStatus,
-                                severity: Severity, description: Optional[str] = None,
-                                raw: Optional[Dict[str, Any]] = None,
-                                external_id: Optional[str] = None) -> Optional[Finding]:
+                                source_system: str, asset_id: str | None, status: ControlStatus,
+                                severity: Severity, description: str | None = None,
+                                raw: dict[str, Any] | None = None,
+                                external_id: str | None = None) -> Finding | None:
         """Persist a pre-evaluated finding from an external scanner.
 
         Returns the created Finding, or None if it was already ingested
@@ -172,8 +213,8 @@ class AssessmentService:
             severity=severity, reason=description, idem_key=idem,
             telemetry=raw or {"ingested": True}, owner=None)
 
-    def run_batch(self, tenant_id: str, requests: List[AssessmentRequest]) -> Dict[str, Any]:
-        results: Dict[str, Any] = {"succeeded": 0, "failed": 0, "findings": [], "errors": []}
+    def run_batch(self, tenant_id: str, requests: list[AssessmentRequest]) -> dict[str, Any]:
+        results: dict[str, Any] = {"succeeded": 0, "failed": 0, "findings": [], "errors": []}
         for r in requests:
             r.tenant_id = tenant_id
             try:
@@ -187,7 +228,7 @@ class AssessmentService:
                 logger.warning("batch item failed control=%s: %s", r.control_id, exc)
         return results
 
-    def update_finding(self, tenant_id: str, finding_id: str, upd) -> Optional[Finding]:
+    def update_finding(self, tenant_id: str, finding_id: str, upd) -> Finding | None:
         f = self.db.get(Finding, finding_id)
         if not f or f.tenant_id != tenant_id:
             return None
@@ -198,8 +239,8 @@ class AssessmentService:
         self.db.flush()
         return f
 
-    def list_findings(self, tenant_id: str, control_id: Optional[str] = None,
-                      limit: int = DEFAULT_PAGE, offset: int = 0) -> List[Finding]:
+    def list_findings(self, tenant_id: str, control_id: str | None = None,
+                      limit: int = DEFAULT_PAGE, offset: int = 0) -> list[Finding]:
         limit = max(1, min(limit, MAX_PAGE))
         offset = max(0, offset)
         stmt = select(Finding).where(Finding.tenant_id == tenant_id)
@@ -208,7 +249,7 @@ class AssessmentService:
         stmt = stmt.order_by(Finding.created_at.desc()).limit(limit).offset(offset)
         return list(self.db.execute(stmt).scalars().all())
 
-    def compliance_summary(self, tenant_id: str, framework: Optional[str] = None) -> Dict[str, Any]:
+    def compliance_summary(self, tenant_id: str, framework: str | None = None) -> dict[str, Any]:
         # Read current state from posture (bounded by distinct assets*controls,
         # not the full findings history).
         from app.risk import severity_weight

@@ -11,7 +11,7 @@ chains: records are batched into a tree at anchor time.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ def _node(a: str, b: str) -> str:
     return _h(lo + hi)
 
 
-def build_tree(leaves: List[str]) -> Tuple[str, List[List[str]]]:
+def build_tree(leaves: list[str]) -> tuple[str, list[list[str]]]:
     """Return (root, levels) where levels[0] = leaves."""
     if not leaves:
         return _h(""), [[]]
@@ -47,7 +47,7 @@ def build_tree(leaves: List[str]) -> Tuple[str, List[List[str]]]:
     return cur[0], levels
 
 
-def inclusion_proof(levels: List[List[str]], index: int) -> List[str]:
+def inclusion_proof(levels: list[list[str]], index: int) -> list[str]:
     proof = []
     for level in levels[:-1]:
         sib = index ^ 1
@@ -57,7 +57,7 @@ def inclusion_proof(levels: List[List[str]], index: int) -> List[str]:
     return proof
 
 
-def verify_proof(leaf: str, proof: List[str], root: str) -> bool:
+def verify_proof(leaf: str, proof: list[str], root: str) -> bool:
     h = leaf
     for sib in proof:
         h = _node(h, sib)
@@ -68,7 +68,7 @@ class MerkleService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _ordered_leaves(self, tenant_id: str) -> List[Tuple[str, str]]:
+    def _ordered_leaves(self, tenant_id: str) -> list[tuple[str, str]]:
         rows = self.db.execute(
             select(EvidenceMeta.evidence_id, EvidenceMeta.record_hash)
             .where(EvidenceMeta.tenant_id == tenant_id)
@@ -76,7 +76,7 @@ class MerkleService:
         ).all()
         return [(eid, rh or "") for eid, rh in rows]
 
-    def anchor(self, tenant_id: str) -> Dict[str, Any]:
+    def anchor(self, tenant_id: str) -> dict[str, Any]:
         leaves = [rh for _eid, rh in self._ordered_leaves(tenant_id)]
         root, _ = build_tree(leaves)
         a = MerkleAnchor(tenant_id=tenant_id, root=root, leaf_count=len(leaves))
@@ -85,7 +85,7 @@ class MerkleService:
         return {"anchor_id": a.id, "root": root, "leaf_count": len(leaves),
                 "created_at": a.created_at.isoformat()}
 
-    def anchors(self, tenant_id: str) -> List[Dict[str, Any]]:
+    def anchors(self, tenant_id: str) -> list[dict[str, Any]]:
         rows = self.db.execute(
             select(MerkleAnchor).where(MerkleAnchor.tenant_id == tenant_id)
             .order_by(MerkleAnchor.created_at.desc())
@@ -93,7 +93,7 @@ class MerkleService:
         return [{"anchor_id": a.id, "root": a.root, "leaf_count": a.leaf_count,
                  "created_at": a.created_at.isoformat()} for a in rows]
 
-    def proof(self, tenant_id: str, evidence_id: str) -> Dict[str, Any]:
+    def proof(self, tenant_id: str, evidence_id: str) -> dict[str, Any]:
         ordered = self._ordered_leaves(tenant_id)
         ids = [e for e, _ in ordered]
         leaves = [rh for _, rh in ordered]

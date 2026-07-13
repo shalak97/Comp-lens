@@ -11,7 +11,7 @@ import logging
 import time
 import uuid
 from collections import defaultdict, deque
-from typing import Callable, Deque, Dict, Tuple
+from collections.abc import Callable
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -33,9 +33,9 @@ class SlidingWindowLimiter:
     def __init__(self, max_requests: int, window_seconds: int):
         self.max = max_requests
         self.window = window_seconds
-        self._hits: Dict[str, Deque[float]] = defaultdict(deque)
+        self._hits: dict[str, deque[float]] = defaultdict(deque)
 
-    def check(self, key: str) -> Tuple[bool, int, float]:
+    def check(self, key: str) -> tuple[bool, int, float]:
         """Return (allowed, remaining, retry_after_seconds)."""
         now = time.monotonic()
         q = self._hits[key]
@@ -66,7 +66,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """Applies the limiter, keyed by API key (or client IP for anonymous)."""
 
     def __init__(self, app, max_requests: int = 120, window_seconds: int = 60,
-                 exempt_paths: Tuple[str, ...] = ("/health", "/docs", "/openapi.json",
+                 exempt_paths: tuple[str, ...] = ("/health", "/docs", "/openapi.json",
                                                   "/redoc", "/dashboard")):
         super().__init__(app)
         self.limiter = SlidingWindowLimiter(max_requests, window_seconds)

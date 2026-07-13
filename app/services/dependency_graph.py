@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import Any
 
 from app.services import evidence_graph as evg
 
@@ -33,9 +33,9 @@ def _load(name: str) -> Any:
 
 
 @lru_cache(maxsize=1)
-def _graph() -> Dict[str, List[Dict[str, Any]]]:
+def _graph() -> dict[str, list[dict[str, Any]]]:
     """adjacency: {source_control: [edge,...]} where edge has target/type/weight/provenance/rationale."""
-    adj: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    adj: dict[str, dict[str, dict[str, Any]]] = {}
 
     def put(src, tgt, etype, weight, prov, rationale):
         if src == tgt:
@@ -54,7 +54,7 @@ def _graph() -> Dict[str, List[Dict[str, Any]]]:
             "curated", e.get("rationale", ""))
 
     # 2) shared-concept soft edges (bidirectional)
-    concept_controls: Dict[str, set] = {}
+    concept_controls: dict[str, set] = {}
     for c in evg.lexicon():
         nist = [m["control_id"] for m in c.get("controls", []) if m["framework"] == "NIST_800_53"]
         for cid in nist:
@@ -79,12 +79,12 @@ def _graph() -> Dict[str, List[Dict[str, Any]]]:
     return {src: list(b.values()) for src, b in adj.items()}
 
 
-def out_edges(control_id: str) -> List[Dict[str, Any]]:
+def out_edges(control_id: str) -> list[dict[str, Any]]:
     """Controls affected if `control_id` degrades (downstream dependents)."""
     return _graph().get(control_id, [])
 
 
-def in_edges(control_id: str) -> List[Dict[str, Any]]:
+def in_edges(control_id: str) -> list[dict[str, Any]]:
     """Controls that `control_id` depends on (upstream prerequisites)."""
     out = []
     for src, edges in _graph().items():
@@ -96,9 +96,9 @@ def in_edges(control_id: str) -> List[Dict[str, Any]]:
     return out
 
 
-def stats() -> Dict[str, int]:
+def stats() -> dict[str, int]:
     g = _graph()
-    by_type: Dict[str, int] = {}
+    by_type: dict[str, int] = {}
     total = 0
     for edges in g.values():
         for e in edges:
