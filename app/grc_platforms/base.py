@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from app.grc_platforms.crosswalk import QUALITY_CONFIDENCE, resolve_best
+
 
 @dataclass
 class ControlAttestation:
@@ -27,6 +29,7 @@ class ControlAttestation:
     frameworks: dict[str, list[str]]    # their framework refs (SOC2, ISO27001, …)
     confidence: float                   # 0..1 — how strongly we trust this mapping
     title: str = ""
+    mapping_reason: str = ""            # human-readable why-this-maps (or why not)
     raw: dict[str, Any] = field(default_factory=dict)
 
     def to_telemetry(self) -> dict[str, Any]:
@@ -41,6 +44,7 @@ class ControlAttestation:
             "frameworks": self.frameworks,
             "confidence": self.confidence,
             "title": self.title,
+            "mapping_reason": self.mapping_reason,
             "mapped": self.comp_lens_control_id is not None,
         }
 
@@ -70,9 +74,45 @@ class PlatformProfile:
     field_frameworks: str | None = None
     # status normalization: their status string -> ours
     status_map: dict[str, str] = field(default_factory=dict)
-    # taxonomy crosswalk: their control ref -> our control id
+    # taxonomy crosswalk: their control ref -> our control id (legacy per-platform
+    # dict; profiles now prefer `speaks_frameworks` + the shared crosswalk instead).
     control_crosswalk: dict[str, str] = field(default_factory=dict)
+    # frameworks this platform speaks — the shared crosswalk does the translation.
+    speaks_frameworks: list[str] = field(default_factory=list)
+    version: str = ""
+    source: str = "builtin"             # "builtin" | "yaml:<file>"
     notes: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], source: str = "builtin") -> PlatformProfile:
+        """Build a profile from a declarative dict (a YAML doc or inline config).
+
+        Only the platform's API shape + which frameworks it speaks are required;
+        every optional key falls back to a sensible default so a minimal profile
+        stays valid. Unknown keys are ignored so config can carry extra metadata.
+        """
+        return cls(
+            platform=str(data["platform"]),
+            name=str(data.get("name", data["platform"])),
+            base_url=str(data.get("base_url", "")),
+            auth_method=str(data.get("auth_method", "api_key")),
+            env_vars=list(data.get("env_vars", []) or []),
+            results_path=str(data.get("results_path", "")),
+            items_key=data.get("items_key"),
+            pagination_key=data.get("pagination_key"),
+            field_test_id=str(data.get("field_test_id", "id")),
+            field_status=str(data.get("field_status", "status")),
+            field_control_ref=str(data.get("field_control_ref", "control")),
+            field_updated=data.get("field_updated"),
+            field_title=data.get("field_title"),
+            field_frameworks=data.get("field_frameworks"),
+            status_map=dict(data.get("status_map", {}) or {}),
+            control_crosswalk=dict(data.get("control_crosswalk", {}) or {}),
+            speaks_frameworks=list(data.get("speaks_frameworks", []) or []),
+            version=str(data.get("version", "")),
+            source=source,
+            notes=str(data.get("notes", "")),
+        )
 
 
 def dotted(obj: Any, path: str | None, default: Any = None) -> Any:
@@ -135,10 +175,10 @@ class GRCPlatformConnector(abc.ABC):
         status = p.status_map.get(raw_status, raw_status if raw_status in
                                   ("pass", "fail", "error", "not_applicable") else "error")
         control_ref = str(dotted(item, p.field_control_ref, "") or "")
-        cl_control = p.control_crosswalk.get(control_ref)
+        cl_control, base_conf, reason = self._resolve_control(control_ref)
         # confidence: mapped + fresh = high; unmapped or stale = lower
         freshness = self._freshness_days(dotted(item, p.field_updated))
-        confidence = 0.9 if cl_control else 0.4
+        confidence = base_conf
         if freshness is not None and freshness > 30:
             confidence *= 0.7
         frameworks = dotted(item, p.field_frameworks, {}) or {}
@@ -149,7 +189,31 @@ class GRCPlatformConnector(abc.ABC):
             external_control_ref=control_ref, comp_lens_control_id=cl_control,
             status=status, evidence_freshness_days=freshness,
             frameworks=frameworks, confidence=round(confidence, 2),
-            title=str(dotted(item, p.field_title, "") or ""), raw=item)
+            title=str(dotted(item, p.field_title, "") or ""),
+            mapping_reason=reason, raw=item)
+
+    def _resolve_control(self, control_ref: str) -> tuple[str | None, float, str]:
+        """Map a platform control ref to a Comp-Lens control id.
+
+        Precedence: an explicit per-platform crosswalk entry (legacy, highest
+        confidence) wins; otherwise the shared standards crosswalk translates via
+        the frameworks the platform speaks. Unmapped refs are kept, not dropped.
+        Returns (control_id | None, base_confidence, mapping_reason).
+        """
+        p = self.profile
+        if not control_ref:
+            return None, 0.4, "unmapped: no control reference on this result"
+        declared = p.control_crosswalk.get(control_ref)
+        if declared:
+            return declared, 0.9, f"exact match: platform-declared mapping {control_ref}→{declared}"
+        mapping, fw = resolve_best(control_ref, p.speaks_frameworks or None)
+        if mapping:
+            conf = QUALITY_CONFIDENCE.get(mapping.quality, 0.5)
+            return (mapping.control_id, conf,
+                    f"{mapping.quality} match via {fw}: {control_ref}→{mapping.control_id}"
+                    f" ({mapping.note})")
+        fws = ", ".join(p.speaks_frameworks) or "none declared"
+        return None, 0.4, f"unmapped: no crosswalk entry for {control_ref} (frameworks: {fws})"
 
     @staticmethod
     def _freshness_days(ts: Any) -> int | None:

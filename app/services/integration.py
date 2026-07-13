@@ -27,14 +27,38 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ControlStatus, Finding, Lifecycle, Severity
+from app.models import ControlStatus, Finding, Lifecycle, Posture, Severity
 
 _SEV_MAP = {"critical": Severity.CRITICAL, "high": Severity.HIGH,
             "medium": Severity.MEDIUM, "low": Severity.LOW, "info": Severity.INFO}
 _VULN_CONTROLS = {"RA-5", "SI-2", "SI-3", "SC-7", "CA-7", "RA-3"}
 
 POLICY_SOURCE = "policy-as-code"
+# Materialized-posture source tag read by the unified-trust "policy" lane
+# (app.services.trust_telemetry._policy_lane). Kept uppercase to match that reader.
+POLICY_POSTURE_SOURCE = "POLICY-AS-CODE"
 AIGOV_CATEGORY = "ai_governance"
+
+
+def _upsert_policy_posture(db: Session, tenant_id: str, control_id: str,
+                           status: ControlStatus, severity: Severity, finding_id: str) -> None:
+    """Materialize the policy verdict into Posture so the unified-trust policy
+    lane can read it. One row per (tenant, control) for the POLICY-AS-CODE source."""
+    p = db.execute(select(Posture).where(
+        Posture.tenant_id == tenant_id, Posture.control_id == control_id,
+        Posture.source_system == POLICY_POSTURE_SOURCE, Posture.asset_key == "",
+    )).scalar_one_or_none()
+    if p:
+        p.prev_status = p.status
+        p.status = status
+        p.severity = severity
+        p.last_finding_id = finding_id
+        p.updated_at = datetime.now(UTC)
+    else:
+        db.add(Posture(
+            tenant_id=tenant_id, control_id=control_id, source_system=POLICY_POSTURE_SOURCE,
+            asset_id=None, asset_key="", status=status, prev_status=None,
+            severity=severity, last_finding_id=finding_id))
 
 
 # ── 1. POLICY ENGINE → FINDINGS ──────────────────────────────────────
@@ -70,16 +94,20 @@ def evaluate_policies_to_findings(db: Session, tenant_id: str,
             existing.updated_at = datetime.now(UTC)
             if cstatus == ControlStatus.PASS:
                 existing.lifecycle = Lifecycle.RESOLVED
+            finding_id = existing.finding_id
             updated += 1
         else:
+            finding_id = str(uuid.uuid4())
             db.add(Finding(
-                finding_id=str(uuid.uuid4()), tenant_id=tenant_id, run_id=run_id,
+                finding_id=finding_id, tenant_id=tenant_id, run_id=run_id,
                 framework=framework, control_id=d.control_id, source_system=POLICY_SOURCE,
                 status=cstatus, severity=sev,
                 lifecycle=Lifecycle.OPEN if cstatus == ControlStatus.FAIL else Lifecycle.RESOLVED,
                 description=d.reason,
                 remediation={"obligations": d.obligations, "rules": d.rules}))
             created += 1
+        # materialize posture for the unified-trust policy lane
+        _upsert_policy_posture(db, tenant_id, d.control_id, cstatus, sev, finding_id)
     db.commit()
     failing = [d.control_id for d in decisions if d.status == "fail"]
     return {"run_id": run_id, "evaluated": len(decisions),

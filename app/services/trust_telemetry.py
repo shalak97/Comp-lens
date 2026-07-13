@@ -172,13 +172,19 @@ def _enforcement_lane() -> dict[str, dict[str, Any]]:
 
 
 def _followthrough_lane(db: Session, tenant_id: str) -> dict[str, dict[str, Any]]:
-    """Did dispatched obligations for a control's violations actually run?"""
+    """Did dispatched obligations for a control's violations actually run?
+
+    Optional plane: the obligations ledger may not be imported OR its table may
+    not exist yet (no migration in some deployments), so any failure degrades to
+    an absent lane rather than breaking the whole composite.
+    """
     try:
         from app.policy_models import ObligationDispatch
-    except Exception:  # noqa: BLE001 — obligations plane optional
+        rows = db.execute(select(ObligationDispatch).where(
+            ObligationDispatch.tenant_id == tenant_id)).scalars().all()
+    except Exception:  # noqa: BLE001 — obligations plane optional (module or table absent)
+        db.rollback()
         return {}
-    rows = db.execute(select(ObligationDispatch).where(
-        ObligationDispatch.tenant_id == tenant_id)).scalars().all()
     by_ctrl: dict[str, list[ObligationDispatch]] = {}
     for r in rows:
         if r.control_id:
@@ -193,19 +199,24 @@ def _followthrough_lane(db: Session, tenant_id: str) -> dict[str, dict[str, Any]
 
 
 def _drift_signal(db: Session, tenant_id: str) -> dict[str, Any]:
-    """Tenant-level: recent external changes detected by the crawlers."""
+    """Tenant-level: recent external changes detected by the crawlers.
+
+    Optional plane (see _followthrough_lane): missing module or table degrades to
+    "no drift" instead of failing the composite.
+    """
     try:
         from app.crawler_models import CrawlResult, CrawlTarget
-    except Exception:  # noqa: BLE001
+        cutoff = _now() - timedelta(days=_DRIFT_WINDOW_DAYS)
+        rows = db.execute(select(CrawlResult).where(
+            CrawlResult.tenant_id == tenant_id,
+            CrawlResult.status == "changed").order_by(desc(CrawlResult.fetched_at)).limit(50)
+        ).scalars().all()
+        targets = {t.id: t for t in db.execute(select(CrawlTarget).where(
+            CrawlTarget.tenant_id == tenant_id)).scalars().all()}
+    except Exception:  # noqa: BLE001 — crawler plane optional (module or table absent)
+        db.rollback()
         return {"recent_changes": 0}
-    cutoff = _now() - timedelta(days=_DRIFT_WINDOW_DAYS)
-    rows = db.execute(select(CrawlResult).where(
-        CrawlResult.tenant_id == tenant_id,
-        CrawlResult.status == "changed").order_by(desc(CrawlResult.fetched_at)).limit(50)
-    ).scalars().all()
     recent = [r for r in rows if _aware(r.fetched_at) and _aware(r.fetched_at) >= cutoff]
-    targets = {t.id: t for t in db.execute(select(CrawlTarget).where(
-        CrawlTarget.tenant_id == tenant_id)).scalars().all()}
     detail = []
     for r in recent[:10]:
         t = targets.get(r.target_id)
