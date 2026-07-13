@@ -1,0 +1,18 @@
+# Ruff configuration for Comp-Lens 2.0 (FastAPI)
+# Minimum supported Python version.
+target-version = "py311"
+line-length = 100
+indent-width = 4
+extend-exclude = [".venv", "alembic/versions", "build", "dist"]
+[lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM"]
+ignore = ["E501", "B008"]
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["B", "SIM"]
+[lint.isort]
+known-first-party = ["app", "cli"]
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
