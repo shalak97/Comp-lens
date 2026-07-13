@@ -16,7 +16,6 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///./test_edge.db")
 os.environ.setdefault("EVIDENCE_LOCAL_PATH", "./test_edge_evidence")
 
 import concurrent.futures
-import json
 
 import pytest
 from fastapi.testclient import TestClient

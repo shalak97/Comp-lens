@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from datetime import datetime, timezone
-from typing import Optional, Tuple
+from datetime import UTC, datetime
 
 
 def _key() -> bytes:
@@ -30,14 +29,14 @@ def _canon(dt: datetime) -> str:
     """Canonical UTC, second-precision string — stable across DB round-trips
     (SQLite can drop tzinfo / microseconds, which would otherwise break HMAC)."""
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%S")
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def sign(content_hash: str, tenant_id: str, doc_id: str,
-         signed_at: Optional[datetime] = None) -> Tuple[str, datetime]:
-    signed_at = (signed_at or datetime.now(timezone.utc)).replace(microsecond=0)
-    msg = f"{content_hash}|{_canon(signed_at)}|{tenant_id}|{doc_id}".encode("utf-8")
+         signed_at: datetime | None = None) -> tuple[str, datetime]:
+    signed_at = (signed_at or datetime.now(UTC)).replace(microsecond=0)
+    msg = f"{content_hash}|{_canon(signed_at)}|{tenant_id}|{doc_id}".encode()
     sig = hmac.new(_key(), msg, hashlib.sha256).hexdigest()
     return sig, signed_at
 
@@ -48,6 +47,6 @@ def verify(content_hash: str, tenant_id: str, doc_id: str,
         return False
     expected = hmac.new(
         _key(),
-        f"{content_hash}|{_canon(signed_at)}|{tenant_id}|{doc_id}".encode("utf-8"),
+        f"{content_hash}|{_canon(signed_at)}|{tenant_id}|{doc_id}".encode(),
         hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)

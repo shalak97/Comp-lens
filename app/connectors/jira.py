@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -54,8 +54,8 @@ class JiraConnector(BaseConnector):
             return False
 
     def collect_telemetry(
-        self, control_id: str, asset_id: Optional[str], params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
         if control_id != "CM-3":
             raise ConnectorError(f"Jira connector does not support control {control_id}")
 

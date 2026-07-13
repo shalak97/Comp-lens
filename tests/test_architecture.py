@@ -1,13 +1,17 @@
 """Tests for the architecture upgrade: posture, OPA engine, ingestion, OSCAL."""
 from __future__ import annotations
+
 import os
+
 os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_arch.db")
 os.environ.setdefault("EVIDENCE_LOCAL_PATH", "./test_arch_ev")
 
 import importlib
+
 import pytest
 from fastapi.testclient import TestClient
+
 from app.database import init_db
 
 
@@ -21,9 +25,10 @@ def client():
 
 # ── Posture current-state table ──
 def test_posture_maintained_and_summary_reads_it(client):
+    from sqlalchemy import select
+
     from app.database import SessionLocal
     from app.models import Posture
-    from sqlalchemy import select
     client.post("/assessments", json={"tenant_id": "ps", "control_id": "SC-7",
         "source_system": "DEMO", "asset_id": "a", "idempotency_key": "p1"})
     db = SessionLocal()
@@ -38,9 +43,10 @@ def test_reassessment_updates_posture_not_duplicates(client):
         "source_system": "DEMO", "asset_id": "x", "idempotency_key": "a1"})
     client.post("/assessments", json={"tenant_id": "ps2", "control_id": "SC-28",
         "source_system": "DEMO", "asset_id": "x", "params": {"fail": True}, "idempotency_key": "a2"})
+    from sqlalchemy import select
+
     from app.database import SessionLocal
     from app.models import Posture
-    from sqlalchemy import select
     db = SessionLocal()
     rows = db.execute(select(Posture).where(Posture.tenant_id == "ps2")).scalars().all()
     db.close()
@@ -59,12 +65,14 @@ def test_drift_from_posture(client):
 
 def test_summary_query_count_constant_with_posture(client):
     from sqlalchemy import event
+
     from app.database import engine
     for i in range(15):
         client.post("/assessments", json={"tenant_id": "pc", "control_id": "SC-7",
             "source_system": "DEMO", "asset_id": f"b{i}"})
     n = {"c": 0}
-    fn = lambda *a: n.__setitem__("c", n["c"] + 1)
+    def fn(*a):
+        return n.__setitem__("c", n["c"] + 1)
     event.listen(engine, "before_cursor_execute", fn)
     try:
         client.get("/summary?tenant_id=pc")
@@ -86,7 +94,6 @@ def test_opa_engine_maps_decision(monkeypatch):
         def raise_for_status(self): pass
         def json(self): return {"result": {"status": "fail", "reason": "from OPA"}}
     monkeypatch.setattr(pe, "_build_engine", lambda: eng)
-    import requests
     monkeypatch.setattr("requests.post", lambda *a, **k: R())
     status, reason, sev = eng.evaluate("SC-7", {"public_access_blocked": False})
     assert status.value == "fail" and reason == "from OPA"
@@ -128,8 +135,8 @@ def test_ingested_findings_feed_posture_and_summary(client):
 
 
 def test_asff_mapper_unit():
-    from app.services.ingestion import IngestionService
     from app.database import SessionLocal
+    from app.services.ingestion import IngestionService
     svc = IngestionService(SessionLocal())
     asff = {"Id": "arn:finding/1", "Title": "S3 bucket is public",
             "Compliance": {"Status": "FAILED", "SecurityControlId": "S3.2"},

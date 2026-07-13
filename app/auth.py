@@ -21,7 +21,6 @@ import hmac
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict, Set
 
 from fastapi import Header, HTTPException, status
 
@@ -33,7 +32,7 @@ ALL = "*"
 @dataclass
 class Principal:
     key_id: str          # masked key id for logging
-    tenants: Set[str]    # set of allowed tenant ids, or {"*"}
+    tenants: set[str]    # set of allowed tenant ids, or {"*"}
 
     @property
     def is_admin(self) -> bool:
@@ -43,9 +42,9 @@ class Principal:
         return self.is_admin or tenant_id in self.tenants
 
 
-def _parse_keys() -> Dict[str, Set[str]]:
+def _parse_keys() -> dict[str, set[str]]:
     raw = os.getenv("COMP_LENS_API_KEYS", "")
-    mapping: Dict[str, Set[str]] = {}
+    mapping: dict[str, set[str]] = {}
     for entry in raw.split(";"):
         entry = entry.strip()
         if not entry:

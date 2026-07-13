@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.models import ControlAttestation, EvidenceConceptHit
 from app.services import evidence_graph as evg
 
-_POLICY: Optional[dict] = None
+_POLICY: dict | None = None
 
 
 def policy() -> dict:
@@ -32,7 +32,7 @@ def policy() -> dict:
     return _POLICY
 
 
-def _control_concepts(control_id: str, framework: str) -> List[str]:
+def _control_concepts(control_id: str, framework: str) -> list[str]:
     """concept ids whose lexicon mapping includes this control."""
     out = []
     for c in evg.lexicon():
@@ -50,17 +50,17 @@ def _effective_rules(control_id: str, framework: str, concept_id: str) -> dict:
     return rules
 
 
-def _age_days(dt) -> Optional[float]:
+def _age_days(dt) -> float | None:
     if not dt:
         return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
+        dt = dt.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - dt).total_seconds() / 86400.0
 
 
-def evaluate(db: Session, tenant_id: str, framework: str, control_id: str) -> Dict[str, Any]:
+def evaluate(db: Session, tenant_id: str, framework: str, control_id: str) -> dict[str, Any]:
     concepts = _control_concepts(control_id, framework)
-    hits: List[EvidenceConceptHit] = []
+    hits: list[EvidenceConceptHit] = []
     if concepts:
         hits = list(db.execute(select(EvidenceConceptHit).where(
             EvidenceConceptHit.tenant_id == tenant_id,
@@ -104,7 +104,7 @@ def _facts(control_id, framework, hits, att):
     }
 
 
-def _evaluate_builtin(control_id, framework, hits, att) -> Dict[str, Any]:
+def _evaluate_builtin(control_id, framework, hits, att) -> dict[str, Any]:
     reasons, qualifying = [], []
     for h in hits:
         r = _effective_rules(control_id, framework, h.concept_id)
@@ -113,7 +113,8 @@ def _evaluate_builtin(control_id, framework, hits, att) -> Dict[str, Any]:
         eff_conf = float(h.confidence or 0) * decay
         ok = True
         if r["require_confirmation"] and not h.confirmed:
-            ok = False; reasons.append(f"{h.concept_id}: hit not confirmed")
+            ok = False
+            reasons.append(f"{h.concept_id}: hit not confirmed")
         if eff_conf < r["min_confidence"]:
             if decay < 1.0:
                 reasons.append(f"{h.concept_id}: decayed confidence {eff_conf:.2f} (age {age:.0f}d) < {r['min_confidence']}")
@@ -121,7 +122,8 @@ def _evaluate_builtin(control_id, framework, hits, att) -> Dict[str, Any]:
                 reasons.append(f"{h.concept_id}: confidence {h.confidence:.2f} < {r['min_confidence']}")
             ok = False
         if r["max_age_days"] is not None and age is not None and age > r["max_age_days"]:
-            ok = False; reasons.append(f"{h.concept_id}: evidence is {age:.0f} days old (> {r['max_age_days']})")
+            ok = False
+            reasons.append(f"{h.concept_id}: evidence is {age:.0f} days old (> {r['max_age_days']})")
         if ok:
             need_owner = r["require_attestation_owner"]
             if need_owner and not (att and att.owner):
@@ -165,9 +167,10 @@ def _decay_factor(age_days):
     return max(0.0, 1.0 - (age_days - full) / float(zero - full))
 
 
-def _evaluate_opa(opa_url: str, facts: dict) -> Optional[dict]:
+def _evaluate_opa(opa_url: str, facts: dict) -> dict | None:
     try:
         import requests
+
         from app.config import settings
         pkg = getattr(settings, "opa_package", "evidence_compliance")
         url = opa_url.rstrip("/") + f"/v1/data/{pkg}/decision"

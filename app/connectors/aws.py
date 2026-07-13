@@ -18,8 +18,8 @@ Supported controls (control_id -> what it checks):
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from app.config import settings
 from app.connectors.base import Asset, BaseConnector, ConnectorError
@@ -36,7 +36,7 @@ class AWSConnector(BaseConnector):
         except ImportError as exc:  # pragma: no cover
             raise ConnectorError("boto3 is not installed.") from exc
 
-        kwargs: Dict[str, Any] = {"region_name": settings.aws_region}
+        kwargs: dict[str, Any] = {"region_name": settings.aws_region}
         if settings.aws_access_key_id and settings.aws_secret_access_key:
             kwargs["aws_access_key_id"] = settings.aws_access_key_id
             kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
@@ -53,8 +53,8 @@ class AWSConnector(BaseConnector):
 
     # ── telemetry ──
     def collect_telemetry(
-        self, control_id: str, asset_id: Optional[str], params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
         try:
             if control_id in ("AC-2-7", "AC-2-3"):
                 return self._iam_user_telemetry(asset_id or params.get("username"))
@@ -69,7 +69,7 @@ class AWSConnector(BaseConnector):
             raise ConnectorError(f"AWS API error: {exc}") from exc
 
     # ── IAM ──
-    def _iam_user_telemetry(self, username: Optional[str]) -> Dict[str, Any]:
+    def _iam_user_telemetry(self, username: str | None) -> dict[str, Any]:
         if not username:
             raise ConnectorError("IAM control requires 'username' (or asset_id).")
         iam = self._session.client("iam")
@@ -83,7 +83,7 @@ class AWSConnector(BaseConnector):
             user = iam.get_user(UserName=username)["User"]
             pwd_last = user.get("PasswordLastUsed")
             if pwd_last:
-                days_since = (datetime.now(timezone.utc) - pwd_last).days
+                days_since = (datetime.now(UTC) - pwd_last).days
         except Exception:  # noqa: BLE001
             pass
 
@@ -95,7 +95,7 @@ class AWSConnector(BaseConnector):
         }
 
     # ── S3 ──
-    def _s3_bucket_telemetry(self, bucket: Optional[str]) -> Dict[str, Any]:
+    def _s3_bucket_telemetry(self, bucket: str | None) -> dict[str, Any]:
         if not bucket:
             raise ConnectorError("S3 control requires 'bucket' (or asset_id).")
         s3 = self._session.client("s3")
@@ -132,7 +132,7 @@ class AWSConnector(BaseConnector):
         }
 
     # ── CloudTrail ──
-    def _cloudtrail_telemetry(self) -> Dict[str, Any]:
+    def _cloudtrail_telemetry(self) -> dict[str, Any]:
         ct = self._session.client("cloudtrail")
         trails = ct.describe_trails().get("trailList", [])
         logging_on = False
@@ -147,8 +147,8 @@ class AWSConnector(BaseConnector):
         return {"logging_enabled": logging_on, "owner": "secops-team"}
 
     # ── discovery ──
-    def discover_assets(self, params: Dict[str, Any]) -> List[Asset]:
-        assets: List[Asset] = []
+    def discover_assets(self, params: dict[str, Any]) -> list[Asset]:
+        assets: list[Asset] = []
         try:
             iam = self._session.client("iam")
             for u in iam.list_users().get("Users", []):

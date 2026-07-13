@@ -21,11 +21,20 @@ evidence ledger in production. No auth here: in production require mTLS or a
 bearer token from each PDP (see README).
 """
 from __future__ import annotations
-import gzip, hashlib, io, json, tarfile, time, os
-from collections import deque, defaultdict
-from datetime import datetime, timezone
+
+import contextlib
+import gzip
+import hashlib
+import io
+import json
+import os
+import tarfile
+import time
+from collections import defaultdict, deque
+from datetime import UTC, datetime
 from pathlib import Path
-from fastapi import FastAPI, Request, Response, HTTPException
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 POLICY_DIR = Path(os.environ.get("COMPLENS_POLICY_DIR", Path(__file__).parent / "policy"))
@@ -45,7 +54,7 @@ BOOT = time.time()
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ----------------------------------------------------------------------------
@@ -147,14 +156,12 @@ def _ingest_entry(e: dict) -> dict | None:
 async def decision_logs(request: Request):
     raw = await request.body()
     if request.headers.get("content-encoding", "").lower() == "gzip" or raw[:2] == b"\x1f\x8b":
-        try:
+        with contextlib.suppress(OSError):
             raw = gzip.decompress(raw)
-        except OSError:
-            pass
     try:
         payload = json.loads(raw or b"[]")
-    except json.JSONDecodeError:
-        raise HTTPException(400, "invalid decision log payload")
+    except json.JSONDecodeError as e:
+        raise HTTPException(400, "invalid decision log payload") from e
     entries = payload if isinstance(payload, list) else [payload]
     ingested = sum(1 for e in entries if _ingest_entry(e) is not None)
     return {"received": len(entries), "ingested": ingested}
@@ -178,7 +185,7 @@ def status():
             totals[k] += c.get(k, 0)
     live_cut = time.time() - 120
     peps = []
-    for n, p in PEPS.items():
+    for _n, p in PEPS.items():
         last = p.get("last_seen")
         online = bool(last and datetime.fromisoformat(last).timestamp() > live_cut)
         peps.append({**p, "online": online})

@@ -14,14 +14,12 @@ Supported controls:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-
-import requests
+from datetime import UTC, datetime
+from typing import Any
 
 from app.config import settings
 from app.connectors.base import Asset, BaseConnector, ConnectorError
-from app.connectors.http_client import ResilientClient, paginate
+from app.connectors.http_client import ResilientClient
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +51,8 @@ class OktaConnector(BaseConnector):
             return False
 
     def collect_telemetry(
-        self, control_id: str, asset_id: Optional[str], params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
         user_ref = asset_id or params.get("user")
         if not user_ref:
             raise ConnectorError("Okta control requires asset_id (userId or login).")
@@ -75,7 +73,7 @@ class OktaConnector(BaseConnector):
             days = None
             if last_login:
                 dt = datetime.fromisoformat(last_login.replace("Z", "+00:00"))
-                days = (datetime.now(timezone.utc) - dt).days
+                days = (datetime.now(UTC) - dt).days
             return {
                 "days_since_last_login": days,
                 "principal": user.get("profile", {}).get("login"),
@@ -84,8 +82,8 @@ class OktaConnector(BaseConnector):
 
         raise ConnectorError(f"Okta connector does not support control {control_id}")
 
-    def discover_assets(self, params: Dict[str, Any]) -> List[Asset]:
-        out: List[Asset] = []
+    def discover_assets(self, params: dict[str, Any]) -> list[Asset]:
+        out: list[Asset] = []
         try:
             for u in self._get("/api/v1/users?limit=50"):
                 out.append(

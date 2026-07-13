@@ -16,7 +16,7 @@ which path. Remediations baked in:
 from __future__ import annotations
 
 import collections
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -36,7 +36,7 @@ def _level(sev: float, edge_type: str) -> str:
     return "at_risk"
 
 
-def _resolve_seeds(framework: str, changes: List[Dict[str, Any]]):
+def _resolve_seeds(framework: str, changes: list[dict[str, Any]]):
     """Map each requested change onto controls present in the NIST-keyed graph.
 
     Remediations:
@@ -46,8 +46,8 @@ def _resolve_seeds(framework: str, changes: List[Dict[str, Any]]):
       * warns when a seed has no downstream dependencies (so an empty blast
         radius is never silently misread as "safe")
     """
-    seeds: Dict[str, float] = {}
-    warnings: List[str] = []
+    seeds: dict[str, float] = {}
+    warnings: list[str] = []
     for ch in changes:
         cid = ch.get("control_id", "").strip()
         if not cid:
@@ -83,16 +83,16 @@ def _resolve_seeds(framework: str, changes: List[Dict[str, Any]]):
     return seeds, warnings
 
 
-def simulate(framework: str, changes: List[Dict[str, Any]],
+def simulate(framework: str, changes: list[dict[str, Any]],
              max_depth: int = 3, min_weight: float = 0.0,
-             exclude_edges: Optional[List[List[str]]] = None) -> Dict[str, Any]:
+             exclude_edges: list[list[str]] | None = None) -> dict[str, Any]:
     """changes: [{control_id, state}] (state failed|degraded). Returns blast radius."""
     max_depth = max(0, min(int(max_depth), 10))   # clamp: safety against runaway traversal
     excl = {tuple(e) for e in (exclude_edges or []) if isinstance(e, (list, tuple)) and len(e) == 2}
     seeds, warnings = _resolve_seeds(framework, changes)
 
     # best impact per control: {cid: (severity, level, path, edge)}
-    impact: Dict[str, Dict[str, Any]] = {}
+    impact: dict[str, dict[str, Any]] = {}
     # BFS frontier of (control, severity, depth, path) — only hard-failed nodes expand
     frontier: collections.deque = collections.deque(
         (cid, sev, 0, [cid]) for cid, sev in seeds.items())
@@ -126,7 +126,7 @@ def simulate(framework: str, changes: List[Dict[str, Any]],
     cascade = sorted(impact.values(), key=lambda x: (-x["severity"], x["control_id"]))
 
     # blast radius summary
-    by_level: Dict[str, int] = {}
+    by_level: dict[str, int] = {}
     for c in cascade:
         by_level[c["impact"]] = by_level.get(c["impact"], 0) + 1
 
@@ -159,7 +159,7 @@ def _explain(changes, cascade) -> str:
     return " ".join(parts)
 
 
-def fragility(db: Session, tenant_id: str, framework: str, control_id: str) -> Dict[str, Any]:
+def fragility(db: Session, tenant_id: str, framework: str, control_id: str) -> dict[str, Any]:
     """Is this control green-but-structurally-at-risk? Checks its hard prerequisites'
     current compliance state via the evidence policy engine."""
     from app.services import evidence_policy

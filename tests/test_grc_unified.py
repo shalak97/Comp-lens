@@ -1,9 +1,9 @@
 """Unified trust portal: standards crosswalk + YAML-loadable profiles + transparency."""
 import os
-import pytest
-from app.grc_platforms.crosswalk import resolve, resolve_best, CROSSWALKS
-from app.grc_platforms.loader import load_all_profiles, load_yaml_profiles
+
 from app.grc_platforms.base import GRCPlatformConnector, PlatformProfile
+from app.grc_platforms.crosswalk import resolve, resolve_best
+from app.grc_platforms.loader import load_all_profiles, load_yaml_profiles
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:////tmp/test_uni.db")
 os.environ.setdefault("APP_ENV", "test")

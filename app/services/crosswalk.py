@@ -7,7 +7,7 @@ proving a concept satisfies the control in every framework that concept maps to.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import Any
 
 from app.services import evidence_graph as evg
 
@@ -15,7 +15,7 @@ from app.services import evidence_graph as evg
 @lru_cache(maxsize=1)
 def _index():
     """Build {(.framework,control): set(concepts)} and concept->controls."""
-    ctrl_concepts: Dict[tuple, set] = {}
+    ctrl_concepts: dict[tuple, set] = {}
     for c in evg.lexicon():
         for m in c.get("controls", []):
             key = (m["framework"], m["control_id"])
@@ -23,7 +23,7 @@ def _index():
     return ctrl_concepts
 
 
-def mapped_controls(control_id: str, framework: str) -> List[Dict[str, Any]]:
+def mapped_controls(control_id: str, framework: str) -> list[dict[str, Any]]:
     """Controls in OTHER frameworks that share >=1 concept with this control."""
     idx = _index()
     src = idx.get((framework, control_id), set())

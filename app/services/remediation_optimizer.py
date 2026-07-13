@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import os
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -68,7 +68,7 @@ def _downstream_hard(control_id: str, max_depth: int = 4) -> set:
     return seen
 
 
-def _effort(cid: str, available_connectors: List[str]) -> Dict[str, Any]:
+def _effort(cid: str, available_connectors: list[str]) -> dict[str, Any]:
     kb = _kb()["effort"]
     fam = _family(cid)
     base = kb.get("family_effort", {}).get(fam, 2)
@@ -87,7 +87,7 @@ def _effort(cid: str, available_connectors: List[str]) -> Dict[str, Any]:
     return {"band": band, "score": base, "automatable": covered, "reasons": reasons}
 
 
-def _failing_from_attestations(db: Session, tenant_id: str, framework: str) -> List[str]:
+def _failing_from_attestations(db: Session, tenant_id: str, framework: str) -> list[str]:
     from app.models import ControlAttestation
     rows = db.execute(select(ControlAttestation).where(
         ControlAttestation.tenant_id == tenant_id,
@@ -96,8 +96,8 @@ def _failing_from_attestations(db: Session, tenant_id: str, framework: str) -> L
 
 
 def plan(db: Session, tenant_id: str, framework: str,
-         failing_controls: Optional[List[str]] = None,
-         available_connectors: Optional[List[str]] = None) -> Dict[str, Any]:
+         failing_controls: list[str] | None = None,
+         available_connectors: list[str] | None = None) -> dict[str, Any]:
     kb = _kb()
     failing = [c.upper() for c in (failing_controls or [])]
     if not failing:
@@ -140,7 +140,7 @@ def plan(db: Session, tenant_id: str, framework: str,
 
 
 def detail(db: Session, tenant_id: str, framework: str, control_id: str,
-           available_connectors: Optional[List[str]] = None) -> Dict[str, Any]:
+           available_connectors: list[str] | None = None) -> dict[str, Any]:
     kb = _kb()
     cid = control_id.upper()
     downstream = _downstream_hard(cid)

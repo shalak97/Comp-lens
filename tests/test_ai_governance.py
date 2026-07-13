@@ -1,8 +1,10 @@
 """AI governance: PET assessment + dynamic privacy-risk scoring + EU AI Act."""
 import os
+
 import pytest
 from fastapi.testclient import TestClient
-from app.services.ai_governance import assess_pet, compute_privacy_risk, ai_act_obligations
+
+from app.services.ai_governance import ai_act_obligations, assess_pet, compute_privacy_risk
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:////tmp/test_aigov.db")
 os.environ.setdefault("APP_ENV", "test")

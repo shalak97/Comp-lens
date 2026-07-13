@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
-from app.policy_as_code.evaluator import SafeEvaluator, PolicyExpressionError
+from app.policy_as_code.evaluator import PolicyExpressionError, SafeEvaluator
 
 _SEV_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -39,12 +39,12 @@ class PolicyDecision:
     status: str                          # pass | fail | error
     severity: str
     reason: str
-    rules: List[Dict[str, Any]] = field(default_factory=list)
-    obligations: List[str] = field(default_factory=list)
-    requires: List[str] = field(default_factory=list)
-    frameworks: Dict[str, List[str]] = field(default_factory=dict)
+    rules: list[dict[str, Any]] = field(default_factory=list)
+    obligations: list[str] = field(default_factory=list)
+    requires: list[str] = field(default_factory=list)
+    frameworks: dict[str, list[str]] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"control_id": self.control_id, "status": self.status,
                 "severity": self.severity, "reason": self.reason,
                 "rules": self.rules, "obligations": self.obligations,
@@ -56,20 +56,20 @@ class Policy:
     control_id: str
     title: str
     base_severity: str
-    frameworks: Dict[str, List[str]]
-    params: Dict[str, Any]
-    rules: List[Dict[str, Any]]                 # [{id, when, else_fail, severity}]
-    severity_escalation: List[Dict[str, Any]]   # [{when, severity}]
-    obligations: Dict[str, List[str]]           # {on_fail: [...]}
-    requires: List[str]
+    frameworks: dict[str, list[str]]
+    params: dict[str, Any]
+    rules: list[dict[str, Any]]                 # [{id, when, else_fail, severity}]
+    severity_escalation: list[dict[str, Any]]   # [{when, severity}]
+    obligations: dict[str, list[str]]           # {on_fail: [...]}
+    requires: list[str]
     description: str = ""
     source_file: str = ""
-    tests: List[Dict[str, Any]] = field(default_factory=list)
+    tests: list[dict[str, Any]] = field(default_factory=list)
 
-    def evaluate(self, evidence: Dict[str, Any],
-                 dep_status: Optional[Dict[str, str]] = None) -> PolicyDecision:
+    def evaluate(self, evidence: dict[str, Any],
+                 dep_status: dict[str, str] | None = None) -> PolicyDecision:
         dep_status = dep_status or {}
-        rule_results: List[RuleResult] = []
+        rule_results: list[RuleResult] = []
         try:
             for r in self.rules:
                 ev = SafeEvaluator(evidence, self.params)
@@ -103,9 +103,10 @@ class Policy:
                 sev = r.severity
         for esc in self.severity_escalation:
             try:
-                if SafeEvaluator(evidence, self.params).eval(esc["when"]):
-                    if _SEV_ORDER.get(esc.get("severity", "high"), 0) > _SEV_ORDER.get(sev, 0):
-                        sev = esc["severity"]
+                if SafeEvaluator(evidence, self.params).eval(esc["when"]) and _SEV_ORDER.get(
+                    esc.get("severity", "high"), 0
+                ) > _SEV_ORDER.get(sev, 0):
+                    sev = esc["severity"]
             except PolicyExpressionError:
                 pass
 
@@ -124,7 +125,7 @@ class PolicyValidationError(Exception):
     pass
 
 
-def load_policy(data: Dict[str, Any], source: str = "") -> Policy:
+def load_policy(data: dict[str, Any], source: str = "") -> Policy:
     if "control" not in data:
         raise PolicyValidationError(f"policy missing 'control' ({source})")
     # normalize: pass_when shorthand → a single rule
@@ -159,7 +160,7 @@ def load_policy(data: Dict[str, Any], source: str = "") -> Policy:
     )
 
 
-def _validate_expr(expr: str, control: str, params: Dict[str, Any]) -> None:
+def _validate_expr(expr: str, control: str, params: dict[str, Any]) -> None:
     try:
         SafeEvaluator({}, params).eval(expr)
     except PolicyExpressionError as exc:
@@ -167,12 +168,12 @@ def _validate_expr(expr: str, control: str, params: Dict[str, Any]) -> None:
 
 
 class PolicyEngine:
-    def __init__(self, policies: Optional[Dict[str, Policy]] = None):
-        self.policies: Dict[str, Policy] = policies or {}
+    def __init__(self, policies: dict[str, Policy] | None = None):
+        self.policies: dict[str, Policy] = policies or {}
 
     @classmethod
-    def from_dir(cls, path: str) -> "PolicyEngine":
-        policies: Dict[str, Policy] = {}
+    def from_dir(cls, path: str) -> PolicyEngine:
+        policies: dict[str, Policy] = {}
         if os.path.isdir(path):
             for fn in sorted(os.listdir(path)):
                 if not fn.endswith((".yaml", ".yml")):
@@ -184,7 +185,7 @@ class PolicyEngine:
                             policies[p.control_id] = p
         return cls(policies)
 
-    def list_policies(self) -> List[Dict[str, Any]]:
+    def list_policies(self) -> list[dict[str, Any]]:
         return [{"control_id": p.control_id, "title": p.title, "severity": p.base_severity,
                  "frameworks": p.frameworks, "rules": len(p.rules),
                  "params": p.params, "requires": p.requires,
@@ -193,15 +194,15 @@ class PolicyEngine:
                  "source_file": p.source_file, "test_count": len(p.tests)}
                 for p in self.policies.values()]
 
-    def evaluate(self, control_id: str, evidence: Dict[str, Any],
-                 dep_status: Optional[Dict[str, str]] = None) -> PolicyDecision:
+    def evaluate(self, control_id: str, evidence: dict[str, Any],
+                 dep_status: dict[str, str] | None = None) -> PolicyDecision:
         p = self.policies.get(control_id)
         if p is None:
             return PolicyDecision(control_id, "error", "info",
                                   f"no policy defined for {control_id}")
         return p.evaluate(evidence, dep_status)
 
-    def evaluate_all(self, evidence_by_control: Dict[str, Dict[str, Any]]) -> List[PolicyDecision]:
+    def evaluate_all(self, evidence_by_control: dict[str, dict[str, Any]]) -> list[PolicyDecision]:
         """Two-pass: evaluate base rules, then re-evaluate so `requires` see real dep status."""
         first = {cid: p.evaluate(evidence_by_control.get(cid, {}))
                  for cid, p in self.policies.items()}
@@ -211,7 +212,7 @@ class PolicyEngine:
             out.append(p.evaluate(evidence_by_control.get(cid, {}), dep_status))
         return out
 
-    def run_tests(self) -> Dict[str, Any]:
+    def run_tests(self) -> dict[str, Any]:
         results, passed, failed = [], 0, 0
         for p in self.policies.values():
             for i, t in enumerate(p.tests):

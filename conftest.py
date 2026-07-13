@@ -50,8 +50,9 @@ def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", url)
 
     from sqlalchemy import create_engine
-    from app.database import Base
+
     import app.models  # noqa: F401 — ensure all models are registered on Base
+    from app.database import Base
 
     engine = create_engine(url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)

@@ -12,7 +12,7 @@ record_hash to escape detection. Reports the first/any broken records.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,7 +25,7 @@ class IntegrityService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def verify(self, tenant_id: str) -> Dict[str, Any]:
+    def verify(self, tenant_id: str) -> dict[str, Any]:
         rows = self.db.execute(
             select(EvidenceMeta).where(EvidenceMeta.tenant_id == tenant_id)
             .order_by(EvidenceMeta.created_at.asc())

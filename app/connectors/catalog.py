@@ -15,7 +15,7 @@ so the dashboard is fully functional with zero credentials.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 CATEGORIES = ["cloud", "identity", "devops", "itsm", "security", "grc", "saas", "endpoint"]
 
@@ -30,16 +30,16 @@ EVIDENCE_TYPES = [
 ]
 
 
-def _c(key: str, name: str, category: str, auth: str, env: List[str],
-       evidence: List[str], registry_key: Optional[str] = None,
-       maturity: str = "production", vendor: str = "") -> Dict[str, Any]:
+def _c(key: str, name: str, category: str, auth: str, env: list[str],
+       evidence: list[str], registry_key: str | None = None,
+       maturity: str = "production", vendor: str = "") -> dict[str, Any]:
     return {"key": key, "name": name, "category": category, "auth_method": auth,
             "env_vars": env, "evidence_types": evidence,
             "registry_key": registry_key, "maturity": maturity,
             "vendor": vendor or name.split()[0]}
 
 
-CONNECTOR_CATALOG: List[Dict[str, Any]] = [
+CONNECTOR_CATALOG: list[dict[str, Any]] = [
     # ── Cloud ────────────────────────────────────────────────────────────────
     _c("AWS_SECURITY_HUB", "AWS Security Hub", "cloud", "iam_keys",
        ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
@@ -208,13 +208,13 @@ CONNECTOR_CATALOG: List[Dict[str, Any]] = [
 _BY_KEY = {c["key"]: c for c in CONNECTOR_CATALOG}
 
 
-def get(key: str) -> Optional[Dict[str, Any]]:
+def get(key: str) -> dict[str, Any] | None:
     return _BY_KEY.get((key or "").upper())
 
 
-def all_connectors() -> List[Dict[str, Any]]:
+def all_connectors() -> list[dict[str, Any]]:
     return CONNECTOR_CATALOG
 
 
-def by_category(cat: str) -> List[Dict[str, Any]]:
+def by_category(cat: str) -> list[dict[str, Any]]:
     return [c for c in CONNECTOR_CATALOG if c["category"] == cat]

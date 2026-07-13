@@ -14,7 +14,7 @@ folded into the posture current-state and drift tracking.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -50,8 +50,9 @@ class IngestionService:
         self.svc = AssessmentService(db)
 
     # ── AWS Security Hub (ASFF) ──
-    def from_security_hub(self, tenant_id: str, max_findings: int = 100) -> Dict[str, Any]:
+    def from_security_hub(self, tenant_id: str, max_findings: int = 100) -> dict[str, Any]:
         import boto3
+
         from app.config import settings
         client = boto3.client("securityhub", region_name=settings.aws_region)
         ingested, skipped = 0, 0
@@ -66,7 +67,7 @@ class IngestionService:
                     return {"ingested": ingested, "skipped": skipped}
         return {"ingested": ingested, "skipped": skipped}
 
-    def _ingest_asff(self, tenant_id: str, f: Dict[str, Any]) -> bool:
+    def _ingest_asff(self, tenant_id: str, f: dict[str, Any]) -> bool:
         comp = f.get("Compliance", {}) or {}
         control_id = comp.get("SecurityControlId") or f.get("GeneratorId") or f.get("Title", "UNKNOWN")
         status = _status(comp.get("Status", "WARNING"))
@@ -82,7 +83,7 @@ class IngestionService:
         return result is not None
 
     # ── Prowler / Steampipe / Powerpipe JSON ──
-    def from_report(self, tenant_id: str, source_label: str, findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def from_report(self, tenant_id: str, source_label: str, findings: list[dict[str, Any]]) -> dict[str, Any]:
         ingested, skipped = 0, 0
         for item in findings:
             # accept several common field spellings across tools

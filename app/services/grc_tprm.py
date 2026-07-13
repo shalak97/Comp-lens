@@ -1,25 +1,28 @@
 """GRC Risk Register + TPRM service layer: CRUD, scoring, lifecycle, summaries."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+import builtins
+from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.grc_tprm_models import (Risk, Vendor, RiskIn, RiskPatch, VendorIn,
-                                 VendorPatch)
+from app.grc_tprm_models import Risk, RiskIn, RiskPatch, Vendor, VendorIn, VendorPatch
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # severity banding shared by risk + vendor scores (out of 25 for risk, 100 for vendor)
 def _risk_band(score: int) -> str:
-    if score >= 20: return "critical"
-    if score >= 12: return "high"
-    if score >= 6: return "medium"
+    if score >= 20:
+        return "critical"
+    if score >= 12:
+        return "high"
+    if score >= 6:
+        return "medium"
     return "low"
 
 
@@ -28,7 +31,7 @@ class RiskService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _ser(self, r: Risk) -> Dict[str, Any]:
+    def _ser(self, r: Risk) -> dict[str, Any]:
         inherent = r.likelihood * r.impact
         rl = r.residual_likelihood if r.residual_likelihood else r.likelihood
         ri = r.residual_impact if r.residual_impact else r.impact
@@ -46,14 +49,14 @@ class RiskService:
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
         }
 
-    def list(self, tenant_id: str) -> List[Dict[str, Any]]:
+    def list(self, tenant_id: str) -> builtins.list[dict[str, Any]]:
         rows = self.db.execute(select(Risk).where(Risk.tenant_id == tenant_id)
                                .order_by(Risk.created_at.desc())).scalars().all()
         out = [self._ser(r) for r in rows]
         out.sort(key=lambda x: x["inherent_score"], reverse=True)
         return out
 
-    def create(self, tenant_id: str, data: RiskIn) -> Dict[str, Any]:
+    def create(self, tenant_id: str, data: RiskIn) -> dict[str, Any]:
         r = Risk(tenant_id=tenant_id, title=data.title, description=data.description,
                  category=data.category, owner=data.owner,
                  likelihood=data.likelihood, impact=data.impact,
@@ -63,10 +66,12 @@ class RiskService:
                  linked_control=data.linked_control,
                  linked_vendor_id=data.linked_vendor_id,
                  review_date=data.review_date)
-        self.db.add(r); self.db.commit(); self.db.refresh(r)
+        self.db.add(r)
+        self.db.commit()
+        self.db.refresh(r)
         return self._ser(r)
 
-    def update(self, tenant_id: str, risk_id: str, patch: RiskPatch) -> Optional[Dict[str, Any]]:
+    def update(self, tenant_id: str, risk_id: str, patch: RiskPatch) -> dict[str, Any] | None:
         r = self.db.get(Risk, risk_id)
         if not r or r.tenant_id != tenant_id:
             return None
@@ -75,21 +80,23 @@ class RiskService:
                 v = v.value
             setattr(r, k, v)
         r.updated_at = _now()
-        self.db.commit(); self.db.refresh(r)
+        self.db.commit()
+        self.db.refresh(r)
         return self._ser(r)
 
     def delete(self, tenant_id: str, risk_id: str) -> bool:
         r = self.db.get(Risk, risk_id)
         if not r or r.tenant_id != tenant_id:
             return False
-        self.db.delete(r); self.db.commit()
+        self.db.delete(r)
+        self.db.commit()
         return True
 
-    def summary(self, tenant_id: str) -> Dict[str, Any]:
+    def summary(self, tenant_id: str) -> dict[str, Any]:
         rows = self.list(tenant_id)
-        by_band: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-        by_status: Dict[str, int] = {}
-        by_treatment: Dict[str, int] = {}
+        by_band: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        by_status: dict[str, int] = {}
+        by_treatment: dict[str, int] = {}
         overdue = 0
         now = _now()
         for r in rows:
@@ -108,12 +115,15 @@ class RiskService:
 
 
 # ── TPRM Vendor lifecycle ──
-def _vendor_band(score: Optional[float], tier: str) -> str:
+def _vendor_band(score: float | None, tier: str) -> str:
     if score is None:
         return tier
-    if score >= 85: return "low"
-    if score >= 65: return "medium"
-    if score >= 40: return "high"
+    if score >= 85:
+        return "low"
+    if score >= 65:
+        return "medium"
+    if score >= 40:
+        return "high"
     return "critical"
 
 
@@ -121,7 +131,7 @@ class VendorService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _ser(self, v: Vendor) -> Dict[str, Any]:
+    def _ser(self, v: Vendor) -> dict[str, Any]:
         return {
             "id": v.id, "name": v.name, "category": v.category,
             "contact_email": v.contact_email, "stage": v.stage,
@@ -135,12 +145,12 @@ class VendorService:
             "updated_at": v.updated_at.isoformat() if v.updated_at else None,
         }
 
-    def list(self, tenant_id: str) -> List[Dict[str, Any]]:
+    def list(self, tenant_id: str) -> builtins.list[dict[str, Any]]:
         rows = self.db.execute(select(Vendor).where(Vendor.tenant_id == tenant_id)
                                .order_by(Vendor.onboarded_at.desc())).scalars().all()
         return [self._ser(v) for v in rows]
 
-    def create(self, tenant_id: str, data: VendorIn) -> Dict[str, Any]:
+    def create(self, tenant_id: str, data: VendorIn) -> dict[str, Any]:
         v = Vendor(tenant_id=tenant_id, name=data.name, category=data.category,
                    contact_email=data.contact_email, stage=data.stage.value,
                    risk_tier=data.risk_tier, assessment_state=data.assessment_state.value,
@@ -148,10 +158,12 @@ class VendorService:
                    has_soc2=data.has_soc2, assessment_score=data.assessment_score,
                    linked_connector_key=data.linked_connector_key,
                    next_review=data.next_review)
-        self.db.add(v); self.db.commit(); self.db.refresh(v)
+        self.db.add(v)
+        self.db.commit()
+        self.db.refresh(v)
         return self._ser(v)
 
-    def update(self, tenant_id: str, vendor_id: str, patch: VendorPatch) -> Optional[Dict[str, Any]]:
+    def update(self, tenant_id: str, vendor_id: str, patch: VendorPatch) -> dict[str, Any] | None:
         v = self.db.get(Vendor, vendor_id)
         if not v or v.tenant_id != tenant_id:
             return None
@@ -160,20 +172,22 @@ class VendorService:
                 val = val.value
             setattr(v, k, val)
         v.updated_at = _now()
-        self.db.commit(); self.db.refresh(v)
+        self.db.commit()
+        self.db.refresh(v)
         return self._ser(v)
 
     def delete(self, tenant_id: str, vendor_id: str) -> bool:
         v = self.db.get(Vendor, vendor_id)
         if not v or v.tenant_id != tenant_id:
             return False
-        self.db.delete(v); self.db.commit()
+        self.db.delete(v)
+        self.db.commit()
         return True
 
-    def summary(self, tenant_id: str) -> Dict[str, Any]:
+    def summary(self, tenant_id: str) -> dict[str, Any]:
         rows = self.list(tenant_id)
-        by_stage: Dict[str, int] = {}
-        by_risk: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        by_stage: dict[str, int] = {}
+        by_risk: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         needs_assessment = 0
         missing_dpa = 0
         now = _now()

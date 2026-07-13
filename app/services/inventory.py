@@ -7,8 +7,9 @@ given source system.
 
 from __future__ import annotations
 
+import builtins
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,7 +25,7 @@ class InventoryService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def discover(self, tenant_id: str, source_system: str, params: Dict[str, Any]) -> int:
+    def discover(self, tenant_id: str, source_system: str, params: dict[str, Any]) -> int:
         connector = registry.get(source_system)
         assets = connector.discover_assets(params or {})
         count = 0
@@ -49,14 +50,14 @@ class InventoryService:
         logger.info("discovered tenant=%s source=%s new=%d total=%d", tenant_id, source_system, count, len(assets))
         return count
 
-    def list(self, tenant_id: str, source_system: str | None = None) -> List[AssetRecord]:
+    def list(self, tenant_id: str, source_system: str | None = None) -> builtins.list[AssetRecord]:
         stmt = select(AssetRecord).where(AssetRecord.tenant_id == tenant_id)
         if source_system:
             stmt = stmt.where(AssetRecord.source_system == source_system.upper())
         return list(self.db.execute(stmt.order_by(AssetRecord.discovered_at.desc())).scalars().all())
 
     def bulk_assess(self, tenant_id: str, framework: str, control_id: str,
-                    source_system: str, params: Dict[str, Any]) -> Dict[str, Any]:
+                    source_system: str, params: dict[str, Any]) -> dict[str, Any]:
         assets = self.list(tenant_id, source_system)
         svc = AssessmentService(self.db)
         results = {"assessed": 0, "failed": 0, "findings": []}

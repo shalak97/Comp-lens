@@ -1,8 +1,11 @@
 """Dynamic policy-as-code: safe evaluator (functions, quantifiers, arithmetic) + engine."""
 import os
+
 import pytest
-from app.policy_as_code.evaluator import SafeEvaluator, PolicyExpressionError, evaluate_expression as ev
-from app.policy_as_code.engine import PolicyEngine, load_policy, PolicyValidationError
+
+from app.policy_as_code.engine import PolicyEngine, PolicyValidationError, load_policy
+from app.policy_as_code.evaluator import SafeEvaluator
+from app.policy_as_code.evaluator import evaluate_expression as ev
 
 POLICY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "policies")
 

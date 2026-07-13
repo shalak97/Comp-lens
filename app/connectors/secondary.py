@@ -12,14 +12,12 @@ from __future__ import annotations
 
 import base64
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
 from app.config import settings
 from app.connectors.base import BaseConnector, ConnectorError
-from app.connectors.http_client import ResilientClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +31,7 @@ class AzureConnector(BaseConnector):
     def __init__(self) -> None:
         if not (settings.azure_tenant_id and settings.azure_client_id and settings.azure_client_secret):
             raise ConnectorError("AZURE_TENANT_ID / CLIENT_ID / CLIENT_SECRET required.")
-        self._token: Optional[str] = None
+        self._token: str | None = None
         self._token_exp: float = 0.0
 
     def _acquire_graph_token(self) -> str:
@@ -74,7 +72,7 @@ class AzureConnector(BaseConnector):
             logger.warning("Azure healthcheck failed: %s", exc)
             return False
 
-    def collect_telemetry(self, control_id, asset_id, params) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         user_ref = asset_id or params.get("user")
         if control_id == "AC-2-7":
             if not user_ref:
@@ -112,7 +110,7 @@ class GCPConnector(BaseConnector):
             logger.warning("GCP healthcheck failed: %s", exc)
             return False
 
-    def collect_telemetry(self, control_id, asset_id, params) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         if control_id in ("SC-28", "SC-7"):
             from google.cloud import storage
 
@@ -163,7 +161,7 @@ class GitLabConnector(BaseConnector):
             logger.warning("GitLab healthcheck failed: %s", exc)
             return False
 
-    def collect_telemetry(self, control_id, asset_id, params) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         if control_id == "SA-15-BRANCH":
             project_id = asset_id or params.get("project_id")
             if not project_id:
@@ -190,7 +188,7 @@ class SlackConnector(BaseConnector):
             raise ConnectorError("SLACK_BOT_TOKEN required.")
         self._headers = {"Authorization": f"Bearer {settings.slack_bot_token}"}
 
-    def _get(self, method: str, params: Dict[str, Any] | None = None) -> Any:
+    def _get(self, method: str, params: dict[str, Any] | None = None) -> Any:
         r = requests.get(f"https://slack.com/api/{method}", headers=self._headers,
                          params=params or {}, timeout=settings.request_timeout_seconds)
         data = r.json()
@@ -206,7 +204,7 @@ class SlackConnector(BaseConnector):
             logger.warning("Slack healthcheck failed: %s", exc)
             return False
 
-    def collect_telemetry(self, control_id, asset_id, params) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         if control_id == "SC-7":
             # Check a channel is private (not public) as a data-exposure proxy
             channel = asset_id or params.get("channel")
@@ -253,7 +251,7 @@ class ServiceNowConnector(BaseConnector):
             logger.warning("ServiceNow healthcheck failed: %s", exc)
             return False
 
-    def collect_telemetry(self, control_id, asset_id, params) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         if control_id == "CM-3":
             change_id = asset_id or params.get("change")
             if not change_id:
@@ -291,7 +289,7 @@ class QualysConnector(BaseConnector):
             logger.warning("Qualys healthcheck failed: %s", exc)
             return False
 
-    def collect_telemetry(self, control_id, asset_id, params) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         if control_id == "RA-5":
             ip = asset_id or params.get("ip")
             if not ip:
@@ -320,7 +318,7 @@ class CrowdStrikeConnector(BaseConnector):
         if not (settings.crowdstrike_client_id and settings.crowdstrike_client_secret):
             raise ConnectorError("CROWDSTRIKE_CLIENT_ID / CLIENT_SECRET required.")
         self._base = settings.crowdstrike_base_url.rstrip("/")
-        self._token: Optional[str] = None
+        self._token: str | None = None
         self._token_exp: float = 0.0
 
     def _auth_token(self) -> str:
@@ -342,7 +340,7 @@ class CrowdStrikeConnector(BaseConnector):
         self._token_exp = time.time() + int(body.get("expires_in", 1800))
         return self._token
 
-    def _get(self, path: str, params: Dict[str, Any] | None = None) -> Any:
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         r = requests.get(f"{self._base}{path}",
                         headers={"Authorization": f"Bearer {self._auth_token()}"},
                         params=params or {}, timeout=settings.request_timeout_seconds)
@@ -358,7 +356,7 @@ class CrowdStrikeConnector(BaseConnector):
             logger.warning("CrowdStrike healthcheck failed: %s", exc)
             return False
 
-    def collect_telemetry(self, control_id, asset_id, params) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         if control_id == "RA-5":
             host_id = asset_id or params.get("device_id")
             if not host_id:

@@ -21,13 +21,13 @@ Everything is idempotent (re-running doesn't duplicate) and tenant-scoped.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Finding, ControlStatus, Severity, Lifecycle
+from app.models import ControlStatus, Finding, Lifecycle, Severity
 
 _SEV_MAP = {"critical": Severity.CRITICAL, "high": Severity.HIGH,
             "medium": Severity.MEDIUM, "low": Severity.LOW, "info": Severity.INFO}
@@ -39,8 +39,8 @@ AIGOV_CATEGORY = "ai_governance"
 
 # ── 1. POLICY ENGINE → FINDINGS ──────────────────────────────────────
 def evaluate_policies_to_findings(db: Session, tenant_id: str,
-                                  evidence_by_control: Dict[str, Dict[str, Any]],
-                                  framework: str = "ALL") -> Dict[str, Any]:
+                                  evidence_by_control: dict[str, dict[str, Any]],
+                                  framework: str = "ALL") -> dict[str, Any]:
     """Run every policy against supplied evidence; persist fail/pass as findings.
 
     This is the missing spine: 'compliance as code' decisions now enter the same
@@ -67,7 +67,7 @@ def evaluate_policies_to_findings(db: Session, tenant_id: str,
             existing.severity = sev
             existing.description = d.reason
             existing.remediation = {"obligations": d.obligations, "rules": d.rules}
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             if cstatus == ControlStatus.PASS:
                 existing.lifecycle = Lifecycle.RESOLVED
             updated += 1
@@ -89,17 +89,17 @@ def evaluate_policies_to_findings(db: Session, tenant_id: str,
 
 
 # ── 2. AI GOVERNANCE → RISK REGISTER ─────────────────────────────────
-def ai_system_to_risk(db: Session, tenant_id: str, system_id: str) -> Dict[str, Any]:
+def ai_system_to_risk(db: Session, tenant_id: str, system_id: str) -> dict[str, Any]:
     """Turn an AI system's computed privacy risk into a risk-register entry.
 
     A critical-residual AI system handling PHI is a real enterprise risk — it should
     live in the register alongside every other risk, not in a separate calculator.
     """
     from app.ai_governance_models import AISystemPET
-    from app.services import ai_governance as aigov
-    from app.services.grc_tprm import RiskService
     from app.grc_tprm_models import RiskIn
     from app.models import AISystem
+    from app.services import ai_governance as aigov
+    from app.services.grc_tprm import RiskService
 
     sys = db.get(AISystem, system_id)
     if not sys or sys.tenant_id != tenant_id:
@@ -137,7 +137,7 @@ def ai_system_to_risk(db: Session, tenant_id: str, system_id: str) -> Dict[str, 
             "note": "AI system privacy risk is now in the risk register"}
 
 
-def sync_all_ai_risks(db: Session, tenant_id: str) -> Dict[str, Any]:
+def sync_all_ai_risks(db: Session, tenant_id: str) -> dict[str, Any]:
     """Push every AI system with PETs into the risk register."""
     from app.ai_governance_models import AISystemPET
     sys_ids = {r.system_id for r in db.execute(
@@ -148,15 +148,15 @@ def sync_all_ai_risks(db: Session, tenant_id: str) -> Dict[str, Any]:
 
 
 # ── 3. THREAT INTEL → RISK ESCALATION ────────────────────────────────
-def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
+def escalate_risks_from_threat(db: Session, tenant_id: str) -> dict[str, Any]:
     """Escalate risks whose linked control is a vuln control under active KEV pressure.
 
     The same dynamic-severity idea the AI-gov engine uses, applied across the register:
     real-world exploitation should raise the impact of the risks it touches.
     """
+    from app.grc_tprm_models import RiskPatch
     from app.services import threat_intel as ti
     from app.services.grc_tprm import RiskService
-    from app.grc_tprm_models import RiskPatch
 
     pressure = ti.threat_pressure()
     if pressure["actively_exploited"] == 0:
@@ -179,10 +179,10 @@ def escalate_risks_from_threat(db: Session, tenant_id: str) -> Dict[str, Any]:
 
 # ── UNIFIED: run the whole integrated pipeline ───────────────────────
 def run_unified_pipeline(db: Session, tenant_id: str,
-                         evidence_by_control: Optional[Dict[str, Dict[str, Any]]] = None
-                         ) -> Dict[str, Any]:
+                         evidence_by_control: dict[str, dict[str, Any]] | None = None
+                         ) -> dict[str, Any]:
     """One call that runs every cross-feature flow and reports what connected."""
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     if evidence_by_control:
         out["policy_to_findings"] = evaluate_policies_to_findings(db, tenant_id, evidence_by_control)
     out["ai_to_risk"] = sync_all_ai_risks(db, tenant_id)

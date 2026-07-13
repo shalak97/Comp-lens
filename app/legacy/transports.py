@@ -19,7 +19,7 @@ import io
 import json
 import logging
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -31,7 +31,7 @@ from app.legacy.sources import LegacySource
 logger = logging.getLogger(__name__)
 
 # cache SQLAlchemy engines per url so we reuse connection pools
-_engines: Dict[str, Any] = {}
+_engines: dict[str, Any] = {}
 
 
 def _engine(url: str):
@@ -41,7 +41,7 @@ def _engine(url: str):
     return _engines[url]
 
 
-def fetch_raw(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def fetch_raw(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     try:
         if source.type == "sql":
             return _fetch_sql(source, asset_id)
@@ -58,7 +58,7 @@ def fetch_raw(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
     raise ConnectorError(f"unsupported legacy type {source.type}")
 
 
-def discover(source: LegacySource) -> List[str]:
+def discover(source: LegacySource) -> list[str]:
     """Enumerate asset ids from a source (sql only, via discovery_query)."""
     if source.type == "sql" and source.discovery_query and source.key_column:
         from sqlalchemy import text
@@ -69,7 +69,7 @@ def discover(source: LegacySource) -> List[str]:
 
 
 # ── SQL ──
-def _fetch_sql(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_sql(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     if not source.query:
         raise ConnectorError("sql source missing 'query'")
     from sqlalchemy import text
@@ -103,7 +103,7 @@ def _read_bytes(url: str) -> bytes:
     raise ConnectorError(f"unsupported file scheme {parsed.scheme!r}")
 
 
-def _fetch_file(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_file(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     data = _read_bytes(source.url)
     fmt = (source.format or "csv").lower()
 
@@ -141,7 +141,7 @@ def _fetch_file(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]
 
 
 # ── SOAP ──
-def _fetch_soap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_soap(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     if not source.template or not source.field_paths:
         raise ConnectorError("soap source needs 'template' and 'field_paths'")
     envelope = source.template.replace("{asset_id}", str(asset_id or ""))
@@ -154,7 +154,7 @@ def _fetch_soap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]
         raise ConnectorError(f"soap {r.status_code}")
     root = ET.fromstring(r.content)
     ns = source.namespaces or {}
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for key, path in source.field_paths.items():
         el = root.find(path, ns) if ns else root.find(path)
         out[key] = el.text if el is not None else None
@@ -162,7 +162,7 @@ def _fetch_soap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]
 
 
 # ── LDAP ──
-def _fetch_ldap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_ldap(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     try:
         from ldap3 import ALL, Connection, Server
     except ImportError as exc:  # pragma: no cover

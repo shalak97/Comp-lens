@@ -1,5 +1,6 @@
 """Connector safety guardrails — prove no live call escapes when locked."""
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 

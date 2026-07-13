@@ -7,8 +7,8 @@ matching failures from the compliance score.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import List, Optional
+import builtins
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ class WaiverService:
         self.db.flush()
         return w
 
-    def list(self, tenant_id: str) -> List[Waiver]:
+    def list(self, tenant_id: str) -> builtins.list[Waiver]:
         rows = self.db.execute(
             select(Waiver).where(Waiver.tenant_id == tenant_id).order_by(Waiver.created_at.desc())
         ).scalars().all()
@@ -44,13 +44,13 @@ class WaiverService:
         return True
 
     def _refresh_status(self, w: Waiver) -> Waiver:
-        if w.status == ExceptionStatus.ACTIVE and w.expires_at and w.expires_at < datetime.now(timezone.utc):
+        if w.status == ExceptionStatus.ACTIVE and w.expires_at and w.expires_at < datetime.now(UTC):
             w.status = ExceptionStatus.EXPIRED
         return w
 
-    def active_for(self, tenant_id: str, control_id: str, asset_id: Optional[str]) -> Optional[Waiver]:
+    def active_for(self, tenant_id: str, control_id: str, asset_id: str | None) -> Waiver | None:
         """Return an active waiver covering this control/asset, if any."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         rows = self.db.execute(
             select(Waiver).where(
                 Waiver.tenant_id == tenant_id,
@@ -65,10 +65,10 @@ class WaiverService:
                 return w
         return None
 
-    def active_index(self, tenant_id: str) -> "WaiverIndex":
+    def active_index(self, tenant_id: str) -> WaiverIndex:
         """Load all active, unexpired waivers for a tenant in ONE query and
         return an O(1) membership index (avoids N+1 lookups during scoring)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         rows = self.db.execute(
             select(Waiver.control_id, Waiver.asset_id, Waiver.expires_at).where(
                 Waiver.tenant_id == tenant_id, Waiver.status == ExceptionStatus.ACTIVE
@@ -93,5 +93,5 @@ class WaiverIndex:
         self._all = all_assets
         self._specific = specific
 
-    def covers(self, control_id: str, asset_id: Optional[str]) -> bool:
+    def covers(self, control_id: str, asset_id: str | None) -> bool:
         return control_id in self._all or (control_id, asset_id) in self._specific
