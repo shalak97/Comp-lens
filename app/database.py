@@ -40,23 +40,11 @@ if settings.database_url.startswith("sqlite"):
 
     @event.listens_for(engine, "connect")
     def _sqlite_pragmas(dbapi_conn, _rec):  # noqa: ANN001
-        # Disable pysqlite's implicit/deferred BEGIN. Without this, pysqlite's
-        # transaction handling both breaks SAVEPOINTs (begin_nested(), used on the
-        # assessment write path) and lets concurrent writers deadlock on the
-        # read→write upgrade. We drive BEGIN ourselves in the "begin" handler below.
-        dbapi_conn.isolation_level = None
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")   # concurrent readers + one writer
         cur.execute("PRAGMA busy_timeout=30000")  # wait up to 30s for the lock
         cur.execute("PRAGMA synchronous=NORMAL")
         cur.close()
-
-    @event.listens_for(engine, "begin")
-    def _sqlite_begin_immediate(conn):  # noqa: ANN001
-        # Take the write lock up front so concurrent writers serialise cleanly on
-        # busy_timeout instead of racing the deferred upgrade (SQLAlchemy's
-        # documented recipe for savepoints + write concurrency under pysqlite).
-        conn.exec_driver_sql("BEGIN IMMEDIATE")
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
