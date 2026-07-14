@@ -6,30 +6,85 @@ Run locally:
 
 from __future__ import annotations
 
+import json as _json
 import logging
+import os as _os
+import os as _os_evm
 from contextlib import asynccontextmanager
+from dataclasses import asdict as _asdict
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse as _FileResponse
+from fastapi.responses import FileResponse as _FileResponse_evm
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+from pydantic import BaseModel as _BaseModel
+from pydantic import BaseModel as _PydBase
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai_governance_models import AISystemPET as _PET
+from app.audit_models import AuditIn as _AuditIn
+from app.audit_models import AuditPatch as _AuditPatch
+from app.audit_models import ControlReviewPatch as _CtrlPatch
+from app.audit_models import EvidenceRequestIn as _ReqIn
+from app.audit_models import EvidenceRequestPatch as _ReqPatch
 from app.auth import Principal, auth_enabled, authorize_tenant, require_principal
 from app.config import settings
 from app.connectors.base import ConnectorError
 from app.connectors.registry import registry
 from app.database import get_db, init_db
 from app.frameworks import crosswalk_for, frameworks
-from app.models import (AISystemRequest, AssessmentRequest, AssetRecord, BatchAssessmentRequest,
-                        BulkAssessRequest, FindingOut, FindingUpdate, PolicyDraftRequest,
-                        ScheduleOut, ScheduleRequest, WaiverOut, WaiverRequest)
+from app.grc_platforms import service as _grc_svc
+from app.grc_platforms.registry import GRC_PLATFORM_REGISTRY as _GRC_REG
+from app.grc_platforms.trust_telemetry import GRCTrustTelemetry as _GRCTrust
+from app.grc_platforms.trust_telemetry import resolve_policy as _resolve_trust_policy
+from app.grc_tprm_models import RiskIn as _RiskIn
+from app.grc_tprm_models import RiskPatch as _RiskPatch
+from app.grc_tprm_models import VendorIn as _VendorIn
+from app.grc_tprm_models import VendorPatch as _VendorPatch
+from app.hardening import (
+    RateLimitMiddleware,
+    RequestContextMiddleware,
+    SecurityHeadersMiddleware,
+    install_exception_handlers,
+)
+from app.models import (
+    AISystemRequest,
+    AssessmentRequest,
+    BatchAssessmentRequest,
+    BulkAssessRequest,
+    FindingOut,
+    FindingUpdate,
+    PolicyDraftRequest,
+    ScheduleOut,
+    ScheduleRequest,
+    WaiverOut,
+    WaiverRequest,
+)
 from app.policy.engine import CONTROL_CATALOG
+from app.policy_as_code import get_engine as _policy_engine
+from app.policy_as_code import reload_engine as _reload_policies
+from app.services import ai_governance as _aigov
+from app.services import doc_ingest as _doc_ingest
+from app.services import evidence_graph as _evg
+from app.services import framework_catalog as _catalog
+from app.services import integration as _integ
+from app.services import llm_client as _llm
+from app.services import resolver as _resolver
+from app.services import threat_intel as _threat
 from app.services.assessment import AssessmentService
+from app.services.attestation import AttestationService as _AttestationService
+from app.services.audit_service import AuditService as _AuditSvc
+from app.services.evidence_graph import EvidenceService as _EvidenceService
+from app.services.grc_tprm import RiskService as _RiskService
+from app.services.grc_tprm import VendorService as _VendorService
 from app.services.inventory import InventoryService
 from app.services.reporting import ReportService
 from app.services.scheduler import ScheduleService, start_background_runner, stop_background_runner
 from app.services.trends import TrendService
+from app.services.trust_graph import TrustGraphService as _TrustGraph
 from app.services.waivers import WaiverService
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -39,6 +94,17 @@ logger = logging.getLogger("comp-lens")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail closed in production: refuse to start if authentication is not
+    # configured (empty COMP_LENS_API_KEYS would otherwise make every request an
+    # all-tenant admin). Mirrors the demo/auto-create production guards.
+    if settings.is_production and not auth_enabled():
+        raise RuntimeError(
+            "Refusing to start: APP_ENV=production but no API keys are configured. "
+            "Set COMP_LENS_API_KEYS to enable authentication.")
+    if settings.is_production and not settings.evidence_signing_key:
+        raise RuntimeError(
+            "Refusing to start: APP_ENV=production but EVIDENCE_SIGNING_KEY is not set. "
+            "Evidence tamper-evidence would fall back to a world-known key.")
     if settings.autocreate_enabled():
         init_db()
         logger.info("tables auto-created (dev). Use Alembic in production.")
@@ -51,8 +117,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, version="1.2.0", lifespan=lifespan)
 
 # ── production hardening stack (outermost first) ──
-from app.hardening import (RateLimitMiddleware, RequestContextMiddleware,
-                           SecurityHeadersMiddleware, install_exception_handlers)
+
 app.add_middleware(SecurityHeadersMiddleware, hsts=getattr(settings, "enable_hsts", True))
 app.add_middleware(RateLimitMiddleware,
                    max_requests=(1_000_000 if getattr(settings, "app_env", "production") == "test"
@@ -95,6 +160,7 @@ def ready() -> dict:
     db_ok = True
     try:
         from sqlalchemy import text
+
         from app.database import SessionLocal
         with SessionLocal() as s:
             s.execute(text("SELECT 1"))
@@ -134,7 +200,7 @@ def connectors_catalog(category: str | None = None,
                        _: Principal = Depends(require_principal)) -> list[dict]:
     from app.connectors import catalog as ccat
     items = ccat.by_category(category) if category else ccat.all_connectors()
-    return [{k: v for k, v in c.items()} for c in items]
+    return [dict(c.items()) for c in items]
 
 
 @app.get("/connectors/safety", tags=["connectors"])
@@ -176,7 +242,6 @@ def connector_test(name: str, p: Principal = Depends(require_principal)) -> dict
     return cfw.test_connection(c)
 
 
-from pydantic import BaseModel as _PydBase
 
 
 class _SyncRequest(_PydBase):
@@ -235,7 +300,8 @@ def create_assessment(req: AssessmentRequest, db: Session = Depends(get_db),
     except HTTPException:
         raise
     except Exception:  # noqa: BLE001
-        logger.exception("assessment failed"); raise _server_error()
+        logger.exception("assessment failed")
+        raise _server_error() from None
 
 
 @app.post("/assessment-jobs")
@@ -245,7 +311,8 @@ def create_batch(req: BatchAssessmentRequest, db: Session = Depends(get_db),
     try:
         return AssessmentService(db).run_batch(req.tenant_id, req.controls)
     except Exception:  # noqa: BLE001
-        logger.exception("batch failed"); raise _server_error()
+        logger.exception("batch failed")
+        raise _server_error() from None
 
 
 @app.post("/assessments/bulk")
@@ -258,7 +325,8 @@ def bulk_assess(req: BulkAssessRequest, db: Session = Depends(get_db),
     except ConnectorError as exc:
         raise _client_error(exc) from exc
     except Exception:  # noqa: BLE001
-        logger.exception("bulk failed"); raise _server_error()
+        logger.exception("bulk failed")
+        raise _server_error() from None
 
 
 # ── findings + lifecycle ──
@@ -354,7 +422,7 @@ def run_schedule(schedule_id: str, tenant_id: str = "default", db: Session = Dep
     try:
         return ScheduleService(db).run(schedule_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail="Schedule not found.")
+        raise HTTPException(status_code=404, detail="Schedule not found.") from None
 
 
 @app.delete("/schedules/{schedule_id}")
@@ -417,7 +485,8 @@ def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
                  human_oversight=req.human_oversight, transparency_notice=req.transparency_notice,
                  eval_report=req.eval_report, logging_enabled=req.logging_enabled,
                  accuracy_tested=req.accuracy_tested)
-    db.add(s); db.flush()
+    db.add(s)
+    db.flush()
     return {"id": s.id, "name": s.name, "risk_tier": s.risk_tier}
 
 
@@ -533,7 +602,7 @@ def ingest_securityhub(tenant_id: str = "default", max_findings: int = Query(100
         return IngestionService(db).from_security_hub(tenant_id, max_findings)
     except Exception:  # noqa: BLE001
         logger.exception("security hub ingest failed")
-        raise _server_error()
+        raise _server_error() from None
 
 
 @app.post("/ingest/report")
@@ -550,9 +619,7 @@ def ingest_report(payload: dict, tenant_id: str = "default", source: str = "PROW
 
 
 # ── static dashboard console ──
-import os as _os
-from fastapi.responses import FileResponse as _FileResponse
-from fastapi.staticfiles import StaticFiles as _StaticFiles
+
 
 _STATIC_DIR = _os.path.join(_os.path.dirname(__file__), "static")
 if _os.path.isdir(_STATIC_DIR):
@@ -564,9 +631,7 @@ if _os.path.isdir(_STATIC_DIR):
 
 
 # ── framework catalog + attestation (full coverage) ──
-from pydantic import BaseModel as _BaseModel
-from app.services import framework_catalog as _catalog
-from app.services.attestation import AttestationService as _AttestationService
+
 
 
 class _AttestationRequest(_BaseModel):
@@ -604,7 +669,7 @@ def upsert_attestation(req: _AttestationRequest, db: Session = Depends(get_db),
         row = _AttestationService(db).upsert(req.tenant_id, req.framework, req.control_id,
                                              req.status, req.owner, req.approver, req.note, req.evidence_ref)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return {"id": row.id, "tenant_id": row.tenant_id, "framework": row.framework,
             "control_id": row.control_id, "status": row.status.value, "owner": row.owner,
             "approver": row.approver, "note": row.note, "evidence_ref": row.evidence_ref,
@@ -629,9 +694,6 @@ def framework_coverage(framework: str, tenant_id: str = "default",
 
 
 # ── evidence graph (LLM-grounded document → concept → control mindmap) ──
-from app.services.evidence_graph import EvidenceService as _EvidenceService
-from app.services import evidence_graph as _evg
-from app.services import llm_client as _llm
 
 
 class _DocumentRequest(_BaseModel):
@@ -790,25 +852,25 @@ def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
         try:
             raw = _b64.b64decode(req.content_base64, validate=True)
         except Exception:
-            raise HTTPException(status_code=422, detail="content_base64 is not valid base64")
+            raise HTTPException(status_code=422, detail="content_base64 is not valid base64") from None
         fn = (req.filename or "upload").lower()
         if fn.endswith(".pdf"):
             from app.services.doc_fetch import _pdf_to_text
             try:
                 content = _pdf_to_text(raw)
             except Exception as e:
-                raise HTTPException(status_code=422, detail=f"could not read PDF: {e}")
+                raise HTTPException(status_code=422, detail=f"could not read PDF: {e}") from e
             stype = "upload:pdf"
         else:
             content = raw.decode("utf-8", errors="replace")
             stype = "upload:text"
         name = name or req.filename or "uploaded document"
     if req.url:
-        from app.services.doc_fetch import fetch_url_text, FetchError
+        from app.services.doc_fetch import FetchError, fetch_url_text
         try:
             content, stype = fetch_url_text(req.url.strip())
         except FetchError as e:
-            raise HTTPException(status_code=400, detail=f"URL fetch failed: {e}")
+            raise HTTPException(status_code=400, detail=f"URL fetch failed: {e}") from e
         name = name or req.url.strip()[:120]
     if not content or not content.strip():
         raise HTTPException(status_code=400, detail="No content (provide 'content', 'content_base64', or a fetchable 'url').")
@@ -835,18 +897,22 @@ def confirm_evidence_hit(hit_id: str, req: _ConfirmRequest, db: Session = Depend
     try:
         return _EvidenceService(db).confirm_hit(hit_id, req.confirmed, req.auto_attest, req.approver)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @app.delete("/evidence/documents/{doc_id}", tags=["evidence-graph"])
 def delete_evidence_document(doc_id: str, db: Session = Depends(get_db),
                              p: Principal = Depends(require_principal)) -> dict:
-    _EvidenceService(db).delete_document(doc_id)
+    from app.models import EvidenceDocument
+    doc = db.get(EvidenceDocument, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="document not found")
+    authorize_tenant(p, doc.tenant_id)  # prevent cross-tenant deletion
+    _EvidenceService(db).delete_document(doc_id, doc.tenant_id)
     return {"deleted": doc_id}
 
 
 # ── ontology-driven resolver (telemetry / document / attestation routing) ──
-from app.services import resolver as _resolver
 
 
 class _ResolveRequest(_BaseModel):
@@ -880,7 +946,7 @@ def resolve_control(req: _ResolveRequest, db: Session = Depends(get_db),
         return _resolver.resolve(db, req.tenant_id, req.framework, req.control_id,
                                  req.asset, req.available_connectors, req.dry_run)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/resolve/decisions", tags=["ontology"])
@@ -897,8 +963,7 @@ def list_routing_decisions(tenant_id: str = "default", control_id: str | None = 
 
 
 # ── evidence mindmap ──
-import os as _os_evm
-from fastapi.responses import FileResponse as _FileResponse_evm
+
 
 _EVMAP_FILE = _os_evm.path.join(_os_evm.path.dirname(__file__), "static", "evidence-map.html")
 
@@ -912,10 +977,6 @@ def _serve_evidence_map():
 # ════════════════════════════════════════════════════════════════════
 # GRC Risk Register + TPRM (Third-Party Risk Management)
 # ════════════════════════════════════════════════════════════════════
-from app.grc_tprm_models import (RiskIn as _RiskIn, RiskPatch as _RiskPatch,
-                                 VendorIn as _VendorIn, VendorPatch as _VendorPatch)
-from app.services.grc_tprm import (RiskService as _RiskService,
-                                   VendorService as _VendorService)
 
 
 @app.get("/grc/risks", tags=["grc"])
@@ -1005,27 +1066,24 @@ def tprm_delete_vendor(vendor_id: str, tenant_id: str = "default",
 
 
 
-from app.services.trust_graph import TrustGraphService as _TrustGraph
 
 
 @app.get("/trust/graph", tags=["trust"])
 def trust_graph(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
-    authorize_tenant(p, tenant_id); return _TrustGraph(db).graph(tenant_id)
+    authorize_tenant(p, tenant_id)
+    return _TrustGraph(db).graph(tenant_id)
 
 
 @app.get("/trust/risk-telemetry", tags=["trust"])
 def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
-    authorize_tenant(p, tenant_id); return _TrustGraph(db).risk_telemetry(tenant_id)
+    authorize_tenant(p, tenant_id)
+    return _TrustGraph(db).risk_telemetry(tenant_id)
 
 
 
 # ════════════════════════════════════════════════════════════════════
 # AUDIT MANAGEMENT  (engagement lifecycle + PBC requests + export package)
 # ════════════════════════════════════════════════════════════════════
-from app.audit_models import (AuditIn as _AuditIn, AuditPatch as _AuditPatch,
-                              ControlReviewPatch as _CtrlPatch,
-                              EvidenceRequestIn as _ReqIn, EvidenceRequestPatch as _ReqPatch)
-from app.services.audit_service import AuditService as _AuditSvc
 
 
 @app.get("/audits", tags=["audit"])
@@ -1142,7 +1200,6 @@ def audit_export(audit_id: str, tenant_id: str = "default", db: Session = Depend
 # ════════════════════════════════════════════════════════════════════
 # DOCUMENT → POLICY/TELEMETRY  (ingest a doc, auto-extract controls)
 # ════════════════════════════════════════════════════════════════════
-from app.services import doc_ingest as _doc_ingest
 
 
 @app.post("/v1/documents/extract", tags=["documents"])
@@ -1205,7 +1262,7 @@ def doc_upload(payload: dict, tenant_id: str = "default",
     try:
         raw = base64.b64decode(b64)
     except Exception:
-        raise HTTPException(422, "content_base64 is not valid base64")
+        raise HTTPException(422, "content_base64 is not valid base64") from None
     if name.endswith(".pdf"):
         from app.services.doc_fetch import _pdf_to_text
         text = _pdf_to_text(raw)
@@ -1228,7 +1285,6 @@ def doc_upload(payload: dict, tenant_id: str = "default",
 # ════════════════════════════════════════════════════════════════════
 # THREAT INTELLIGENCE  (CISA KEV + EPSS + NVD — external feeds)
 # ════════════════════════════════════════════════════════════════════
-from app.services import threat_intel as _threat
 
 
 @app.get("/v1/threat/summary", tags=["threat-intel"])
@@ -1273,7 +1329,8 @@ def threat_enrich(payload: dict, p: Principal = Depends(require_principal)) -> d
             "pressure": _threat.threat_pressure()}
 
 
-from app.policy_as_code import get_engine as _policy_engine, reload_engine as _reload_policies
+
+
 @app.get("/v1/policy/list", tags=["policy-as-code"])
 def policy_list(p: Principal = Depends(require_principal)) -> dict:
     eng = _policy_engine()
@@ -1315,9 +1372,7 @@ def policy_reload(p: Principal = Depends(require_principal)) -> dict:
 # ════════════════════════════════════════════════════════════════════
 # AI GOVERNANCE — privacy-enhancing technologies + dynamic risk
 # ════════════════════════════════════════════════════════════════════
-import json as _json
-from app.services import ai_governance as _aigov
-from app.ai_governance_models import AISystemPET as _PET
+
 
 
 @app.get("/v1/ai-gov/pet-catalog", tags=["ai-governance"])
@@ -1348,7 +1403,9 @@ def add_system_pet(system_id: str, payload: dict, tenant_id: str = "default",
     row = _PET(tenant_id=tenant_id, system_id=system_id, pet=pet,
                params_json=_json.dumps(payload.get("params", {})),
                data_sensitivity=payload.get("data_sensitivity", "pii"))
-    db.add(row); db.commit(); db.refresh(row)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
     return {"id": row.id, "system_id": system_id, "pet": pet,
             "assessment": _aigov.assess_pet(pet, payload.get("params"))}
 
@@ -1387,7 +1444,6 @@ def score_adhoc(payload: dict, p: Principal = Depends(require_principal)) -> dic
 # ════════════════════════════════════════════════════════════════════
 # INTEGRATION — wires policy/AI-gov/threat into findings + risk register
 # ════════════════════════════════════════════════════════════════════
-from app.services import integration as _integ
 
 
 @app.post("/v1/integrate/policy-to-findings", tags=["integration"])
@@ -1443,8 +1499,6 @@ def integrate_run_all(payload: dict = None, tenant_id: str = "default",
 # GRC-PLATFORM SYNC — separate connector set (Vanta / Drata / OneTrust)
 # Inherited trust telemetry, kept in its own lane (source_kind=grc_platform)
 # ════════════════════════════════════════════════════════════════════
-from app.grc_platforms import service as _grc_svc
-from app.grc_platforms.registry import GRC_PLATFORM_REGISTRY as _GRC_REG
 
 
 @app.get("/v1/grc-sync/platforms", tags=["grc-platforms"])
@@ -1463,7 +1517,7 @@ def grc_sync(platform: str, tenant_id: str = "default",
     try:
         return _grc_svc.sync_platform(db, tenant_id, platform)
     except ConnectorError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
 
 @app.get("/v1/grc-sync/status", tags=["grc-platforms"])
@@ -1487,8 +1541,8 @@ def grc_multi_source(tenant_id: str = "default", db: Session = Depends(get_db),
 def grc_profiles(p: Principal = Depends(require_principal)) -> dict:
     """The loaded platform profiles (built-in + YAML) and the shared crosswalk —
     the transparency layer for a unified, adaptive trust telemetry portal."""
-    from app.grc_platforms.loader import load_all_profiles
     from app.grc_platforms import crosswalk as xw
+    from app.grc_platforms.loader import load_all_profiles
     profs = load_all_profiles()
     return {
         "profiles": [{"platform": k, "name": v.name, "source": v.source,
@@ -1505,10 +1559,7 @@ def grc_profiles(p: Principal = Depends(require_principal)) -> dict:
 # GRC TRUST TELEMETRY — dedicated inherited-trust scoring (separate lane)
 # Tunable as code: weights come from a TrustPolicy (default / env / inline).
 # ════════════════════════════════════════════════════════════════════
-from app.grc_platforms.trust_telemetry import (
-    GRCTrustTelemetry as _GRCTrust, resolve_policy as _resolve_trust_policy,
-    TrustPolicy as _TrustPolicy)
-from dataclasses import asdict as _asdict
+
 
 
 @app.get("/v1/grc-trust/score", tags=["grc-trust-telemetry"])

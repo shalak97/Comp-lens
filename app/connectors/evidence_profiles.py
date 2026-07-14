@@ -10,10 +10,10 @@ demo and live modes.
 from __future__ import annotations
 
 import random
-from typing import Any, Dict, List
+from typing import Any
 
 # ── flagship profiles (the 8 required demo connectors) ──────────────────────
-_RICH: Dict[str, List[Dict[str, Any]]] = {
+_RICH: dict[str, list[dict[str, Any]]] = {
     "AWS_SECURITY_HUB": [
         {"evidence_type": "vulnerability_findings", "title": "Security Hub findings summary",
          "signals": {"critical_findings": 2, "high_findings": 11, "medium_findings": 37,
@@ -112,7 +112,7 @@ _RICH: Dict[str, List[Dict[str, Any]]] = {
 }
 
 # ── category templates for everything else ───────────────────────────────────
-_TEMPLATES: Dict[str, Dict[str, Any]] = {
+_TEMPLATES: dict[str, dict[str, Any]] = {
     "mfa_enabled": {"title": "MFA enforcement", "signals": lambda r: {
         "mfa_enforced": True, "coverage_pct": round(90 + r.random() * 10, 1)}, "status": "pass"},
     "privileged_users_reviewed": {"title": "Privileged access review", "signals": lambda r: {
@@ -152,7 +152,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
 }
 
 
-def demo_evidence(connector: Dict[str, Any]) -> List[Dict[str, Any]]:
+def demo_evidence(connector: dict[str, Any]) -> list[dict[str, Any]]:
     """Deterministic, realistic demo evidence for any catalogued connector."""
     key = connector["key"]
     if key in _RICH:

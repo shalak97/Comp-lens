@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_URL = "https://api.first.org/data/v1/epss"
@@ -67,10 +67,10 @@ _SEED_KEV = [
      "dateAdded": "2022-04-04", "knownRansomwareCampaignUse": "Known"},
 ]
 
-_cache: Dict[str, Any] = {"kev": None, "kev_ts": 0.0, "epss": {}, "source": "none"}
+_cache: dict[str, Any] = {"kev": None, "kev_ts": 0.0, "epss": {}, "source": "none"}
 
 
-def _fetch_json(url: str, timeout: float = 12.0) -> Optional[Any]:
+def _fetch_json(url: str, timeout: float = 12.0) -> Any | None:
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Comp-Lens/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -82,7 +82,7 @@ def _fetch_json(url: str, timeout: float = 12.0) -> Optional[Any]:
 
 
 # ── CISA KEV ──
-def get_kev(force: bool = False) -> Dict[str, Any]:
+def get_kev(force: bool = False) -> dict[str, Any]:
     """Return the KEV catalog, cached. Falls back to last cache, then seed."""
     now = time.time()
     if not force and _cache["kev"] and (now - _cache["kev_ts"]) < CACHE_TTL:
@@ -104,7 +104,7 @@ def get_kev(force: bool = False) -> Dict[str, Any]:
             "note": "live feed unreachable; showing seed of well-known KEV entries"}
 
 
-def kev_summary() -> Dict[str, Any]:
+def kev_summary() -> dict[str, Any]:
     kev = get_kev()
     vulns = kev["vulnerabilities"]
     ransomware = sum(1 for v in vulns
@@ -124,9 +124,9 @@ def kev_summary() -> Dict[str, Any]:
 
 
 # ── EPSS (exploit probability) ──
-def get_epss(cve_ids: List[str]) -> Dict[str, float]:
+def get_epss(cve_ids: list[str]) -> dict[str, float]:
     """EPSS scores (0..1) for given CVEs. Cached per-CVE."""
-    out: Dict[str, float] = {}
+    out: dict[str, float] = {}
     missing = []
     for c in cve_ids:
         if c in _cache["epss"]:
@@ -150,7 +150,7 @@ def get_epss(cve_ids: List[str]) -> Dict[str, float]:
 
 
 # ── NVD severity (optional, single CVE) ──
-def get_nvd_severity(cve_id: str) -> Optional[Dict[str, Any]]:
+def get_nvd_severity(cve_id: str) -> dict[str, Any] | None:
     data = _fetch_json(f"{NVD_URL}?cveId={cve_id}")
     if not data:
         return None
@@ -167,7 +167,7 @@ def get_nvd_severity(cve_id: str) -> Optional[Dict[str, Any]]:
 
 
 # ── the bridge: enrich controls with real-world exploitation pressure ──
-def threat_pressure() -> Dict[str, Any]:
+def threat_pressure() -> dict[str, Any]:
     """Aggregate exploitation pressure from KEV, applied to vuln-mgmt controls."""
     s = kev_summary()
     total = s["total_known_exploited"]
@@ -179,8 +179,8 @@ def threat_pressure() -> Dict[str, Any]:
             "basis": "CISA KEV catalog", "source": s["source"]}
 
 
-def enrich_controls(control_ids: List[str], cve_map: Optional[Dict[str, List[str]]] = None
-                    ) -> Dict[str, Dict[str, Any]]:
+def enrich_controls(control_ids: list[str], cve_map: dict[str, list[str]] | None = None
+                    ) -> dict[str, dict[str, Any]]:
     """Attach threat context to controls — only where the relationship is genuine.
 
     cve_map: optional {control_id: [cve_ids]} from connector findings. When present,
@@ -190,12 +190,12 @@ def enrich_controls(control_ids: List[str], cve_map: Optional[Dict[str, List[str
     kev = get_kev()
     kev_cves = {v.get("cveID"): v for v in kev["vulnerabilities"]}
     pressure = threat_pressure()
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     # gather all finding CVEs to score EPSS in one call
     all_cves = sorted({c for cves in cve_map.values() for c in cves})
     epss = get_epss(all_cves) if all_cves else {}
     for cid in control_ids:
-        ctx: Dict[str, Any] = {}
+        ctx: dict[str, Any] = {}
         base = cid.split("(")[0].strip()
         # bridge 1: vuln-management control → aggregate pressure
         if base in VULN_CONTROLS:

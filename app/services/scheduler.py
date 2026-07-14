@@ -11,11 +11,10 @@ After each run, a compliance snapshot is captured for trend history.
 
 from __future__ import annotations
 
+import builtins
 import logging
 import threading
-import time
-from datetime import datetime, timedelta, timezone
-from typing import List
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -37,13 +36,13 @@ class ScheduleService:
         s = Schedule(
             tenant_id=req.tenant_id, name=req.name, interval_minutes=req.interval_minutes,
             controls=[c.model_dump() for c in req.controls], enabled=req.enabled,
-            next_run_at=datetime.now(timezone.utc),
+            next_run_at=datetime.now(UTC),
         )
         self.db.add(s)
         self.db.flush()
         return s
 
-    def list(self, tenant_id: str) -> List[Schedule]:
+    def list(self, tenant_id: str) -> builtins.list[Schedule]:
         return list(self.db.execute(
             select(Schedule).where(Schedule.tenant_id == tenant_id)
             .order_by(Schedule.created_at.desc())
@@ -74,7 +73,7 @@ class ScheduleService:
             except Exception as exc:  # noqa: BLE001
                 failed += 1
                 logger.warning("scheduled item failed: %s", exc)
-        s.last_run_at = datetime.now(timezone.utc)
+        s.last_run_at = datetime.now(UTC)
         s.next_run_at = s.last_run_at + timedelta(minutes=s.interval_minutes)
         # snapshot for trends
         TrendService(self.db).snapshot(s.tenant_id, svc.compliance_summary(s.tenant_id))
@@ -90,7 +89,7 @@ class ScheduleService:
         try:
             due = db.execute(
                 select(Schedule).where(Schedule.enabled.is_(True),
-                                       Schedule.next_run_at <= datetime.now(timezone.utc))
+                                       Schedule.next_run_at <= datetime.now(UTC))
             ).scalars().all()
             svc = ScheduleService(db)
             for s in due:

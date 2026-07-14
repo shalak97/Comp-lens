@@ -21,10 +21,10 @@ compliance-as-code model.
 """
 from __future__ import annotations
 
-import os
 import json
-from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Optional
+import os
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -37,7 +37,7 @@ from app.grc_platforms.models import GRCAttestation
 class TrustPolicy:
     """Declarative weights for GRC trust scoring. Tune per risk appetite."""
     # status verdict -> base trust (0..1)
-    status_weights: Dict[str, float] = field(default_factory=lambda: {
+    status_weights: dict[str, float] = field(default_factory=lambda: {
         "pass": 1.0, "not_applicable": 0.5, "error": 0.3, "fail": 0.0})
     status_default: float = 0.3
     # freshness decay
@@ -46,7 +46,7 @@ class TrustPolicy:
     freshness_floor: float = 0.25  # oldest evidence still retains this fraction
     unknown_age_mult: float = 0.6  # multiplier when age is unknown
     # cross-platform agreement
-    corroboration_bonus: Dict[int, float] = field(default_factory=lambda: {
+    corroboration_bonus: dict[int, float] = field(default_factory=lambda: {
         1: 1.0, 2: 1.15, 3: 1.25})
     conflict_factor: float = 0.35  # disagreement multiplies trust down hard
     # band thresholds (0..100)
@@ -54,7 +54,7 @@ class TrustPolicy:
     band_medium: int = 50
     band_low: int = 25
 
-    def validate(self) -> "TrustPolicy":
+    def validate(self) -> TrustPolicy:
         """Clamp to sane ranges so a bad override can't produce nonsense scores."""
         self.fresh_days = max(0, int(self.fresh_days))
         self.stale_days = max(self.fresh_days + 1, int(self.stale_days))
@@ -66,7 +66,7 @@ class TrustPolicy:
         return self
 
     @classmethod
-    def from_overrides(cls, overrides: Optional[Dict[str, Any]]) -> "TrustPolicy":
+    def from_overrides(cls, overrides: dict[str, Any] | None) -> TrustPolicy:
         base = cls()
         if overrides:
             for k, v in overrides.items():
@@ -86,7 +86,7 @@ DEFAULT_POLICY = TrustPolicy()
 
 
 def resolve_policy(tenant_id: str = "default",
-                   inline: Optional[Dict[str, Any]] = None) -> TrustPolicy:
+                   inline: dict[str, Any] | None = None) -> TrustPolicy:
     """Resolve the active trust policy.
 
     Precedence: inline override (request) > env var GRC_TRUST_POLICY (JSON) > defaults.
@@ -130,7 +130,7 @@ def _band(score_0_100: float, pol: TrustPolicy) -> str:
     return "critical"
 
 
-def _control_trust(attestations: List[GRCAttestation], pol: TrustPolicy) -> Dict[str, Any]:
+def _control_trust(attestations: list[GRCAttestation], pol: TrustPolicy) -> dict[str, Any]:
     """Trust score (0..100) for one control from all its GRC attestations."""
     if not attestations:
         return {"trust": 0, "reason": "no attestations"}
@@ -165,18 +165,18 @@ def _control_trust(attestations: List[GRCAttestation], pol: TrustPolicy) -> Dict
 class GRCTrustTelemetry:
     """Computes inherited-trust telemetry from GRC-platform attestations."""
 
-    def __init__(self, db: Session, policy: Optional[TrustPolicy] = None):
+    def __init__(self, db: Session, policy: TrustPolicy | None = None):
         self.db = db
         self.policy = policy or DEFAULT_POLICY
 
-    def _rows(self, tenant_id: str) -> List[GRCAttestation]:
+    def _rows(self, tenant_id: str) -> list[GRCAttestation]:
         return list(self.db.execute(
             select(GRCAttestation).where(
                 GRCAttestation.tenant_id == tenant_id,
                 GRCAttestation.comp_lens_control_id.isnot(None))).scalars().all())
 
-    def by_control(self, tenant_id: str) -> List[Dict[str, Any]]:
-        grouped: Dict[str, List[GRCAttestation]] = {}
+    def by_control(self, tenant_id: str) -> list[dict[str, Any]]:
+        grouped: dict[str, list[GRCAttestation]] = {}
         for r in self._rows(tenant_id):
             grouped.setdefault(r.comp_lens_control_id, []).append(r)
         out = [{"control_id": cid, **_control_trust(atts, self.policy)}
@@ -184,7 +184,7 @@ class GRCTrustTelemetry:
         out.sort(key=lambda c: (c.get("agreement") != "conflict", c["trust"]))
         return out
 
-    def score(self, tenant_id: str) -> Dict[str, Any]:
+    def score(self, tenant_id: str) -> dict[str, Any]:
         controls = self.by_control(tenant_id)
         if not controls:
             return {"grc_trust_score": None, "controls_scored": 0,
@@ -204,9 +204,9 @@ class GRCTrustTelemetry:
             "note": "inherited trust — derived from GRC-platform attestations, separate from native trust graph",
         }
 
-    def by_platform(self, tenant_id: str) -> Dict[str, Any]:
+    def by_platform(self, tenant_id: str) -> dict[str, Any]:
         rows = self._rows(tenant_id)
-        byp: Dict[str, List[GRCAttestation]] = {}
+        byp: dict[str, list[GRCAttestation]] = {}
         for r in rows:
             byp.setdefault(r.platform, []).append(r)
         out = {}

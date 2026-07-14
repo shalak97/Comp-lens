@@ -18,9 +18,13 @@ import csv
 import io
 import json
 import logging
-import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
+
+try:  # defused parser blocks entity-expansion ("billion laughs") / external entities
+    from defusedxml.ElementTree import fromstring as _xml_fromstring
+except ImportError:  # pragma: no cover — falls back to stdlib if defusedxml absent
+    from xml.etree.ElementTree import fromstring as _xml_fromstring
 
 import requests
 
@@ -31,7 +35,7 @@ from app.legacy.sources import LegacySource
 logger = logging.getLogger(__name__)
 
 # cache SQLAlchemy engines per url so we reuse connection pools
-_engines: Dict[str, Any] = {}
+_engines: dict[str, Any] = {}
 
 
 def _engine(url: str):
@@ -41,7 +45,7 @@ def _engine(url: str):
     return _engines[url]
 
 
-def fetch_raw(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def fetch_raw(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     try:
         if source.type == "sql":
             return _fetch_sql(source, asset_id)
@@ -58,7 +62,7 @@ def fetch_raw(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
     raise ConnectorError(f"unsupported legacy type {source.type}")
 
 
-def discover(source: LegacySource) -> List[str]:
+def discover(source: LegacySource) -> list[str]:
     """Enumerate asset ids from a source (sql only, via discovery_query)."""
     if source.type == "sql" and source.discovery_query and source.key_column:
         from sqlalchemy import text
@@ -69,7 +73,7 @@ def discover(source: LegacySource) -> List[str]:
 
 
 # ── SQL ──
-def _fetch_sql(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_sql(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     if not source.query:
         raise ConnectorError("sql source missing 'query'")
     from sqlalchemy import text
@@ -88,8 +92,10 @@ def _read_bytes(url: str) -> bytes:
             return fh.read()
     if parsed.scheme == "sftp":
         import paramiko
+
+        from app.connectors.safety import apply_ssh_host_key_policy
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        apply_ssh_host_key_policy(client)
         client.connect(parsed.hostname, port=parsed.port or 22,
                        username=parsed.username or settings.ssh_default_user,
                        password=parsed.password, key_filename=settings.ssh_key_path,
@@ -103,7 +109,7 @@ def _read_bytes(url: str) -> bytes:
     raise ConnectorError(f"unsupported file scheme {parsed.scheme!r}")
 
 
-def _fetch_file(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_file(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     data = _read_bytes(source.url)
     fmt = (source.format or "csv").lower()
 
@@ -141,10 +147,13 @@ def _fetch_file(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]
 
 
 # ── SOAP ──
-def _fetch_soap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_soap(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     if not source.template or not source.field_paths:
         raise ConnectorError("soap source needs 'template' and 'field_paths'")
-    envelope = source.template.replace("{asset_id}", str(asset_id or ""))
+    from xml.sax.saxutils import escape as _xml_escape
+    # asset_id is client-controlled: XML-escape it so it can't break out of the
+    # envelope element or inject markup into the request body.
+    envelope = source.template.replace("{asset_id}", _xml_escape(str(asset_id or "")))
     headers = {"Content-Type": "text/xml; charset=utf-8"}
     if source.soap_action:
         headers["SOAPAction"] = source.soap_action
@@ -152,9 +161,9 @@ def _fetch_soap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]
                       timeout=settings.request_timeout_seconds)
     if r.status_code >= 400:
         raise ConnectorError(f"soap {r.status_code}")
-    root = ET.fromstring(r.content)
+    root = _xml_fromstring(r.content)
     ns = source.namespaces or {}
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for key, path in source.field_paths.items():
         el = root.find(path, ns) if ns else root.find(path)
         out[key] = el.text if el is not None else None
@@ -162,9 +171,10 @@ def _fetch_soap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]
 
 
 # ── LDAP ──
-def _fetch_ldap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]:
+def _fetch_ldap(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     try:
         from ldap3 import ALL, Connection, Server
+        from ldap3.utils.conv import escape_filter_chars
     except ImportError as exc:  # pragma: no cover
         raise ConnectorError("ldap3 not installed") from exc
     if not (source.base_dn and source.filter):
@@ -172,7 +182,9 @@ def _fetch_ldap(source: LegacySource, asset_id: Optional[str]) -> Dict[str, Any]
     server = Server(source.url, get_info=ALL)
     conn = Connection(server, user=source.bind_dn, password=source.bind_pw, auto_bind=True)
     try:
-        flt = source.filter.replace("{asset_id}", str(asset_id or ""))
+        # asset_id is client-controlled: escape per RFC 4515 so it can't inject
+        # LDAP filter syntax (e.g. ')(uid=*' ) and alter the search.
+        flt = source.filter.replace("{asset_id}", escape_filter_chars(str(asset_id or "")))
         conn.search(source.base_dn, flt, attributes=["*"])
         if not conn.entries:
             return {}

@@ -1,12 +1,14 @@
 """GRC-platform connectors — separate set, bulk ingest, multi-source attestation."""
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 from fastapi.testclient import TestClient
-from app.grc_platforms.base import GRCPlatformConnector
-from app.grc_platforms.profiles import VANTA, DRATA, ALL_PROFILES
-from app.grc_platforms.registry import GRC_PLATFORM_REGISTRY, get_grc_connector
+
 from app.connectors.base import ConnectorError
+from app.grc_platforms.base import GRCPlatformConnector
+from app.grc_platforms.profiles import DRATA, VANTA
+from app.grc_platforms.registry import GRC_PLATFORM_REGISTRY, get_grc_connector
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:////tmp/test_grc.db")
 os.environ.setdefault("APP_ENV", "test")

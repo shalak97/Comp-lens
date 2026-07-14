@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -23,4 +23,4 @@ class AISystemPET(Base):
     params_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     data_sensitivity: Mapped[str] = mapped_column(String(32), default="pii")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
-                                                 default=lambda: datetime.now(timezone.utc))
+                                                 default=lambda: datetime.now(UTC))

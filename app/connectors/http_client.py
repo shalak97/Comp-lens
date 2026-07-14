@@ -22,7 +22,7 @@ import random
 import socket
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -70,9 +70,7 @@ class CircuitBreaker:
         if self._failures < self.fail_threshold:
             return True
         # open — allow a probe after cooldown (half-open)
-        if time.time() - self._opened_at >= self.cooldown_seconds:
-            return True
-        return False
+        return time.time() - self._opened_at >= self.cooldown_seconds
 
     def record_success(self) -> None:
         self._failures = 0
@@ -89,7 +87,7 @@ class CircuitBreaker:
             (time.time() - self._opened_at) < self.cooldown_seconds
 
 
-_breakers: Dict[str, CircuitBreaker] = {}
+_breakers: dict[str, CircuitBreaker] = {}
 
 
 def _breaker_for(service: str) -> CircuitBreaker:
@@ -106,16 +104,16 @@ class ResilientClient:
     allow_ssrf_check: bool = True
     session: requests.Session = field(default_factory=requests.Session)
 
-    def get(self, url: str, headers: Optional[Dict[str, str]] = None,
-            params: Optional[Dict[str, Any]] = None) -> Any:
+    def get(self, url: str, headers: dict[str, str] | None = None,
+            params: dict[str, Any] | None = None) -> Any:
         return self._request("GET", url, headers=headers, params=params)
 
     def request(self, method: str, url: str, **kwargs) -> Any:
         return self._request(method, url, **kwargs)
 
-    def _request(self, method: str, url: str, headers: Optional[Dict[str, str]] = None,
-                 params: Optional[Dict[str, Any]] = None,
-                 json: Optional[Any] = None) -> Any:
+    def _request(self, method: str, url: str, headers: dict[str, str] | None = None,
+                 params: dict[str, Any] | None = None,
+                 json: Any | None = None) -> Any:
         method = method.upper()
         if method not in _READ_ONLY_METHODS:
             raise ConnectorError(
@@ -170,7 +168,7 @@ class ResilientClient:
         breaker.record_failure()
         raise ConnectorError(f"{self.service}: exhausted retries ({last_err})")
 
-    def _sleep(self, attempt: int, override: Optional[float] = None) -> None:
+    def _sleep(self, attempt: int, override: float | None = None) -> None:
         if override is not None:
             time.sleep(min(override, 30))
             return
@@ -188,8 +186,8 @@ def _redact(text: str) -> str:
     return text
 
 
-def paginate(client: ResilientClient, url: str, headers: Dict[str, str],
-             next_key: str = "next", item_key: Optional[str] = None,
+def paginate(client: ResilientClient, url: str, headers: dict[str, str],
+             next_key: str = "next", item_key: str | None = None,
              max_pages: int = 20) -> list:
     """Generic cursor pagination — follows `next`-style links, capped for safety."""
     out: list = []

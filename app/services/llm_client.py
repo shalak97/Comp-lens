@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -88,20 +88,20 @@ _INSTRUCTION = (
 )
 
 
-def _catalog_str(concepts: List[Dict[str, Any]]) -> str:
+def _catalog_str(concepts: list[dict[str, Any]]) -> str:
     return "\n".join(
         f"- {c['id']}: {c['label']} (aliases: {', '.join(c.get('aliases', [])[:5])})"
         for c in concepts
     )
 
 
-def _user_prompt(doc_text: str, concepts: List[Dict[str, Any]], max_chars: int) -> str:
+def _user_prompt(doc_text: str, concepts: list[dict[str, Any]], max_chars: int) -> str:
     return (f"COMPLIANCE CONCEPTS:\n{_catalog_str(concepts)}\n\n"
             f"DOCUMENT:\n\"\"\"\n{doc_text[:max_chars]}\n\"\"\"\n\n"
             "Return the JSON array now.")
 
 
-def _parse_json_array(text: str) -> Optional[List[Dict[str, Any]]]:
+def _parse_json_array(text: str) -> list[dict[str, Any]] | None:
     """Extract and normalise a JSON array of hits from raw model text."""
     if not text:
         return None
@@ -115,7 +115,7 @@ def _parse_json_array(text: str) -> Optional[List[Dict[str, Any]]]:
         parsed = json.loads(text[start:end + 1])
     except Exception:
         return None
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for item in parsed:
         if isinstance(item, dict) and item.get("concept_id") and item.get("quote"):
             try:
@@ -179,8 +179,8 @@ def _detect_huggingface(doc_text, concepts, max_chars):
 
 
 # ---------------------------------------------------------------- public api
-def detect_concepts(doc_text: str, concepts: List[Dict[str, Any]],
-                    max_chars: int = 16000) -> Optional[List[Dict[str, Any]]]:
+def detect_concepts(doc_text: str, concepts: list[dict[str, Any]],
+                    max_chars: int = 16000) -> list[dict[str, Any]] | None:
     """Return [{concept_id, quote, confidence}] or None if unavailable / failed.
 
     Returning None signals the caller to fall back to deterministic lexicon matching.

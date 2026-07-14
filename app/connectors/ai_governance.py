@@ -8,7 +8,7 @@ the normalized governance attributes this returns.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.connectors.base import Asset, BaseConnector, ConnectorError
 
@@ -19,7 +19,7 @@ class AIGovernanceConnector(BaseConnector):
     def healthcheck(self) -> bool:
         return True
 
-    def _load(self, tenant_id: Optional[str], asset_id: Optional[str]):
+    def _load(self, tenant_id: str | None, asset_id: str | None):
         from app.database import SessionLocal
         from app.models import AISystem
         if not asset_id:
@@ -36,8 +36,8 @@ class AIGovernanceConnector(BaseConnector):
         finally:
             db.close()
 
-    def collect_telemetry(self, control_id: str, asset_id: Optional[str],
-                          params: Dict[str, Any]) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id: str, asset_id: str | None,
+                          params: dict[str, Any]) -> dict[str, Any]:
         tenant_id = (params or {}).get("_tenant_id")
         s = self._load(tenant_id, asset_id)
         return {
@@ -52,10 +52,11 @@ class AIGovernanceConnector(BaseConnector):
             "owner": s.owner, "risk_tier": s.risk_tier, "asset": s.name,
         }
 
-    def discover_assets(self, params: Dict[str, Any]) -> List[Asset]:
+    def discover_assets(self, params: dict[str, Any]) -> list[Asset]:
+        from sqlalchemy import select
+
         from app.database import SessionLocal
         from app.models import AISystem
-        from sqlalchemy import select
         tenant_id = (params or {}).get("_tenant_id")
         db = SessionLocal()
         try:

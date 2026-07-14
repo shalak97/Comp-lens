@@ -19,28 +19,27 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import timezone
+from datetime import UTC
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.connectors import catalog as cat
-from app.connectors.evidence_profiles import demo_evidence
 from app.connectors import safety as _safety
+from app.connectors.evidence_profiles import demo_evidence
 from app.models import ConnectorEvidenceItem, ConnectorSyncState, utc_now
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
 
 @lru_cache(maxsize=1)
-def _control_map() -> Dict[str, Dict[str, List[str]]]:
+def _control_map() -> dict[str, dict[str, list[str]]]:
     with open(os.path.join(_DATA, "connector_control_map.json"), encoding="utf-8") as fh:
         return json.load(fh)["mappings"]
 
 
-def _env_state(c: Dict[str, Any]) -> Dict[str, Any]:
+def _env_state(c: dict[str, Any]) -> dict[str, Any]:
     names = c.get("env_vars", [])
     set_names = [n for n in names if os.getenv(n)]
     return {"required": names, "set": set_names,
@@ -48,7 +47,7 @@ def _env_state(c: Dict[str, Any]) -> Dict[str, Any]:
             "complete": len(set_names) == len(names)}
 
 
-def _registry_connector(c: Dict[str, Any]):
+def _registry_connector(c: dict[str, Any]):
     if not c.get("registry_key"):
         return None
     try:
@@ -58,10 +57,10 @@ def _registry_connector(c: Dict[str, Any]):
         return None
 
 
-def status_one(db: Session, c: Dict[str, Any], tenant_id: str = "default") -> Dict[str, Any]:
+def status_one(db: Session, c: dict[str, Any], tenant_id: str = "default") -> dict[str, Any]:
     env = _env_state(c)
     mode = "not_configured"
-    healthy: Optional[bool] = None
+    healthy: bool | None = None
     if not c.get("env_vars"):
         mode = "demo"
     elif env["complete"] and c.get("registry_key"):
@@ -99,9 +98,9 @@ def status_one(db: Session, c: Dict[str, Any], tenant_id: str = "default") -> Di
     }
 
 
-def supported_controls(c: Dict[str, Any]) -> Dict[str, List[str]]:
+def supported_controls(c: dict[str, Any]) -> dict[str, list[str]]:
     """framework -> sorted control ids this connector's evidence maps to."""
-    out: Dict[str, set] = {}
+    out: dict[str, set] = {}
     cm = _control_map()
     for et in c["evidence_types"]:
         for fw, ids in cm.get(et, {}).items():
@@ -109,7 +108,7 @@ def supported_controls(c: Dict[str, Any]) -> Dict[str, List[str]]:
     return {fw: sorted(ids) for fw, ids in sorted(out.items())}
 
 
-def test_connection(c: Dict[str, Any]) -> Dict[str, Any]:
+def test_connection(c: dict[str, Any]) -> dict[str, Any]:
     env = _env_state(c)
     _gate = _safety.live_allowed(c["key"], c.get("auth_method"))
     if env["complete"] and c.get("registry_key") and _gate["allowed"]:
@@ -131,7 +130,7 @@ def test_connection(c: Dict[str, Any]) -> Dict[str, Any]:
     return {"key": c["key"], "ok": True, "mode": "demo", "detail": "demo mode"}
 
 
-def _normalize(c: Dict[str, Any], items: List[Dict[str, Any]], mode: str) -> List[Dict[str, Any]]:
+def _normalize(c: dict[str, Any], items: list[dict[str, Any]], mode: str) -> list[dict[str, Any]]:
     cm = _control_map()
     out = []
     for it in items:
@@ -147,7 +146,7 @@ def _normalize(c: Dict[str, Any], items: List[Dict[str, Any]], mode: str) -> Lis
     return out
 
 
-def _try_live_collect(c: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+def _try_live_collect(c: dict[str, Any]) -> list[dict[str, Any]] | None:
     """Best-effort live evidence via the registered connector's telemetry API.
     Retries once. Returns None to signal demo fallback."""
     if not _safety.live_allowed(c["key"], c.get("auth_method"))["allowed"]:
@@ -156,7 +155,7 @@ def _try_live_collect(c: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     if inst is None or not _env_state(c)["complete"]:
         return None
     cm = _control_map()
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     for et in c["evidence_types"]:
         nist = cm.get(et, {}).get("NIST_800_53", [])
         if not nist:
@@ -174,8 +173,8 @@ def _try_live_collect(c: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     return items or None
 
 
-def sync(db: Session, c: Dict[str, Any], tenant_id: str = "default",
-         force_demo: bool = False) -> Dict[str, Any]:
+def sync(db: Session, c: dict[str, Any], tenant_id: str = "default",
+         force_demo: bool = False) -> dict[str, Any]:
     mode, items, error = "demo", None, None
     if not force_demo:
         try:
@@ -210,10 +209,10 @@ def sync(db: Session, c: Dict[str, Any], tenant_id: str = "default",
     db.commit()
     return {"key": c["key"], "mode": mode, "evidence_count": len(norm),
             "status": st.status, "error": error,
-            "synced_at": st.last_sync_at.replace(tzinfo=timezone.utc).isoformat()}
+            "synced_at": st.last_sync_at.replace(tzinfo=UTC).isoformat()}
 
 
-def evidence_for(db: Session, key: str, tenant_id: str = "default") -> List[Dict[str, Any]]:
+def evidence_for(db: Session, key: str, tenant_id: str = "default") -> list[dict[str, Any]]:
     rows = db.execute(select(ConnectorEvidenceItem).where(
         ConnectorEvidenceItem.tenant_id == tenant_id,
         ConnectorEvidenceItem.connector_key == key.upper())).scalars().all()

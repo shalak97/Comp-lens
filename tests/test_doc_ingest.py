@@ -1,6 +1,7 @@
 """Document → markdown → controls → telemetry events pipeline."""
 import base64
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 

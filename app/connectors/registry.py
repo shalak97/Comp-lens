@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Dict, Optional, Type
 
 from app.connectors.base import BaseConnector, ConnectorError
 
@@ -19,10 +18,13 @@ logger = logging.getLogger(__name__)
 HEALTH_TTL_SECONDS = 60
 
 
-def _load_registry() -> Dict[str, Type[BaseConnector]]:
+def _load_registry() -> dict[str, type[BaseConnector]]:
+    from app.connectors.ai_governance import AIGovernanceConnector
     from app.connectors.aws import AWSConnector
     from app.connectors.github import GitHubConnector
     from app.connectors.jira import JiraConnector
+    from app.connectors.legacy import LegacyConnector
+    from app.connectors.mock import MockConnector
     from app.connectors.okta import OktaConnector
     from app.connectors.secondary import (
         AzureConnector,
@@ -33,9 +35,6 @@ def _load_registry() -> Dict[str, Type[BaseConnector]]:
         ServiceNowConnector,
         SlackConnector,
     )
-    from app.connectors.ai_governance import AIGovernanceConnector
-    from app.connectors.legacy import LegacyConnector
-    from app.connectors.mock import MockConnector
     from app.connectors.ssh_linux import SSHLinuxConnector
 
     return {
@@ -65,8 +64,8 @@ class ConnectorRegistry:
         if not settings.demo_enabled():
             self._classes.pop("DEMO", None)
             logger.info("DEMO connector disabled (app_env=%s)", settings.app_env)
-        self._instances: Dict[str, BaseConnector] = {}
-        self._health: Dict[str, tuple] = {}  # name -> (timestamp, value)
+        self._instances: dict[str, BaseConnector] = {}
+        self._health: dict[str, tuple] = {}  # name -> (timestamp, value)
 
     def supported(self) -> list[str]:
         return sorted(self._classes.keys())
@@ -87,7 +86,7 @@ class ConnectorRegistry:
                 raise ConnectorError(f"Failed to init {key} connector: {exc}") from exc
         return self._instances[key]
 
-    def healthcheck(self, source_system: str) -> Optional[bool]:
+    def healthcheck(self, source_system: str) -> bool | None:
         # cache results for HEALTH_TTL_SECONDS so /connectors doesn't fire an
         # external API call per connector on every request.
         key = source_system.upper()
@@ -96,7 +95,7 @@ class ConnectorRegistry:
         if hit and now - hit[0] < HEALTH_TTL_SECONDS:
             return hit[1]
         try:
-            val: Optional[bool] = self.get(source_system).healthcheck()
+            val: bool | None = self.get(source_system).healthcheck()
         except ConnectorError:
             val = None
         self._health[key] = (now, val)

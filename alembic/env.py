@@ -1,9 +1,8 @@
 """Alembic environment — wires migrations to the app's models + DATABASE_URL."""
 from logging.config import fileConfig
 
-from alembic import context
-
 import app.models  # noqa: F401  register tables
+from alembic import context
 from app.config import settings
 from app.database import Base
 

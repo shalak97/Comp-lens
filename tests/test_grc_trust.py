@@ -1,13 +1,18 @@
 """GRC Trust Telemetry — configurable scoring (freshness, corroboration, conflict)."""
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 from fastapi.testclient import TestClient
-from app.grc_platforms.trust_telemetry import (
-    TrustPolicy, resolve_policy, _control_trust, _freshness_mult)
-from app.grc_platforms.models import GRCAttestation
+
 from app.grc_platforms.base import GRCPlatformConnector
-from app.grc_platforms.profiles import VANTA, DRATA
+from app.grc_platforms.models import GRCAttestation
+from app.grc_platforms.profiles import VANTA
+from app.grc_platforms.trust_telemetry import (
+    TrustPolicy,
+    _control_trust,
+    resolve_policy,
+)
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:////tmp/test_grctrust.db")
 os.environ.setdefault("APP_ENV", "test")
@@ -17,8 +22,11 @@ os.environ.setdefault("EVIDENCE_SIGNING_KEY", "ci")
 
 def _att(platform, status, days, conf=0.9):
     a = GRCAttestation()
-    a.platform = platform; a.status = status; a.freshness_days = days
-    a.confidence = conf; a.comp_lens_control_id = "AC-2"
+    a.platform = platform
+    a.status = status
+    a.freshness_days = days
+    a.confidence = conf
+    a.comp_lens_control_id = "AC-2"
     return a
 
 

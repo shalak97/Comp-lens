@@ -13,7 +13,7 @@ Supported controls:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -54,8 +54,8 @@ class GitHubConnector(BaseConnector):
             return False
 
     def collect_telemetry(
-        self, control_id: str, asset_id: Optional[str], params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
         repo = asset_id or params.get("repo")
         if not repo or "/" not in repo:
             raise ConnectorError("GitHub control requires asset_id as 'owner/repo'.")
@@ -84,11 +84,11 @@ class GitHubConnector(BaseConnector):
 
         raise ConnectorError(f"GitHub connector does not support control {control_id}")
 
-    def discover_assets(self, params: Dict[str, Any]) -> List[Asset]:
+    def discover_assets(self, params: dict[str, Any]) -> list[Asset]:
         org = params.get("org") or settings.github_org
         if not org:
             return []
-        out: List[Asset] = []
+        out: list[Asset] = []
         try:
             for r in self._get(f"/orgs/{org}/repos?per_page=50") or []:
                 out.append(

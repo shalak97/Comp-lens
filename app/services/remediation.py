@@ -7,7 +7,7 @@ team can see "fix these 5 and you go from 72% to 88%."
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ class RemediationService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def priorities(self, tenant_id: str, top: int = 10) -> Dict[str, Any]:
+    def priorities(self, tenant_id: str, top: int = 10) -> dict[str, Any]:
         rows = self.db.execute(
             select(Posture.control_id, Posture.source_system, Posture.asset_id,
                    Posture.status, Posture.severity)
@@ -35,7 +35,7 @@ class RemediationService:
 
         applicable_weight = 0.0
         fail_weight = 0.0
-        items: List[Dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
         for control_id, source, asset, status, severity in rows:
             if status.value not in ("pass", "fail"):
                 continue

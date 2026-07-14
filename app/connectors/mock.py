@@ -8,7 +8,7 @@ compliance — it does not touch any real system.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from app.connectors.base import BaseConnector
 
@@ -20,8 +20,8 @@ class MockConnector(BaseConnector):
         return True
 
     def collect_telemetry(
-        self, control_id: str, asset_id: Optional[str], params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
         # Synthetic but realistic telemetry per control. `fail` param can force
         # a failing result for testing remediation paths.
         force_fail = bool(params.get("fail"))

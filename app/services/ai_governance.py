@@ -21,10 +21,10 @@ PETs assessed:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # ── PET catalog: each technology, what it protects, how to read its strength ──
-PET_CATALOG: Dict[str, Dict[str, Any]] = {
+PET_CATALOG: dict[str, dict[str, Any]] = {
     "differential_privacy": {
         "label": "Differential Privacy",
         "protects": "Prevents inference about any single individual in the dataset",
@@ -74,7 +74,7 @@ _SENSITIVITY = {"none": 5, "internal": 20, "pii": 60, "phi": 80, "financial": 75
                 "biometric": 90, "special_category": 95}
 
 
-def assess_pet(pet_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def assess_pet(pet_id: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Assess one PET's strength from its parameters → a 0..1 effectiveness score."""
     params = params or {}
     meta = PET_CATALOG.get(pet_id)
@@ -130,7 +130,7 @@ def assess_pet(pet_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str
             "assessment": note, "frameworks": meta["frameworks"]}
 
 
-def compute_privacy_risk(data_sensitivity: str, pets: List[Dict[str, Any]]) -> Dict[str, Any]:
+def compute_privacy_risk(data_sensitivity: str, pets: list[dict[str, Any]]) -> dict[str, Any]:
     """Dynamic residual privacy risk = inherent (from data) reduced by PET strength.
 
     Mirrors the Comp-Lens telemetry philosophy: residual is DERIVED, not typed.
@@ -175,7 +175,7 @@ _AI_ACT_TIERS = {
 }
 
 
-def ai_act_obligations(risk_tier: str, governance: Dict[str, bool]) -> Dict[str, Any]:
+def ai_act_obligations(risk_tier: str, governance: dict[str, bool]) -> dict[str, Any]:
     """Map an AI system to its EU AI Act obligations + which are met."""
     tier = _AI_ACT_TIERS.get(str(risk_tier).lower(), _AI_ACT_TIERS["limited"])
     # map governance booleans to obligation coverage (for high-risk)
@@ -188,7 +188,7 @@ def ai_act_obligations(risk_tier: str, governance: Dict[str, bool]) -> Dict[str,
         "Transparency to users": governance.get("transparency_notice", False),
     }
     obligations = tier["obligations"]
-    met = sum(1 for o in obligations if coverage.get(o, False))
+    sum(1 for o in obligations if coverage.get(o, False))
     applicable = [o for o in obligations if o in coverage]
     met_applicable = sum(1 for o in applicable if coverage[o])
     return {
@@ -200,7 +200,7 @@ def ai_act_obligations(risk_tier: str, governance: Dict[str, bool]) -> Dict[str,
     }
 
 
-def _num(v: Any, default: Optional[float] = None) -> Optional[float]:
+def _num(v: Any, default: float | None = None) -> float | None:
     try:
         return float(v)
     except (TypeError, ValueError):

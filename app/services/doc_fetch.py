@@ -7,11 +7,11 @@ Supported content: HTML (tags stripped), plain text / markdown, and PDF (best ef
 """
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import re
 import socket
 from html.parser import HTMLParser
-from typing import Tuple
 from urllib.parse import urlparse
 
 import requests
@@ -47,7 +47,7 @@ def _assert_safe(url: str) -> None:
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        raise FetchError(f"Cannot resolve host: {host}")
+        raise FetchError(f"Cannot resolve host: {host}") from None
     for info in infos:
         ip = info[4][0]
         if _is_blocked_ip(ip):
@@ -75,10 +75,8 @@ class _TextExtractor(HTMLParser):
 
 def _html_to_text(html: str) -> str:
     ex = _TextExtractor()
-    try:
+    with contextlib.suppress(Exception):
         ex.feed(html)
-    except Exception:
-        pass
     text = " ".join(ex.parts)
     return re.sub(r"\s+", " ", text).strip()
 
@@ -86,16 +84,17 @@ def _html_to_text(html: str) -> str:
 def _pdf_to_text(raw: bytes) -> str:
     try:
         import io
+
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(raw))
         return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
     except ImportError:
-        raise FetchError("PDF support not installed (pypdf).")
+        raise FetchError("PDF support not installed (pypdf).") from None
     except Exception as e:
-        raise FetchError(f"Could not extract PDF text: {e}")
+        raise FetchError(f"Could not extract PDF text: {e}") from e
 
 
-def fetch_url_text(url: str) -> Tuple[str, str]:
+def fetch_url_text(url: str) -> tuple[str, str]:
     """Return (extracted_text, source_type). Raises FetchError on any problem."""
     current = url
     session = requests.Session()

@@ -17,9 +17,9 @@ import hashlib
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from app.config import settings
 from app.retry import TransientError, external_retry
@@ -27,7 +27,7 @@ from app.retry import TransientError, external_retry
 logger = logging.getLogger(__name__)
 
 
-def telemetry_hash(telemetry: Dict[str, Any]) -> str:
+def telemetry_hash(telemetry: dict[str, Any]) -> str:
     """Deterministic SHA-256 over canonical JSON."""
     canonical = json.dumps(telemetry, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -61,12 +61,12 @@ class EvidenceStore:
         self._prefix = settings.evidence_s3_prefix
 
     def store(self, *, evidence_id: str, tenant_id: str, run_id: str, control_id: str,
-              framework: str, status: str, telemetry: Dict[str, Any]) -> str:
+              framework: str, status: str, telemetry: dict[str, Any]) -> str:
         record = {
             "evidence_id": evidence_id, "tenant_id": tenant_id, "run_id": run_id,
             "control_id": control_id, "framework": framework, "status": status,
             "telemetry": telemetry, "telemetry_hash": telemetry_hash(telemetry),
-            "stored_at": datetime.now(timezone.utc).isoformat(),
+            "stored_at": datetime.now(UTC).isoformat(),
         }
         payload = json.dumps(record, default=str, sort_keys=True)
 
@@ -103,11 +103,11 @@ class EvidenceStore:
             raise TransientError(f"S3 put failed: {exc}") from exc
         return f"s3://{self._bucket}/{key}"
 
-    def stored_hashes(self, tenant_id: str) -> Dict[str, str]:
+    def stored_hashes(self, tenant_id: str) -> dict[str, str]:
         """Return {evidence_id: telemetry_hash} as actually persisted in the
         store, so verification can detect tampering of the stored artifacts
         independently of the database metadata."""
-        out: Dict[str, str] = {}
+        out: dict[str, str] = {}
         safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in tenant_id)[:128] or "tenant"
         if self.backend == "s3":
             try:

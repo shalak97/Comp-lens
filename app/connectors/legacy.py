@@ -12,7 +12,7 @@ and the field_map that normalizes the legacy record into control telemetry.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.connectors.base import Asset, BaseConnector, ConnectorError
 from app.legacy import transports
@@ -29,7 +29,7 @@ class LegacyConnector(BaseConnector):
         # healthy if at least one legacy source is configured
         return len(list_sources()) > 0
 
-    def _resolve(self, params: Dict[str, Any]):
+    def _resolve(self, params: dict[str, Any]):
         name = (params or {}).get("source")
         if not name:
             raise ConnectorError("LEGACY requires params.source naming a configured legacy source.")
@@ -39,8 +39,8 @@ class LegacyConnector(BaseConnector):
             raise ConnectorError(f"unknown legacy source '{name}'. Configured: {available}")
         return source
 
-    def collect_telemetry(self, control_id: str, asset_id: Optional[str],
-                          params: Dict[str, Any]) -> Dict[str, Any]:
+    def collect_telemetry(self, control_id: str, asset_id: str | None,
+                          params: dict[str, Any]) -> dict[str, Any]:
         source = self._resolve(params)
         raw = transports.fetch_raw(source, asset_id)
         if not raw:
@@ -50,7 +50,7 @@ class LegacyConnector(BaseConnector):
         telemetry.setdefault("owner", telemetry.get("owner") or f"legacy:{source.name}")
         return telemetry
 
-    def discover_assets(self, params: Dict[str, Any]) -> List[Asset]:
+    def discover_assets(self, params: dict[str, Any]) -> list[Asset]:
         source = self._resolve(params)
         ids = transports.discover(source)
         return [Asset(asset_id=i, asset_type=f"legacy_{source.type}", source_system="LEGACY",

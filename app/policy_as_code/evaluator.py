@@ -25,7 +25,8 @@ import ast
 import functools
 import operator
 import re
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 
 @functools.lru_cache(maxsize=512)
@@ -55,7 +56,7 @@ class PolicyExpressionError(Exception):
 
 
 class SafeEvaluator:
-    def __init__(self, context: Dict[str, Any], params: Optional[Dict[str, Any]] = None):
+    def __init__(self, context: dict[str, Any], params: dict[str, Any] | None = None):
         self.ctx = context or {}
         self.params = params or {}
 
@@ -96,7 +97,7 @@ class SafeEvaluator:
                 return 0
         if isinstance(node, ast.Compare):
             left = self._walk(node.left)
-            for op, comp in zip(node.ops, node.comparators):
+            for op, comp in zip(node.ops, node.comparators, strict=False):
                 fn = _CMP.get(type(op))
                 if fn is None:
                     raise PolicyExpressionError("unsupported comparison operator")
@@ -132,7 +133,7 @@ class SafeEvaluator:
 
     def _resolve_dotted(self, node: ast.Attribute) -> Any:
         # build the full dotted path a.b.c — must be pure Name.attr.attr...
-        parts: List[str] = []
+        parts: list[str] = []
         cur: ast.AST = node
         while isinstance(cur, ast.Attribute):
             if "__" in cur.attr:
@@ -170,14 +171,14 @@ class SafeEvaluator:
         except (TypeError, ValueError):
             return None
 
-    def _quantifier(self, fname: str, args: List[ast.AST]) -> Any:
+    def _quantifier(self, fname: str, args: list[ast.AST]) -> Any:
         if not args:
             return 0 if fname == "count" else False
         collection = self._walk(args[0])
         if not isinstance(collection, list):
             collection = []
         # predicate is optional 2nd arg, a string expression evaluated per item
-        pred: Optional[str] = None
+        pred: str | None = None
         if len(args) >= 2:
             p = self._walk(args[1])
             pred = p if isinstance(p, str) else None
@@ -198,14 +199,23 @@ class SafeEvaluator:
 
 
 # ── safe function registry ──
+_MATCH_MAX_SUBJECT = 10_000
+_MATCH_MAX_PATTERN = 1_000
+
+
 def _matches(s: Any, pattern: Any) -> bool:
+    # Bound subject and pattern length to limit catastrophic-backtracking (ReDoS)
+    # exposure — re has no timeout and a pattern may come from evidence data.
+    pat = str(pattern)
+    if len(pat) > _MATCH_MAX_PATTERN:
+        return False
     try:
-        return re.search(str(pattern), str(s)) is not None
+        return re.search(pat, str(s)[:_MATCH_MAX_SUBJECT]) is not None
     except re.error:
         return False
 
 
-_FUNCTIONS: Dict[str, Callable] = {
+_FUNCTIONS: dict[str, Callable] = {
     "len": lambda x: len(x) if hasattr(x, "__len__") else 0,
     "abs": lambda x: abs(x) if isinstance(x, (int, float)) else 0,
     "round": lambda x, n=0: round(x, int(n)) if isinstance(x, (int, float)) else 0,
@@ -224,6 +234,6 @@ _FUNCTIONS: Dict[str, Callable] = {
 _QUANTIFIERS = {"all", "any", "count"}
 
 
-def evaluate_expression(expr: str, context: Dict[str, Any],
-                        params: Optional[Dict[str, Any]] = None) -> bool:
+def evaluate_expression(expr: str, context: dict[str, Any],
+                        params: dict[str, Any] | None = None) -> bool:
     return bool(SafeEvaluator(context, params).eval(expr))

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -29,9 +29,9 @@ class Asset:
     asset_id: str
     asset_type: str
     source_system: str
-    owner: Optional[str] = None
+    owner: str | None = None
     criticality: str = "medium"
-    raw: Dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 class ConnectorError(RuntimeError):
@@ -48,13 +48,13 @@ class BaseConnector(abc.ABC):
 
     @abc.abstractmethod
     def collect_telemetry(
-        self, control_id: str, asset_id: Optional[str], params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Collect and NORMALIZE telemetry for one control against one asset.
 
         Returns a flat dict of normalized fields the policy engine understands.
         Raise ConnectorError on failure.
         """
 
-    def discover_assets(self, params: Dict[str, Any]) -> List[Asset]:  # optional
+    def discover_assets(self, params: dict[str, Any]) -> list[Asset]:  # optional
         return []

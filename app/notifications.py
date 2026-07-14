@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import smtplib
 from email.message import EmailMessage
-from typing import Any, Dict
+from typing import Any
 
 import requests
 
@@ -28,7 +28,7 @@ def _slack(text: str) -> None:
                   timeout=settings.request_timeout_seconds)
 
 
-def _webhook(payload: Dict[str, Any]) -> None:
+def _webhook(payload: dict[str, Any]) -> None:
     requests.post(settings.notify_generic_webhook, json=payload,
                   timeout=settings.request_timeout_seconds)
 
@@ -46,7 +46,7 @@ def _email(subject: str, body: str) -> None:
         s.send_message(msg)
 
 
-def notify_finding(finding) -> Dict[str, bool]:
+def notify_finding(finding) -> dict[str, bool]:
     """Dispatch a finding alert to every configured channel. Returns per-channel result."""
     if finding.status.value != settings.notify_on_status:
         return {}
@@ -62,7 +62,7 @@ def notify_finding(finding) -> Dict[str, bool]:
         "finding_id": finding.finding_id,
     }
 
-    results: Dict[str, bool] = {}
+    results: dict[str, bool] = {}
     for name, enabled, fn in (
         ("slack", settings.notify_slack_webhook, lambda: _slack(f"{title}\n{body}")),
         ("webhook", settings.notify_generic_webhook, lambda: _webhook(payload)),

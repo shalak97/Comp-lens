@@ -16,7 +16,7 @@ asset_id may be used as the host.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from app.config import settings
 from app.connectors.base import BaseConnector, ConnectorError
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class SSHLinuxConnector(BaseConnector):
     source_system = "SSH"
 
-    def _client(self, params: Dict[str, Any], asset_id: Optional[str]):
+    def _client(self, params: dict[str, Any], asset_id: str | None):
         try:
             import paramiko
         except ImportError as exc:  # pragma: no cover
@@ -37,9 +37,13 @@ class SSHLinuxConnector(BaseConnector):
         if not host:
             raise ConnectorError("SSH control requires 'host' (or asset_id).")
 
+        from app.connectors.safety import apply_ssh_host_key_policy, ssh_host_allowed
+        if not ssh_host_allowed(host):
+            raise ConnectorError(f"SSH host '{host}' is not in SSH_ALLOWED_HOSTS.")
+
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        connect_kwargs: Dict[str, Any] = {
+        apply_ssh_host_key_policy(client)
+        connect_kwargs: dict[str, Any] = {
             "hostname": host,
             "port": int(params.get("port", 22)),
             "username": params.get("user", settings.ssh_default_user),
@@ -61,8 +65,8 @@ class SSHLinuxConnector(BaseConnector):
         return True
 
     def collect_telemetry(
-        self, control_id: str, asset_id: Optional[str], params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
         client = None
         try:
             client = self._client(params, asset_id)

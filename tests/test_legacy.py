@@ -1,6 +1,11 @@
 """Tests for the legacy integration layer (SQL, file, mapping, security)."""
 from __future__ import annotations
-import csv, json, os, sqlite3, tempfile
+
+import csv
+import json
+import os
+import sqlite3
+import tempfile
 
 # Build fixtures and point config at them BEFORE importing the app
 _TMP = tempfile.mkdtemp(prefix="legacy_test_")
@@ -12,10 +17,14 @@ con = sqlite3.connect(_HR)
 con.execute("CREATE TABLE users(user_id TEXT, mfa TEXT, last_login TEXT)")
 con.executemany("INSERT INTO users VALUES(?,?,?)",
                 [("alice", "1", "2026-05-25T00:00:00Z"), ("bob", "0", "2024-01-01T00:00:00Z")])
-con.commit(); con.close()
+con.commit()
+con.close()
 
 with open(_CSV, "w", newline="") as f:
-    w = csv.writer(f); w.writerow(["host", "luks"]); w.writerow(["s1", "true"]); w.writerow(["s2", "false"])
+    w = csv.writer(f)
+    w.writerow(["host", "luks"])
+    w.writerow(["s1", "true"])
+    w.writerow(["s2", "false"])
 
 with open(_JSON, "w") as f:
     json.dump([{"ip": "10.0.0.1", "crit": 0}, {"ip": "10.0.0.2", "crit": 4}], f)
@@ -36,10 +45,11 @@ os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{_TMP}/app.db")
 os.environ.setdefault("EVIDENCE_LOCAL_PATH", f"{_TMP}/ev")
 
-import pytest
-from fastapi.testclient import TestClient
-from app.database import init_db
-from app.legacy.sources import reload_sources
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.database import init_db  # noqa: E402
+from app.legacy.sources import reload_sources  # noqa: E402
 
 
 @pytest.fixture(scope="module")

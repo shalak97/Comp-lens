@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, Integer, String, Text
+from pydantic import BaseModel
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -28,11 +27,11 @@ def _uuid() -> str:
 
 
 def _utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ── enums ──
-class AuditStatus(str, enum.Enum):
+class AuditStatus(enum.StrEnum):
     PLANNING = "planning"
     FIELDWORK = "fieldwork"        # evidence collection + review under way
     REVIEW = "review"             # auditor reviewing
@@ -40,7 +39,7 @@ class AuditStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
-class ControlReviewState(str, enum.Enum):
+class ControlReviewState(enum.StrEnum):
     NOT_STARTED = "not_started"
     IN_REVIEW = "in_review"
     APPROVED = "approved"
@@ -48,7 +47,7 @@ class ControlReviewState(str, enum.Enum):
     EXCEPTION = "exception"        # accepted deviation
 
 
-class RequestState(str, enum.Enum):
+class RequestState(enum.StrEnum):
     OPEN = "open"
     FULFILLED = "fulfilled"
     ACCEPTED = "accepted"
@@ -62,9 +61,9 @@ class Audit(Base):
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     name: Mapped[str] = mapped_column(String(256))
     framework: Mapped[str] = mapped_column(String(64))
-    period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    auditor: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auditor: Mapped[str | None] = mapped_column(String(256), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="planning")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
@@ -76,12 +75,12 @@ class AuditControl(Base):
     audit_id: Mapped[str] = mapped_column(String(64), index=True)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     control_id: Mapped[str] = mapped_column(String(64))
-    title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     review_state: Mapped[str] = mapped_column(String(32), default="not_started")
-    auto_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # from live posture
-    owner: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    evidence_ref: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    reviewer_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    auto_status: Mapped[str | None] = mapped_column(String(32), nullable=True)  # from live posture
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    reviewer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
 
 
@@ -90,14 +89,14 @@ class EvidenceRequest(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
     audit_id: Mapped[str] = mapped_column(String(64), index=True)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
-    control_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    control_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     title: Mapped[str] = mapped_column(String(512))
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    assignee: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assignee: Mapped[str | None] = mapped_column(String(128), nullable=True)
     state: Mapped[str] = mapped_column(String(32), default="open")
-    response_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    evidence_ref: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    response_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc)
 
@@ -106,36 +105,36 @@ class EvidenceRequest(Base):
 class AuditIn(BaseModel):
     name: str
     framework: str = "NIST"
-    period_start: Optional[datetime] = None
-    period_end: Optional[datetime] = None
-    auditor: Optional[str] = None
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    auditor: str | None = None
 
 
 class AuditPatch(BaseModel):
-    name: Optional[str] = None
-    auditor: Optional[str] = None
-    status: Optional[AuditStatus] = None
-    period_start: Optional[datetime] = None
-    period_end: Optional[datetime] = None
+    name: str | None = None
+    auditor: str | None = None
+    status: AuditStatus | None = None
+    period_start: datetime | None = None
+    period_end: datetime | None = None
 
 
 class ControlReviewPatch(BaseModel):
-    review_state: Optional[ControlReviewState] = None
-    owner: Optional[str] = None
-    evidence_ref: Optional[str] = None
-    reviewer_note: Optional[str] = None
+    review_state: ControlReviewState | None = None
+    owner: str | None = None
+    evidence_ref: str | None = None
+    reviewer_note: str | None = None
 
 
 class EvidenceRequestIn(BaseModel):
     title: str
-    control_id: Optional[str] = None
-    description: Optional[str] = None
-    assignee: Optional[str] = None
-    due_date: Optional[datetime] = None
+    control_id: str | None = None
+    description: str | None = None
+    assignee: str | None = None
+    due_date: datetime | None = None
 
 
 class EvidenceRequestPatch(BaseModel):
-    state: Optional[RequestState] = None
-    response_note: Optional[str] = None
-    evidence_ref: Optional[str] = None
-    assignee: Optional[str] = None
+    state: RequestState | None = None
+    response_note: str | None = None
+    evidence_ref: str | None = None
+    assignee: str | None = None

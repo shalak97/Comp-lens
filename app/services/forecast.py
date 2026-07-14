@@ -10,7 +10,7 @@ audit rather than after.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,14 +19,14 @@ from app.models import Posture
 from app.services.trends import TrendService
 
 
-def _least_squares(xs: List[float], ys: List[float]):
+def _least_squares(xs: list[float], ys: list[float]):
     n = len(xs)
     mx = sum(xs) / n
     my = sum(ys) / n
     denom = sum((x - mx) ** 2 for x in xs)
     if denom == 0:
         return 0.0, my
-    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denom
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False)) / denom
     intercept = my - slope * mx
     return slope, intercept
 
@@ -35,7 +35,7 @@ class ForecastService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def forecast(self, tenant_id: str, horizon_days: int = 30, threshold: float = 80.0) -> Dict[str, Any]:
+    def forecast(self, tenant_id: str, horizon_days: int = 30, threshold: float = 80.0) -> dict[str, Any]:
         snaps = TrendService(self.db).trends(tenant_id)
         at_risk = self._at_risk(tenant_id)
 
@@ -73,7 +73,7 @@ class ForecastService:
             "at_risk_count": len(at_risk),
         }
 
-    def _at_risk(self, tenant_id: str) -> List[Dict[str, Any]]:
+    def _at_risk(self, tenant_id: str) -> list[dict[str, Any]]:
         rows = self.db.execute(
             select(Posture.control_id, Posture.source_system, Posture.asset_id,
                    Posture.status, Posture.prev_status, Posture.severity)

@@ -3,6 +3,7 @@
 Feeds are network-blocked in CI, so these exercise the seed-fallback path and the
 enrichment logic (which is what we actually need to verify — the bridge honesty)."""
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 

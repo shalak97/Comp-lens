@@ -1,12 +1,15 @@
 """Tests for the 7 added capabilities."""
 from __future__ import annotations
+
 import os
+
 os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_feat.db")
 os.environ.setdefault("EVIDENCE_LOCAL_PATH", "./test_feat_evidence")
 
 import pytest
 from fastapi.testclient import TestClient
+
 from app.database import init_db
 
 
@@ -96,8 +99,8 @@ def test_pdf_report(client):
 # 6. Asset discovery + bulk assess (uses a connector that discovers assets)
 def test_discover_and_bulk_assess(client, monkeypatch):
     # DEMO has no discover; stub the AWS connector's discover via the registry
-    from app.connectors.registry import registry
     from app.connectors.base import Asset
+    from app.connectors.registry import registry
     demo = registry.get("DEMO")
     monkeypatch.setattr(demo, "discover_assets",
         lambda params: [Asset(asset_id=f"u{i}", asset_type="user", source_system="DEMO") for i in range(3)],
@@ -125,16 +128,23 @@ def test_drift_detection(client):
 def test_notification_dispatch(monkeypatch):
     monkeypatch.setenv("NOTIFY_SLACK_WEBHOOK", "https://hooks.slack.test/x")
     monkeypatch.setenv("NOTIFY_ON_STATUS", "fail")
-    import importlib, app.config as cfg
+    import importlib
+
+    import app.config as cfg
     importlib.reload(cfg)
     import app.notifications as nt
     importlib.reload(nt)
     sent = {}
     monkeypatch.setattr(nt.requests, "post", lambda url, **kw: sent.update({"url": url, "json": kw.get("json")}) or type("R", (), {"status_code": 200})())
     class F:
-        status = type("S", (), {"value": "fail"})(); control_id = "SC-7"; source_system = "DEMO"
-        asset_id = "a"; severity = type("S", (), {"value": "critical"})(); tenant_id = "t"
-        finding_id = "f1"; description = "bad"
+        status = type("S", (), {"value": "fail"})()
+        control_id = "SC-7"
+        source_system = "DEMO"
+        asset_id = "a"
+        severity = type("S", (), {"value": "critical"})()
+        tenant_id = "t"
+        finding_id = "f1"
+        description = "bad"
     res = nt.notify_finding(F())
     assert res.get("slack") is True and "slack" in sent["url"]
     # a passing finding should NOT notify

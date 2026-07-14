@@ -14,7 +14,7 @@ The markdown is NOT persisted; only the extracted control evidence is kept.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.services import evidence_graph as evg
 
@@ -28,7 +28,7 @@ def to_markdown(text: str, source_type: str = "text") -> str:
     Good enough to make extraction reliable; thrown away after.
     """
     lines = [ln.rstrip() for ln in (text or "").splitlines()]
-    out: List[str] = []
+    out: list[str] = []
     for ln in lines:
         s = ln.strip()
         if not s:
@@ -54,7 +54,7 @@ def to_markdown(text: str, source_type: str = "text") -> str:
 
 
 # ── markdown → controls (lexicon baseline + optional LLM) ──
-def extract_controls(markdown: str) -> Dict[str, Any]:
+def extract_controls(markdown: str) -> dict[str, Any]:
     """Find which controls this document provides evidence for.
 
     Uses evidence_graph.extract() which prefers an LLM if one is wired and falls
@@ -63,7 +63,7 @@ def extract_controls(markdown: str) -> Dict[str, Any]:
     """
     method, hits = evg.extract(markdown)          # [{concept_id, quote, confidence}], method in {llm,lexicon}
     lex = {c["id"]: c for c in evg.lexicon()}
-    by_control: Dict[str, Dict[str, Any]] = {}
+    by_control: dict[str, dict[str, Any]] = {}
     for h in hits:
         concept = lex.get(h.get("concept_id"))
         if not concept:
@@ -88,7 +88,7 @@ def extract_controls(markdown: str) -> Dict[str, Any]:
 
 
 # ── controls → canonical telemetry events ──
-def to_events(extracted: Dict[str, Any], tenant_id: str, source: str = "document") -> List[Dict[str, Any]]:
+def to_events(extracted: dict[str, Any], tenant_id: str, source: str = "document") -> list[dict[str, Any]]:
     """Turn extracted controls into canonical evidence events.
 
     A document is *evidence that a control is addressed*, so each becomes a
@@ -111,7 +111,7 @@ def to_events(extracted: Dict[str, Any], tenant_id: str, source: str = "document
 
 # ── the full pipeline ──
 def ingest_document(text: str, tenant_id: str = "default",
-                    source: str = "document", source_type: str = "text") -> Dict[str, Any]:
+                    source: str = "document", source_type: str = "text") -> dict[str, Any]:
     """doc text → markdown → controls → events. Returns everything for transparency."""
     md = to_markdown(text, source_type)
     extracted = extract_controls(md)
