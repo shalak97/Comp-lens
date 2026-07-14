@@ -75,6 +75,13 @@ def require_principal(x_api_key: str | None = Header(default=None)) -> Principal
     """
     keys = _parse_keys()
     if not keys:
+        # Fail closed in production: never hand out an admin principal when auth
+        # is unconfigured. In non-production this is the local-dev admin path.
+        from app.config import settings
+        if settings.is_production:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Server authentication is not configured.")
         return Principal(key_id="anonymous", tenants={ALL})
 
     if not x_api_key:

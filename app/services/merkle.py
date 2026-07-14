@@ -19,22 +19,30 @@ from sqlalchemy.orm import Session
 from app.models import EvidenceMeta, MerkleAnchor
 
 
-def _h(data: str) -> str:
-    return hashlib.sha256(data.encode("utf-8")).hexdigest()
+def _h(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _leaf(x: str) -> str:
+    # RFC 6962-style domain separation: leaves are hashed with a 0x00 prefix and
+    # internal nodes with 0x01 (below), so an internal node hash can never be
+    # passed off as a leaf — closing the classic Merkle second-preimage forgery.
+    return _h(b"\x00" + x.encode("utf-8"))
 
 
 def _node(a: str, b: str) -> str:
-    # order-independent pairing so proofs are simple to verify
+    # order-independent pairing so proofs don't need to encode sibling direction
     lo, hi = sorted((a, b))
-    return _h(lo + hi)
+    return _h(b"\x01" + (lo + hi).encode("utf-8"))
 
 
 def build_tree(leaves: list[str]) -> tuple[str, list[list[str]]]:
-    """Return (root, levels) where levels[0] = leaves."""
+    """Return (root, levels) where levels[0] = the domain-separated leaf hashes."""
     if not leaves:
-        return _h(""), [[]]
-    levels = [list(leaves)]
-    cur = list(leaves)
+        return _h(b""), [[]]
+    level0 = [_leaf(x) for x in leaves]
+    levels = [level0]
+    cur = list(level0)
     while len(cur) > 1:
         nxt = []
         for i in range(0, len(cur), 2):
@@ -58,7 +66,7 @@ def inclusion_proof(levels: list[list[str]], index: int) -> list[str]:
 
 
 def verify_proof(leaf: str, proof: list[str], root: str) -> bool:
-    h = leaf
+    h = _leaf(leaf)  # hash the raw leaf with leaf-domain separation before combining
     for sib in proof:
         h = _node(h, sib)
     return h == root
@@ -77,20 +85,26 @@ class MerkleService:
         return [(eid, rh or "") for eid, rh in rows]
 
     def anchor(self, tenant_id: str) -> dict[str, Any]:
+        from app.services.evidence_sign import sign_root
         leaves = [rh for _eid, rh in self._ordered_leaves(tenant_id)]
         root, _ = build_tree(leaves)
-        a = MerkleAnchor(tenant_id=tenant_id, root=root, leaf_count=len(leaves))
+        signature = sign_root(root, tenant_id, len(leaves))
+        a = MerkleAnchor(tenant_id=tenant_id, root=root, leaf_count=len(leaves),
+                         signature=signature)
         self.db.add(a)
         self.db.flush()
         return {"anchor_id": a.id, "root": root, "leaf_count": len(leaves),
-                "created_at": a.created_at.isoformat()}
+                "signature": signature, "created_at": a.created_at.isoformat()}
 
     def anchors(self, tenant_id: str) -> list[dict[str, Any]]:
+        from app.services.evidence_sign import verify_root
         rows = self.db.execute(
             select(MerkleAnchor).where(MerkleAnchor.tenant_id == tenant_id)
             .order_by(MerkleAnchor.created_at.desc())
         ).scalars().all()
         return [{"anchor_id": a.id, "root": a.root, "leaf_count": a.leaf_count,
+                 "signature": a.signature,
+                 "signature_valid": verify_root(a.root, a.tenant_id, a.leaf_count, a.signature or ""),
                  "created_at": a.created_at.isoformat()} for a in rows]
 
     def proof(self, tenant_id: str, evidence_id: str) -> dict[str, Any]:

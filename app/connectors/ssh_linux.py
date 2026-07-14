@@ -37,8 +37,12 @@ class SSHLinuxConnector(BaseConnector):
         if not host:
             raise ConnectorError("SSH control requires 'host' (or asset_id).")
 
+        from app.connectors.safety import apply_ssh_host_key_policy, ssh_host_allowed
+        if not ssh_host_allowed(host):
+            raise ConnectorError(f"SSH host '{host}' is not in SSH_ALLOWED_HOSTS.")
+
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        apply_ssh_host_key_policy(client)
         connect_kwargs: dict[str, Any] = {
             "hostname": host,
             "port": int(params.get("port", 22)),

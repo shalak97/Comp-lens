@@ -210,7 +210,11 @@ class OPAEngine:
 
     def __init__(self) -> None:
         from app.config import settings
-        self._url = f"{settings.opa_url.rstrip('/')}/v1/data/{settings.opa_package}/decision"
+        # opa_url defaults to None (OPA is opt-in); when this engine is selected
+        # or constructed directly without a URL, fall back to the conventional
+        # local OPA endpoint rather than crashing.
+        base = (settings.opa_url or "http://localhost:8181").rstrip("/")
+        self._url = f"{base}/v1/data/{settings.opa_package}/decision"
         self._timeout = settings.request_timeout_seconds
 
     def evaluate(self, control_id: str, telemetry: dict[str, Any]) -> tuple[ControlStatus, str, Severity]:

@@ -94,6 +94,17 @@ logger = logging.getLogger("comp-lens")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail closed in production: refuse to start if authentication is not
+    # configured (empty COMP_LENS_API_KEYS would otherwise make every request an
+    # all-tenant admin). Mirrors the demo/auto-create production guards.
+    if settings.is_production and not auth_enabled():
+        raise RuntimeError(
+            "Refusing to start: APP_ENV=production but no API keys are configured. "
+            "Set COMP_LENS_API_KEYS to enable authentication.")
+    if settings.is_production and not settings.evidence_signing_key:
+        raise RuntimeError(
+            "Refusing to start: APP_ENV=production but EVIDENCE_SIGNING_KEY is not set. "
+            "Evidence tamper-evidence would fall back to a world-known key.")
     if settings.autocreate_enabled():
         init_db()
         logger.info("tables auto-created (dev). Use Alembic in production.")
@@ -892,7 +903,12 @@ def confirm_evidence_hit(hit_id: str, req: _ConfirmRequest, db: Session = Depend
 @app.delete("/evidence/documents/{doc_id}", tags=["evidence-graph"])
 def delete_evidence_document(doc_id: str, db: Session = Depends(get_db),
                              p: Principal = Depends(require_principal)) -> dict:
-    _EvidenceService(db).delete_document(doc_id)
+    from app.models import EvidenceDocument
+    doc = db.get(EvidenceDocument, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="document not found")
+    authorize_tenant(p, doc.tenant_id)  # prevent cross-tenant deletion
+    _EvidenceService(db).delete_document(doc_id, doc.tenant_id)
     return {"deleted": doc_id}
 
 
