@@ -218,6 +218,103 @@ def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
     return [cfw.status_one(db, c, tenant_id) for c in ccat.all_connectors()]
 
 
+# ── connector instances (labeled connections) ──
+# NB: declared BEFORE /connectors/{name} so "/connectors/instances" isn't
+# captured as name="instances".
+class _InstanceCreate(_PydBase):
+    tenant_id: str = "default"
+    connector_key: str
+    label: str = ""
+    config: dict = {}
+
+
+class _EphemeralReq(_PydBase):
+    tenant_id: str = "default"
+    connector_key: str
+    config: dict = {}
+    instance_id: str | None = None
+
+
+@app.get("/connectors/instances", tags=["connectors"])
+def list_connector_instances(tenant_id: str = "default", db: Session = Depends(get_db),
+                             p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    from app.services import connector_instances as _ci
+    return _ci.list_instances(db, tenant_id)
+
+
+@app.post("/connectors/instances", tags=["connectors"])
+def create_connector_instance(req: _InstanceCreate, db: Session = Depends(get_db),
+                              p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    from app.services import connector_instances as _ci
+    try:
+        return _ci.create_instance(db, req.tenant_id, req.connector_key, req.label, req.config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/connectors/instances/ephemeral/sync", tags=["connectors"])
+def ephemeral_sync_connector(req: _EphemeralReq, db: Session = Depends(get_db),
+                             p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    from app.services import connector_instances as _ci
+    try:
+        return _ci.ephemeral_sync(db, req.tenant_id, req.connector_key, req.config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/connectors/instances/ephemeral/test", tags=["connectors"])
+def ephemeral_test_connector(req: _EphemeralReq,
+                             p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    from app.services import connector_instances as _ci
+    try:
+        return _ci.ephemeral_test(req.connector_key, req.config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/connectors/instances/{instance_id}/sync", tags=["connectors"])
+def sync_connector_instance(instance_id: str, tenant_id: str = "default",
+                            db: Session = Depends(get_db),
+                            p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services import connector_instances as _ci
+    try:
+        return _ci.sync_instance(db, tenant_id, instance_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail="connector instance not found") from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/connectors/instances/{instance_id}/test", tags=["connectors"])
+def test_connector_instance(instance_id: str, tenant_id: str = "default",
+                            db: Session = Depends(get_db),
+                            p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services import connector_instances as _ci
+    try:
+        return _ci.test_instance(db, tenant_id, instance_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail="connector instance not found") from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.delete("/connectors/instances/{instance_id}", tags=["connectors"])
+def delete_connector_instance(instance_id: str, tenant_id: str = "default",
+                              db: Session = Depends(get_db),
+                              p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services import connector_instances as _ci
+    if not _ci.delete_instance(db, tenant_id, instance_id):
+        raise HTTPException(status_code=404, detail="connector instance not found")
+    return {"deleted": instance_id}
+
+
 @app.get("/connectors/{name}", tags=["connectors"])
 def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
                      p: Principal = Depends(require_principal)) -> dict:
@@ -522,6 +619,129 @@ def evidence_proof(evidence_id: str, tenant_id: str = "default", db: Session = D
     authorize_tenant(p, tenant_id)
     from app.services.merkle import MerkleService
     return MerkleService(db).proof(tenant_id, evidence_id)
+
+
+# ── dashboard-wired endpoints (policies list, evidence ledger, unified trust,
+#    ai->risk, remediation tickets, enforcement control plane) ──
+@app.get("/policies", tags=["policy-as-code"])
+def list_policies(_: Principal = Depends(require_principal)) -> list[dict]:
+    from app.policy_as_code import get_engine
+    return get_engine().list_policies()
+
+
+class _PolicyImport(_PydBase):
+    tenant_id: str = "default"
+    name: str = ""
+    yaml: str | None = None
+
+
+@app.post("/policies/import", tags=["policy-as-code"])
+def import_policy(req: _PolicyImport, p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, req.tenant_id)
+    # If policy YAML is supplied, validate it and reload the engine; otherwise the
+    # import is acknowledged (the built-in catalog is file-managed, not persisted here).
+    if req.yaml:
+        import yaml as _yaml
+
+        from app.policy_as_code import reload_engine
+        from app.policy_as_code.engine import load_policy
+        try:
+            doc = _yaml.safe_load(req.yaml)
+            pol = load_policy(doc, source=req.name or "import")
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"invalid policy: {e}") from e
+        reload_engine()
+        return {"imported": True, "control_id": pol.control_id, "name": req.name}
+    return {"imported": True, "name": req.name,
+            "note": "acknowledged; supply 'yaml' to validate and load a policy"}
+
+
+@app.get("/evidence", tags=["evidence-graph"])
+def evidence_ledger(tenant_id: str = "default", limit: int = Query(200, ge=1, le=1000),
+                    db: Session = Depends(get_db),
+                    p: Principal = Depends(require_principal)) -> list[dict]:
+    authorize_tenant(p, tenant_id)
+    from sqlalchemy import desc, select
+
+    from app.models import EvidenceMeta
+    rows = db.execute(select(EvidenceMeta).where(EvidenceMeta.tenant_id == tenant_id)
+                      .order_by(desc(EvidenceMeta.created_at)).limit(limit)).scalars().all()
+    return [{"id": r.evidence_id, "control": r.control_id, "framework": r.framework,
+             "source": r.run_id, "hash": r.record_hash or r.telemetry_hash,
+             "verified": bool(r.record_hash),
+             "status": getattr(r.status, "value", r.status),
+             "collected_at": r.created_at.isoformat() if r.created_at else None}
+            for r in rows]
+
+
+@app.post("/remediation/tickets", tags=["simulation"])
+def create_remediation_ticket(req: dict, db: Session = Depends(get_db),
+                              p: Principal = Depends(require_principal)) -> dict:
+    tenant_id = (req or {}).get("tenant_id", "default")
+    authorize_tenant(p, tenant_id)
+    from app.policy_models import ObligationDispatch
+    row = ObligationDispatch(
+        tenant_id=tenant_id, control_id=(req or {}).get("control_id", ""),
+        procedure="open_ticket", status="queued",
+        severity=(req or {}).get("severity", "medium"),
+        detail=(req or {}).get("detail", "") or "Remediation ticket",
+        meta={"source": "dashboard"})
+    db.add(row)
+    db.commit()
+    return {"id": row.id, "control_id": row.control_id, "status": row.status,
+            "severity": row.severity, "detail": row.detail}
+
+
+@app.get("/v1/grc-trust/unified", tags=["grc-trust-telemetry"])
+def grc_trust_unified(tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services.trust_telemetry import unified_trust
+    return unified_trust(db, tenant_id)
+
+
+@app.post("/v1/integrate/ai-systems/{system_id}/to-risk", tags=["integration"])
+def integrate_ai_system_to_risk(system_id: str, req: dict | None = None,
+                                db: Session = Depends(get_db),
+                                p: Principal = Depends(require_principal)) -> dict:
+    tenant_id = (req or {}).get("tenant_id", "default")
+    authorize_tenant(p, tenant_id)
+    from app.services import integration
+    return integration.ai_system_to_risk(db, tenant_id, system_id)
+
+
+# ── enforcement control plane (read views + mode toggle) ──
+@app.get("/enforcement/status", tags=["enforcement"])
+def enforcement_status(_: Principal = Depends(require_principal)) -> dict:
+    from app.services import enforcement as _enf
+    return _enf.status_snapshot()
+
+
+@app.get("/enforcement/systems", tags=["enforcement"])
+def enforcement_systems(_: Principal = Depends(require_principal)) -> list[dict]:
+    from app.services import enforcement as _enf
+    return _enf.systems_list()
+
+
+@app.get("/enforcement/decisions", tags=["enforcement"])
+def enforcement_decisions(limit: int = Query(100, ge=1, le=1000),
+                          _: Principal = Depends(require_principal)) -> list[dict]:
+    from app.services import enforcement as _enf
+    return _enf.recent_decisions(limit)
+
+
+@app.post("/enforcement/systems/{host}/mode", tags=["enforcement"])
+def enforcement_set_mode(host: str, body: dict,
+                         _: Principal = Depends(require_principal)) -> dict:
+    from app.services import enforcement as _enf
+    try:
+        return _enf.set_mode(host, (body or {}).get("mode"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"unknown system '{host}'") from e
+    except OSError as e:
+        raise HTTPException(status_code=503, detail="enforcement bundle unavailable") from e
 
 
 # ── NL -> policy authoring (human-in-the-loop) ──

@@ -506,6 +506,26 @@ class RoutingDecision(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class ConnectorInstance(Base):
+    """A configured connection to a source system: a labeled connector_key plus
+    non-secret config. Credentials stay in the environment — config here holds
+    only non-secret settings (region, org, base_url, …), never secret values."""
+    __tablename__ = "connector_instances"
+    __table_args__ = (Index("ix_connector_instances_tenant", "tenant_id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128), default="default")
+    connector_key: Mapped[str] = mapped_column(String(64), index=True)
+    label: Mapped[str] = mapped_column(String(200), default="")
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    evidence_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 # GRC Risk Register + TPRM (imported so Base registers tables)
 from app.ai_governance_models import AISystemPET  # noqa: E402,F401
 
