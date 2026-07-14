@@ -102,3 +102,92 @@ def _systems_config() -> dict:
         return json.loads((POLICY_DIR / "data.json").read_text()).get("systems", {})
     except (OSError, ValueError):
         return {}
+
+
+def bundle_revision() -> str:
+    """Short content hash of the deployed policy bundle ('unversioned' if absent)."""
+    try:
+        import hashlib
+        rego = (POLICY_DIR / "main.rego").read_bytes()
+        data = (POLICY_DIR / "data.json").read_bytes()
+        return hashlib.sha256(rego + b"\x00" + data).hexdigest()[:12]
+    except OSError:
+        return "unversioned"
+
+
+def status_snapshot() -> dict:
+    """Fleet + counter summary the dashboard's Enforcement view renders."""
+    cfg = _systems_config()
+    fail_open = [h for h, c in cfg.items() if c.get("fail") == "open"]
+    enforcing = [h for h, c in cfg.items() if c.get("mode") == "enforce"]
+    totals = {"allow": 0, "denied": 0, "would_block": 0, "requests": 0}
+    for c in SYS_COUNTERS.values():
+        for k in totals:
+            totals[k] += c.get(k, 0)
+    live_cut = time.time() - 120
+    peps = []
+    for p in PEPS.values():
+        last = p.get("last_seen")
+        online = False
+        if last:
+            try:
+                online = datetime.fromisoformat(last).timestamp() > live_cut
+            except ValueError:
+                online = False
+        peps.append({**p, "online": online})
+    return {
+        "control_plane": "ok",
+        "uptime_s": int(time.time() - BOOT),
+        "bundle_revision": bundle_revision(),
+        "pdp_nodes": len(PEPS),
+        "peps_online": sum(1 for p in peps if p["online"]),
+        "systems_protected": len(cfg),
+        "systems_enforcing": len(enforcing),
+        "systems_shadow": len(cfg) - len(enforcing),
+        "systems_fail_open": fail_open,
+        "totals": totals,
+        "peps": peps,
+    }
+
+
+def systems_list() -> list[dict]:
+    """Per-system config + live counters, enforce-first then noisiest-shadow."""
+    cfg = _systems_config()
+    out = []
+    for host, c in cfg.items():
+        ctr = SYS_COUNTERS.get(host, {})
+        out.append({
+            "system": host,
+            "mode": c.get("mode", "shadow"),
+            "fail": c.get("fail", "open"),
+            "policy_id": c.get("policy_id", "unconfigured"),
+            "allowed_roles": c.get("allowed_roles", []),
+            "revision": bundle_revision(),
+            "requests": ctr.get("requests", 0),
+            "allow": ctr.get("allow", 0),
+            "denied": ctr.get("denied", 0),
+            "would_block": ctr.get("would_block", 0),
+            "last_seen": ctr.get("last_seen"),
+        })
+    out.sort(key=lambda s: (s["mode"] != "enforce", -s["would_block"]))
+    return out
+
+
+def recent_decisions(limit: int = 100) -> list[dict]:
+    return list(DECISIONS)[-limit:][::-1]
+
+
+def set_mode(host: str, mode: str) -> dict:
+    """Flip a system between shadow/enforce by rewriting the bundle's data.json.
+
+    Raises ValueError on a bad mode and KeyError on an unknown system.
+    """
+    if mode not in ("shadow", "enforce"):
+        raise ValueError("mode must be 'shadow' or 'enforce'")
+    path = POLICY_DIR / "data.json"
+    doc = json.loads(path.read_text())
+    if host not in doc.get("systems", {}):
+        raise KeyError(host)
+    doc["systems"][host]["mode"] = mode
+    path.write_text(json.dumps(doc, indent=2) + "\n")
+    return {"system": host, "mode": mode, "bundle_revision": bundle_revision()}
