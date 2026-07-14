@@ -199,9 +199,18 @@ class SafeEvaluator:
 
 
 # ── safe function registry ──
+_MATCH_MAX_SUBJECT = 10_000
+_MATCH_MAX_PATTERN = 1_000
+
+
 def _matches(s: Any, pattern: Any) -> bool:
+    # Bound subject and pattern length to limit catastrophic-backtracking (ReDoS)
+    # exposure — re has no timeout and a pattern may come from evidence data.
+    pat = str(pattern)
+    if len(pat) > _MATCH_MAX_PATTERN:
+        return False
     try:
-        return re.search(str(pattern), str(s)) is not None
+        return re.search(pat, str(s)[:_MATCH_MAX_SUBJECT]) is not None
     except re.error:
         return False
 

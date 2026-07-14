@@ -12,16 +12,25 @@ import hashlib
 import hmac
 from datetime import UTC, datetime
 
+_UNCONFIGURED_KEY = "comp-lens-unconfigured-signing-key"
+
 
 def _key() -> bytes:
+    prod = False
     try:
         from app.config import settings
         k = getattr(settings, "evidence_signing_key", None)
+        prod = settings.is_production
     except Exception:
         k = None
     if not k:
-        # fallback: stable within a deployment, lower assurance (documented)
-        k = "comp-lens-unconfigured-signing-key"
+        # Fail closed in production: a world-known constant defeats tamper-evidence,
+        # so refuse it there. In non-production it's a documented lower-assurance dev key.
+        if prod:
+            raise RuntimeError(
+                "evidence_signing_key must be set in production "
+                "(EVIDENCE_SIGNING_KEY); refusing to sign with the unconfigured key.")
+        k = _UNCONFIGURED_KEY
     return k.encode("utf-8")
 
 
@@ -49,4 +58,22 @@ def verify(content_hash: str, tenant_id: str, doc_id: str,
         _key(),
         f"{content_hash}|{_canon(signed_at)}|{tenant_id}|{doc_id}".encode(),
         hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+def sign_root(root: str, tenant_id: str, leaf_count: int) -> str:
+    """HMAC over a Merkle anchor root, binding it to its tenant + leaf count.
+
+    Persisting this alongside the anchor makes the transparency log tamper-evident
+    against DB modification: an attacker without the signing key cannot forge a
+    matching signature for a rewritten root.
+    """
+    msg = f"{root}|{tenant_id}|{leaf_count}".encode()
+    return hmac.new(_key(), msg, hashlib.sha256).hexdigest()
+
+
+def verify_root(root: str, tenant_id: str, leaf_count: int, signature: str) -> bool:
+    if not signature:
+        return False
+    expected = sign_root(root, tenant_id, leaf_count)
     return hmac.compare_digest(expected, signature)

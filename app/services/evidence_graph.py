@@ -235,10 +235,18 @@ class EvidenceService:
         self.db.commit()
         return {"hit_id": hit_id, "confirmed": confirmed, "attested_controls": attested}
 
-    def delete_document(self, doc_id: str) -> None:
-        self.db.execute(EvidenceConceptHit.__table__.delete().where(
-            EvidenceConceptHit.doc_id == doc_id))
+    def delete_document(self, doc_id: str, tenant_id: str) -> bool:
+        """Delete a document (and its concept hits), scoped to its owning tenant.
+
+        Returns True if a document was deleted, False if it does not exist for
+        this tenant. Tenant-scoping the lookup prevents cross-tenant deletion.
+        """
         d = self.db.get(EvidenceDocument, doc_id)
-        if d:
-            self.db.delete(d)
+        if not d or d.tenant_id != tenant_id:
+            return False
+        self.db.execute(EvidenceConceptHit.__table__.delete().where(
+            EvidenceConceptHit.doc_id == doc_id,
+            EvidenceConceptHit.tenant_id == tenant_id))
+        self.db.delete(d)
         self.db.commit()
+        return True

@@ -23,11 +23,50 @@ Each layer fails closed: when in doubt, demo. Decisions are explained via
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 KILL_SWITCH_ENV = "LIVE_CONNECTORS_ENABLED"
 ALLOWLIST_ENV = "LIVE_CONNECTORS_ALLOWLIST"
+SSH_ALLOWED_HOSTS_ENV = "SSH_ALLOWED_HOSTS"
+SSH_TRUST_UNKNOWN_ENV = "SSH_TRUST_UNKNOWN_HOSTS"
+
+
+def ssh_host_allowed(host: str) -> bool:
+    """When SSH_ALLOWED_HOSTS is set (comma-separated), only those hosts may be
+    connected to — stops a client-supplied target turning the connector into an
+    SSH pivot. Unset = allow any (relies on host-key verification below)."""
+    raw = os.getenv(SSH_ALLOWED_HOSTS_ENV, "").strip()
+    if not raw:
+        return True
+    allowed = {h.strip().lower() for h in raw.split(",") if h.strip()}
+    return (host or "").strip().lower() in allowed
+
+
+def apply_ssh_host_key_policy(client) -> None:
+    """Verify host keys on a paramiko SSHClient. Loads known host keys and
+    REJECTS unknown hosts (MITM protection) unless SSH_TRUST_UNKNOWN_HOSTS=true
+    is set to explicitly opt back into the old auto-accept behaviour."""
+    import paramiko
+    for load in (client.load_system_host_keys, client.load_host_keys):
+        try:
+            if load is client.load_host_keys:
+                path = os.path.expanduser("~/.ssh/known_hosts")
+                if os.path.exists(path):
+                    load(path)
+            else:
+                load()
+        except Exception:  # noqa: BLE001 — missing known_hosts is fine
+            pass
+    if os.getenv(SSH_TRUST_UNKNOWN_ENV, "false").strip().lower() == "true":
+        logger.warning("SSH host-key verification disabled (%s=true) — MITM risk.",
+                       SSH_TRUST_UNKNOWN_ENV)
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    else:
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
 # method-name prefixes that are NEVER allowed on a live connector instance
 _MUTATION_PREFIXES = (

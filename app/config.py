@@ -43,16 +43,12 @@ class Settings(BaseSettings):
 
     # ── Policy engine ──
     # "builtin" = in-process rule catalog; "opa" = delegate to an OPA server.
+    # opa_url unset (None) keeps OPA delegation OFF; set it to enable OPA.
     policy_engine: str = Field(default="builtin")
     opa_url: str | None = Field(default=None)            # e.g. http://opa:8181
-    evidence_signing_key: str | None = Field(default=None)  # HMAC key for evidence chain of custody
-    opa_decision_path: str = Field(default="/v1/data/complens/decision")
-
-    # ── Policy engine ──
-    # "rules" = built-in Python rule catalog; "opa" = Open Policy Agent server.
-    policy_engine: str = Field(default="rules")
-    opa_url: str = Field(default="http://localhost:8181")
     opa_package: str = Field(default="compliance")
+    opa_decision_path: str = Field(default="/v1/data/complens/decision")
+    evidence_signing_key: str | None = Field(default=None)  # HMAC key for evidence chain of custody
 
     # ── Legacy integration ──
     # Named legacy data sources (SQL/SOAP/file/LDAP), configured server-side so

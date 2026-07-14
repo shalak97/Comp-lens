@@ -17,6 +17,9 @@ tenacity>=8.2.0
 # HTTP (connectors)
 requests>=2.31.0
 
+# Safe XML parsing (SOAP legacy transport) — blocks entity-expansion/XXE
+defusedxml>=0.7.1
+
 # AWS connector
 boto3>=1.34.0
 

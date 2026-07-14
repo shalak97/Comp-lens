@@ -237,9 +237,14 @@ class OPAEngine:
 
 
 def _build_engine():
+    import logging
+
     from app.config import settings
     if settings.policy_engine.lower() == "opa":
-        return OPAEngine()
+        if settings.opa_url:
+            return OPAEngine()
+        logging.getLogger(__name__).warning(
+            "policy_engine=opa but opa_url is not set; falling back to the built-in rule engine.")
     return RuleEngine()
 
 
