@@ -151,9 +151,11 @@ def _fetch_soap(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     if not source.template or not source.field_paths:
         raise ConnectorError("soap source needs 'template' and 'field_paths'")
     from xml.sax.saxutils import escape as _xml_escape
-    # asset_id is client-controlled: XML-escape it so it can't break out of the
-    # envelope element or inject markup into the request body.
-    envelope = source.template.replace("{asset_id}", _xml_escape(str(asset_id or "")))
+    # asset_id is client-controlled: XML-escape it (including quotes, so it's safe
+    # in attribute position too) so it can't break out of the envelope element or
+    # inject markup into the request body.
+    safe_asset = _xml_escape(str(asset_id or ""), {'"': "&quot;", "'": "&apos;"})
+    envelope = source.template.replace("{asset_id}", safe_asset)
     headers = {"Content-Type": "text/xml; charset=utf-8"}
     if source.soap_action:
         headers["SOAPAction"] = source.soap_action

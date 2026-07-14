@@ -50,17 +50,17 @@ def apply_ssh_host_key_policy(client) -> None:
     """Verify host keys on a paramiko SSHClient. Loads known host keys and
     REJECTS unknown hosts (MITM protection) unless SSH_TRUST_UNKNOWN_HOSTS=true
     is set to explicitly opt back into the old auto-accept behaviour."""
+    import contextlib
+
     import paramiko
-    for load in (client.load_system_host_keys, client.load_host_keys):
-        try:
-            if load is client.load_host_keys:
-                path = os.path.expanduser("~/.ssh/known_hosts")
-                if os.path.exists(path):
-                    load(path)
-            else:
-                load()
-        except Exception:  # noqa: BLE001 — missing known_hosts is fine
-            pass
+    # system host keys (/etc/ssh/ssh_known_hosts) …
+    with contextlib.suppress(Exception):  # absent system known_hosts is fine
+        client.load_system_host_keys()
+    # … plus the user's ~/.ssh/known_hosts, which is where host keys usually live.
+    user_known = os.path.expanduser("~/.ssh/known_hosts")
+    if os.path.exists(user_known):
+        with contextlib.suppress(Exception):  # unreadable/malformed known_hosts is fine
+            client.load_host_keys(user_known)
     if os.getenv(SSH_TRUST_UNKNOWN_ENV, "false").strip().lower() == "true":
         logger.warning("SSH host-key verification disabled (%s=true) — MITM risk.",
                        SSH_TRUST_UNKNOWN_ENV)
