@@ -65,16 +65,15 @@ Example checks include:
 
 One technical control can map to multiple compliance frameworks.
 
-Example frameworks:
+Supported frameworks (in the built-in crosswalk):
 
-- NIST CSF
 - NIST 800-53
 - ISO/IEC 27001
 - SOC 2
 - CIS Controls
-- GDPR-oriented controls
 - NIST AI RMF
-- ISO/IEC 42001-style AI governance controls
+- ISO/IEC 42001 (AI management systems)
+- EU AI Act
 
 This reduces duplicate work and allows one evidence item to support multiple audit requirements.
 
