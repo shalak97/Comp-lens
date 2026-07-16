@@ -571,6 +571,18 @@ def evidence_verify(tenant_id: str = "default", db: Session = Depends(get_db),
     return IntegrityService(db).verify(tenant_id)
 
 
+@app.get("/evidence/{evidence_id}/verify", tags=["evidence-graph"])
+def verify_evidence_record(evidence_id: str, tenant_id: str = "default",
+                           db: Session = Depends(get_db),
+                           p: Principal = Depends(require_principal)) -> dict:
+    authorize_tenant(p, tenant_id)
+    from app.services.integrity import IntegrityService
+    res = IntegrityService(db).verify_one(tenant_id, evidence_id)
+    if not res.get("found"):
+        raise HTTPException(status_code=404, detail="evidence record not found")
+    return res
+
+
 # ── AI governance: register & assess the org's own AI systems ──
 @app.post("/ai-systems")
 def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
