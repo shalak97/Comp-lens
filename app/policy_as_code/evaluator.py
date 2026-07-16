@@ -45,14 +45,32 @@ _CMP = {
 }
 _BOOL = {ast.And: all, ast.Or: any}
 _UNARY = {ast.Not: operator.not_, ast.USub: operator.neg, ast.UAdd: operator.pos}
-_ARITH = {
-    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
-    ast.Div: operator.truediv, ast.Mod: operator.mod, ast.FloorDiv: operator.floordiv,
-}
+
+# Cap sequence-repetition size. `"x" * n` / `[0] * n` allocate memory linear in
+# `n`, so an attacker-supplied expression like `"a" * 999999999` (or chained,
+# `"a" * 9999 * 9999`) is a memory-exhaustion DoS. Bound the resulting length of
+# any sequence * int so a single expression cannot balloon allocation.
+_MAX_SEQ_LEN = 100_000
 
 
 class PolicyExpressionError(Exception):
     """Malformed expression or use of a disallowed construct."""
+
+
+def _safe_mul(a: Any, b: Any) -> Any:
+    """operator.mul, but reject sequence repetition that would exceed the cap."""
+    for seq, n in ((a, b), (b, a)):
+        if (isinstance(seq, (str, bytes, bytearray, list, tuple))
+                and isinstance(n, int) and not isinstance(n, bool)
+                and n > 0 and len(seq) * n > _MAX_SEQ_LEN):
+            raise PolicyExpressionError("sequence repetition too large")
+    return operator.mul(a, b)
+
+
+_ARITH = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: _safe_mul,
+    ast.Div: operator.truediv, ast.Mod: operator.mod, ast.FloorDiv: operator.floordiv,
+}
 
 
 class SafeEvaluator:
@@ -202,12 +220,33 @@ class SafeEvaluator:
 _MATCH_MAX_SUBJECT = 10_000
 _MATCH_MAX_PATTERN = 1_000
 
+# A quantifier (* + ? {..}) applied to a group that itself contains a quantifier
+# or alternation — e.g. `(a+)+`, `(a|aa)*`, `(a*)*` — is the classic shape that
+# makes `re` backtrack exponentially. `re` has no timeout, and patterns can come
+# from evidence data / imported policies, so such a pattern is a ReDoS DoS. The
+# subject-length cap alone does NOT prevent it: `(a+)+$` blows up on a ~30-char
+# string. Reject these pattern shapes outright instead of running them.
+_QUANTIFIED_GROUP = re.compile(r"\(([^()]*)\)\s*(?:[*+]|\{\d*,?\d*\}|[*+]\?)")
+
+
+def _has_nested_quantifier(pat: str) -> bool:
+    """True if `pat` has a quantified group whose body itself contains a
+    quantifier or alternation (the catastrophic-backtracking shape)."""
+    for m in _QUANTIFIED_GROUP.finditer(pat):
+        body = m.group(1)
+        # strip escaped metacharacters so `\+` / `\|` don't count as quantifiers
+        stripped = re.sub(r"\\.", "", body)
+        if any(c in stripped for c in "*+|") or re.search(r"\{\d", stripped):
+            return True
+    return False
+
 
 def _matches(s: Any, pattern: Any) -> bool:
-    # Bound subject and pattern length to limit catastrophic-backtracking (ReDoS)
-    # exposure — re has no timeout and a pattern may come from evidence data.
+    # Bound subject and pattern length, and reject ReDoS-shaped patterns, to
+    # limit catastrophic-backtracking exposure — re has no timeout and a pattern
+    # may come from evidence data or an imported policy.
     pat = str(pattern)
-    if len(pat) > _MATCH_MAX_PATTERN:
+    if len(pat) > _MATCH_MAX_PATTERN or _has_nested_quantifier(pat):
         return False
     try:
         return re.search(pat, str(s)[:_MATCH_MAX_SUBJECT]) is not None
