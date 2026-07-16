@@ -155,6 +155,7 @@ nav{padding:8px 0 14px;flex:1}
 .gauge-legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:8px}
 .gleg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--body)}
 .gleg .sw{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.gleg .sw::after{content:none}
 .gleg .n{font-family:var(--grot);font-weight:600;color:var(--ink)}
 
 .calrow{padding:13px 0;border-bottom:1px solid var(--etch)}
@@ -1976,15 +1977,56 @@ async function instDelete(id,label){
   try{await api("/connectors/instances/"+encodeURIComponent(id)+withTenantQS(),{method:"DELETE"});toast("Connection removed");closeDrawer();render();}
   catch(e){toast("Delete failed: "+(e.message||e),"warn");}
 }
+/* Connection health, derived from the last sync/test result. */
+function instHealth(i){
+  if(i.last_error)return {cls:"c-fail",icon:"✗",label:"Connection error",detail:i.last_error};
+  if(i.last_status==="never"||!i.last_sync_at)return {cls:"c-dim",icon:"○",label:"Not yet tested",detail:"Run a sync or test to verify this connection reaches its system."};
+  if(i.last_status==="degraded")return {cls:"c-warn",icon:"!",label:"Degraded",detail:"Connected, but the last sync reported problems — see the error below."};
+  const live=i.last_mode==="live";
+  return live
+    ?{cls:"c-pass",icon:"✓",label:"Connection successful",detail:"Reached the live system and collected real evidence. Last verified "+ago(i.last_sync_at)+"."}
+    :{cls:"c-focus",icon:"◐",label:"Running in demo mode",detail:"Working with synthetic evidence. Add live credentials to switch to real data."};
+}
+function healthBanner(h){
+  return `<div id="instHealth" style="border:1px solid var(--rule);border-radius:10px;padding:12px 14px;margin-bottom:8px;background:var(--face)">
+    <span class="chip ${h.cls}"><span class="d"></span>${esc(h.icon+" "+h.label)}</span>
+    <div class="t2" style="margin-top:7px;line-height:1.5">${esc(h.detail)}</div></div>`;
+}
+async function _runInstTest(i){
+  const id=i.id;
+  if(String(id).startsWith("local-")){
+    const conn=localConnById(id); if(!conn)return {ok:false,detail:"Local connection not found"};
+    const r=await apiPOST("/connectors/instances/ephemeral/test",withTenantBody({connector_key:conn.connector_key,config:conn.config||{}}));
+    return {ok:!!r.ok,detail:r.detail||(r.ok?"Connection OK":"Connection failed")};
+  }
+  if(STATE.demo)return {ok:true,detail:"Reachable (demo mode) — synthetic system always responds."};
+  const r=await apiPOST("/connectors/instances/"+encodeURIComponent(id)+"/test",withTenantBody({}));
+  return {ok:!!r.ok,detail:r.detail||(r.ok?"Connection OK":"Connection failed")};
+}
+async function instTestInline(id){
+  const box=document.getElementById("instHealth");
+  const i=(CACHE.instances||[]).find(x=>String(x.id)===String(id)); if(!i)return;
+  if(box)box.innerHTML=`<div style="display:flex;align-items:center;gap:8px;color:var(--body)"><span class="spin"></span> Testing connection…</div>`;
+  try{
+    const r=await _runInstTest(i);
+    if(box)box.innerHTML=`<span class="chip ${r.ok?"c-pass":"c-fail"}"><span class="d"></span>${r.ok?"✓ Connection successful":"✗ Connection failed"}</span>
+      <div class="t2" style="margin-top:7px;line-height:1.5">${esc(r.detail)}</div>
+      <div class="t2" style="color:var(--steel);margin-top:4px">Tested just now</div>`;
+  }catch(e){
+    if(box)box.innerHTML=`<span class="chip c-fail"><span class="d"></span>✗ Test failed</span><div class="t2" style="margin-top:7px;line-height:1.5">${esc(e.message||String(e))}</div>`;
+  }
+}
 DETAIL.instances=function(i){
   const c=_cat().find(x=>x.key===i.connector_key)||{name:i.connector_key,env_vars:[]};
   const missing=(c.env_vars||[]).filter(v=>!(i.config_keys_set||[]).includes(v));
   openDrawer({eyebrow:"connection · "+i.connector_key,title:esc(i.label),sub:esc(c.name||i.connector_key),badges:instModeBadge(i)+(i.local?' <span class="chip c-dim"><span class="d"></span>local</span>':""),
     body:
-      dsec("Status",kvlist([["State",i.last_status==="never"?"Never synced":titlecase(i.last_status)],["Mode",titlecase(i.last_mode||"demo")],["Evidence collected",String(i.evidence_count||0)],["Last sync",i.last_sync_at?ago(i.last_sync_at):"—"],["Error",i.last_error||"—"]]))+
+      healthBanner(instHealth(i))+
+      dsec("Connection",kvlist([["Connector",c.name||i.connector_key],["Type",c.category?titlecase(c.category):"—"],["Vendor",c.vendor||"—"],["Auth method",(c.auth_method||"").replace(/_/g," ")||"—"],["Maturity",c.maturity?titlecase(c.maturity):"—"],["Instance ID",`<span class="mono" style="font-size:11px">${esc(String(i.id))}</span>`,true],["Enabled",(i.enabled===false||i.on===false)?"No":"Yes"],["Created",i.created_at?ago(i.created_at):"—"]]))+
+      dsec("Sync status",kvlist([["State",i.last_status==="never"?"Never synced":titlecase(i.last_status||"—")],["Mode",titlecase(i.last_mode||"demo")],["Evidence collected",String(i.evidence_count||0)],["Last sync",i.last_sync_at?ago(i.last_sync_at):"—"],["Last error",i.last_error||"—"]]))+
       dsec("Credentials",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Configured: ${(i.config_keys_set||[]).map(k=>`<span class="chip c-dim" style="margin:2px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"none"}</div>`+(missing.length?`<div class="note" style="margin-top:8px">Missing for live: ${missing.map(esc).join(", ")} — runs in demo until set.</div>`:"")+(i.local?`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored <b>encrypted in this browser</b> (AES-GCM, unlocked by your passphrase). Sent to the server only to run a sync \u2014 never saved there.</div>`:`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored encrypted (Fernet) on the server; values are never displayed.</div>`))+
       dsec("Coverage",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Feeds normalized evidence into the same control fields as every other source — so multiple accounts of one type each contribute independently.</div>`),
-    actions:`<button class="btn sm primary" onclick="instSync('${esc(i.id)}','${esc(i.label)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button> <button class="btn sm" onclick="instTest('${esc(i.id)}')">Test</button><div style="flex:1"></div><button class="btn sm" onclick="instDelete('${esc(i.id)}','${esc(i.label)}')">Remove</button>${closeBtn}`});
+    actions:`<button class="btn sm primary" onclick="instSync('${esc(i.id)}','${esc(i.label)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button> <button class="btn sm" onclick="instTestInline('${esc(i.id)}')">Test connection</button><div style="flex:1"></div><button class="btn sm" onclick="instDelete('${esc(i.id)}','${esc(i.label)}')">Remove</button>${closeBtn}`});
 };
 </script>
 <script>
