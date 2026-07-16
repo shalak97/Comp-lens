@@ -55,6 +55,14 @@ _POLICY_LANE_FLOOR = 0.3
 _ENF_MIN_REQUESTS = 5  # below this, runtime signal is too thin to score
 _DRIFT_WINDOW_DAYS = 14
 
+# The control-id namespace every lane must share for the fusion join to line up.
+# Policies declare `control: AC-2`, enforcement parses the same, and inherited
+# uses the canonical comp_lens id — all NIST-800-53. The connector→control map,
+# by contrast, carries the same evidence under all 8 frameworks, so the native
+# lane must be pinned to this namespace or its ISO/CIS/GDPR aliases never match
+# another lane (mis-scoring those controls and double-counting every logical one).
+_CANONICAL_FRAMEWORK = "NIST_800_53"
+
 
 def _aware(dt):
     if dt is None:
@@ -77,15 +85,28 @@ def _lane_weights(policy_overrides: dict | None) -> dict[str, float]:
 
 
 # ─────────────────────────── lane collectors ───────────────────────────
+def _canonical_control_ids() -> set[str]:
+    """Control ids in the canonical framework across the whole connector catalog.
+
+    The connector→control map carries each evidence type under all 8 frameworks;
+    keeping only the canonical-framework ids keeps the native lane in the same
+    namespace the other lanes speak (see _CANONICAL_FRAMEWORK).
+    """
+    from app.connectors import catalog as ccat
+    from app.connectors.framework import supported_controls
+    ids: set[str] = set()
+    for c in ccat.all_connectors():
+        ids.update(supported_controls(c).get(_CANONICAL_FRAMEWORK, []))
+    return ids
+
+
 def _native_lane(db: Session, tenant_id: str) -> dict[str, dict[str, Any]]:
-    """control_id -> {score, detail} from connector evidence health."""
+    """control_id -> {score, detail} from connector evidence health, keyed in the
+    canonical (NIST-800-53) namespace so it fuses with the other lanes."""
     from app.services.trust_graph import _connector_health, _control_strength
     conns = _connector_health(db, tenant_id)
-    all_controls: set = set()
-    for c in conns.values():
-        all_controls |= c["controls"]
     out = {}
-    for cid in all_controls:
+    for cid in _canonical_control_ids():
         s = _control_strength(cid, conns)
         if s["strength"] > 0:
             out[cid] = {"score": s["strength"], "detail": s["reason"],
