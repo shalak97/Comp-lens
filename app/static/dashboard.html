@@ -4,6 +4,21 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Comp-Lens · Compliance Bench</title>
+<meta name="description" content="Comp-Lens is a compliance bench that turns controls into code and collects audit evidence automatically across cloud, identity, DevOps, ITSM, security, endpoint, SaaS and GRC systems."/>
+<meta name="author" content="Comp-Lens"/>
+<meta name="application-name" content="Comp-Lens"/>
+<meta name="color-scheme" content="light dark"/>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9ecef"/>
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1216"/>
+<meta name="robots" content="noindex, nofollow"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="Comp-Lens"/>
+<meta property="og:title" content="Comp-Lens · Compliance Bench"/>
+<meta property="og:description" content="Turn controls into code and collect audit evidence automatically across cloud, identity, DevOps, ITSM, security, endpoint, SaaS and GRC systems."/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Comp-Lens · Compliance Bench"/>
+<meta name="twitter:description" content="Turn controls into code and collect audit evidence automatically — a compliance bench for continuous, evidenced GRC."/>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%233b82f6' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='4.5' fill='%233b82f6'/%3E%3Cpath d='M16 1v6M16 25v6M1 16h6M25 16h6' stroke='%233b82f6' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1156,7 +1171,11 @@ RENDER.connectors = async function(){
     evidence:(c.evidence_count!=null?c.evidence_count:(c.assets!=null?c.assets:0)),
     last_sync:c.last_sync_at||c.last_sync||null,
     error:c.last_error||null,
+    registry_key:c.registry_key||c.key||null,
+    evidence_types:c.evidence_types||[],
   }));
+  // Backfill evidence types from the catalog when the status endpoint omits them.
+  norm.forEach(c=>{ if(!c.evidence_types||!c.evidence_types.length){ c.evidence_types=evTypesFor(c.key); } });
 
   const MODE={
     connected:{cls:"c-pass",label:"Connected"},
@@ -1208,16 +1227,17 @@ RENDER.connectors = async function(){
         <button class="btn sm" style="margin-left:10px" onclick="openAddConnection(CACHE.connectors&&CACHE.connectors[0]?CACHE.connectors[0].key:undefined)"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add connection</button>
       </div>
       <div class="panel-b flush"><div class="tbl-scroll"><table>
-        <thead><tr><th>Connector</th><th>Category</th><th>Maturity</th><th>Controls</th><th>Evidence</th><th>Auth</th><th>Status</th><th class="right">Last sync</th></tr></thead>
+        <thead><tr><th>Connector</th><th>Category</th><th>Maturity</th><th>Controls</th><th>Collects</th><th>Evidence</th><th>Auth</th><th>Status</th><th class="right">Last sync</th></tr></thead>
         <tbody data-ent="connectors">${r.map(c=>{const md=MODE[c.mode]||MODE.not_configured;return `<tr>
           <td><b>${esc(c.name)}</b>${c.vendor&&c.vendor.toLowerCase()!==c.name.toLowerCase()?`<div class="t2">${esc(c.vendor)}</div>`:""}</td>
           <td style="color:var(--body)">${esc(titlecase(c.category))}</td>
           <td><span class="chip ${c.maturity==='production'?'c-pass':'c-warn'}"><span class="d"></span>${esc(titlecase(c.maturity))}</span></td>
           <td class="num">${c.controls!=null?c.controls:"—"}</td>
+          <td class="num" title="${esc((c.evidence_types||[]).map(humanizeEv).join(', ')||'No evidence types declared')}">${(c.evidence_types||[]).length||"—"}</td>
           <td class="num">${c.evidence||"—"}</td>
           <td class="mono" style="font-size:11px;color:var(--steel)">${esc(c.auth||"—")}</td>
           <td><span class="chip ${md.cls}"><span class="d"></span>${md.label}</span>${c.error?`<div class="t2" style="color:var(--fail)">${esc(c.error)}</div>`:""}</td>
-          <td class="right mono" style="font-size:11px;color:var(--steel)">${c.last_sync?ago(c.last_sync):"—"}</td></tr>`;}).join("")||`<tr><td colspan="8">${emptyState("No connectors","Nothing matches this filter.")}</td></tr>`}</tbody>
+          <td class="right mono" style="font-size:11px;color:var(--steel)">${c.last_sync?ago(c.last_sync):"—"}</td></tr>`;}).join("")||`<tr><td colspan="9">${emptyState("No connectors","Nothing matches this filter.")}</td></tr>`}</tbody>
       </table></div></div>
     </div>`;
     host.querySelectorAll("#connCat button").forEach(b=>b.onclick=()=>{CONN.cat=b.dataset.c;draw();});
@@ -1427,7 +1447,8 @@ DETAIL.connectors=function(c){
   openDrawer({eyebrow:"connector · "+(c.key||c.name),title:esc(c.name),sub:esc(c.vendor||""),
     badges:`<span class="chip ${md[0]}"><span class="d"></span>${md[1]}</span><span class="chip ${c.maturity==='production'?'c-pass':'c-warn'}"><span class="d"></span>${titlecase(c.maturity)}</span>`,
     body:
-      dsec("Configuration",kvlist([["Category",titlecase(c.category)],["Vendor",c.vendor||"—"],["Auth method",c.auth||"—"],["Maturity",titlecase(c.maturity)]]))+
+      dsec("Configuration",kvlist([["Category",titlecase(c.category)],["Vendor",c.vendor||"—"],["Auth method",c.auth||"—"],["Maturity",titlecase(c.maturity)],["Registry key",c.registry_key||c.key||"—"]]))+
+      dsec("Evidence types",`<div style="font-size:12.5px;color:var(--body);line-height:1.55;margin-bottom:8px">${connDescribe({...c,evidence_types:c.evidence_types||evTypesFor(c.key)})}</div><div class="flex wrap">${evTypeChips(c.evidence_types||evTypesFor(c.key))}</div>`)+
       dsec("Coverage",kvlist([["Controls covered",c.controls!=null?c.controls:"—"],["Evidence collected",c.evidence||0],["Last sync",c.last_sync?fmtDate(c.last_sync)+" · "+ago(c.last_sync):"never"]]))+
       (c.error?dsec("Last error",`<div class="note" style="margin:0;border-left-color:var(--fail)"><b>${esc(c.error)}</b></div>`):"")+
       dsec("Sync status",`<div class="timeline"><div class="tl"><div>${c.mode==='connected'?'Healthy — evidence flowing':c.mode==='error'?'Sync failing':c.mode==='demo'?'Running on synthetic data':'Awaiting credentials'}</div><div class="w">${c.last_sync?ago(c.last_sync):'—'}</div></div></div>`),
@@ -1726,12 +1747,12 @@ D.instances=[
   {id:"demo-gh",connector_key:"GITHUB",label:"GitHub — acme-corp",enabled:true,config_keys_set:["GITHUB_TOKEN","GITHUB_ORG"],last_status:"never",last_mode:"demo",evidence_count:0,last_sync_at:null,last_error:null},
 ];
 D.catalog=[
-  {key:"AWS_SECURITY_HUB",name:"AWS Security Hub",category:"cloud",vendor:"AWS",env_vars:["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_REGION"]},
-  {key:"AWS_IAM",name:"AWS IAM",category:"cloud",vendor:"AWS",env_vars:["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"]},
-  {key:"OKTA",name:"Okta",category:"identity",vendor:"Okta",env_vars:["OKTA_ORG_URL","OKTA_API_TOKEN"]},
-  {key:"GITHUB",name:"GitHub",category:"devops",vendor:"GitHub",env_vars:["GITHUB_TOKEN","GITHUB_ORG"]},
-  {key:"JIRA",name:"Jira",category:"itsm",vendor:"Atlassian",env_vars:["JIRA_URL","JIRA_EMAIL","JIRA_API_TOKEN"]},
-  {key:"CROWDSTRIKE",name:"CrowdStrike",category:"security",vendor:"CrowdStrike",env_vars:["CROWDSTRIKE_CLIENT_ID","CROWDSTRIKE_CLIENT_SECRET"]},
+  {key:"AWS_SECURITY_HUB",name:"AWS Security Hub",category:"cloud",vendor:"AWS",registry_key:"AWS",auth_method:"iam_keys",maturity:"production",env_vars:["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY","AWS_REGION"],evidence_types:["vulnerability_findings","logging_enabled","encryption_enabled","siem_alerts_monitored"]},
+  {key:"AWS_IAM",name:"AWS IAM",category:"cloud",vendor:"AWS",registry_key:"AWS",auth_method:"iam_keys",maturity:"production",env_vars:["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"],evidence_types:["mfa_enabled","privileged_users_reviewed","inactive_accounts_disabled","access_reviews_completed"]},
+  {key:"OKTA",name:"Okta",category:"identity",vendor:"Okta",registry_key:"OKTA",auth_method:"api_token",maturity:"production",env_vars:["OKTA_ORG_URL","OKTA_API_TOKEN"],evidence_types:["mfa_enabled","inactive_accounts_disabled","access_reviews_completed"]},
+  {key:"GITHUB",name:"GitHub",category:"devops",vendor:"GitHub",registry_key:"GITHUB",auth_method:"pat_token",maturity:"production",env_vars:["GITHUB_TOKEN","GITHUB_ORG"],evidence_types:["branch_protection","code_scanning_enabled","vulnerability_findings"]},
+  {key:"JIRA",name:"Jira",category:"itsm",vendor:"Atlassian",registry_key:"JIRA",auth_method:"api_token",maturity:"production",env_vars:["JIRA_URL","JIRA_EMAIL","JIRA_API_TOKEN"],evidence_types:["incidents_tracked","patch_status"]},
+  {key:"CROWDSTRIKE",name:"CrowdStrike",category:"security",vendor:"CrowdStrike",registry_key:"CROWDSTRIKE",auth_method:"oauth_client_credentials",maturity:"production",env_vars:["CROWDSTRIKE_CLIENT_ID","CROWDSTRIKE_CLIENT_SECRET"],evidence_types:["endpoint_protection_active","patch_status","vulnerability_findings","incidents_tracked"]},
 ];
 function _cat(){return (window.__CATALOG&&window.__CATALOG.length)?window.__CATALOG:D.catalog;}
 function instModeBadge(i){
@@ -1977,6 +1998,13 @@ async function instDelete(id,label){
   try{await api("/connectors/instances/"+encodeURIComponent(id)+withTenantQS(),{method:"DELETE"});toast("Connection removed");closeDrawer();render();}
   catch(e){toast("Delete failed: "+(e.message||e),"warn");}
 }
+/* ── connector metadata helpers ── */
+function humanizeEv(t){return String(t).replace(/_/g," ").replace(/\bmfa\b/gi,"MFA").replace(/\bsiem\b/gi,"SIEM").replace(/\bai\b/gi,"AI").replace(/\bcve\b/gi,"CVE").replace(/^\w/,c=>c.toUpperCase());}
+function evTypeChips(list){return (list&&list.length)?list.map(t=>`<span class="chip c-out" style="margin:2px"><span class="d"></span>${esc(humanizeEv(t))}</span>`).join(""):`<span style="color:var(--steel);font-size:12.5px">No evidence types declared</span>`;}
+function evTypesFor(connector_key){const c=_cat().find(x=>x.key===connector_key||x.registry_key===connector_key)||{};return c.evidence_types||[];}
+function controlsFor(connector_key){const r=(CACHE.connectors||[]).find(x=>x.key===connector_key||x.key===(_cat().find(x=>x.key===connector_key)||{}).registry_key);return r&&r.controls!=null?r.controls:null;}
+function connDescribe(c){const n=(c.evidence_types||[]).length;const auth=String(c.auth_method||c.auth||"").replace(/_/g," ");return `Collects ${n||"—"} evidence type${n===1?"":"s"} from ${esc(c.vendor||c.name||"the system")}${auth&&auth!=="none"?` via ${esc(auth)}`:""}, normalized into the same control fields as every other source.`;}
+
 /* Connection health, derived from the last sync/test result. */
 function instHealth(i){
   if(i.last_error)return {cls:"c-fail",icon:"✗",label:"Connection error",detail:i.last_error};
@@ -2025,7 +2053,8 @@ DETAIL.instances=function(i){
       dsec("Connection",kvlist([["Connector",c.name||i.connector_key],["Type",c.category?titlecase(c.category):"—"],["Vendor",c.vendor||"—"],["Auth method",(c.auth_method||"").replace(/_/g," ")||"—"],["Maturity",c.maturity?titlecase(c.maturity):"—"],["Instance ID",`<span class="mono" style="font-size:11px">${esc(String(i.id))}</span>`,true],["Enabled",(i.enabled===false||i.on===false)?"No":"Yes"],["Created",i.created_at?ago(i.created_at):"—"]]))+
       dsec("Sync status",kvlist([["State",i.last_status==="never"?"Never synced":titlecase(i.last_status||"—")],["Mode",titlecase(i.last_mode||"demo")],["Evidence collected",String(i.evidence_count||0)],["Last sync",i.last_sync_at?ago(i.last_sync_at):"—"],["Last error",i.last_error||"—"]]))+
       dsec("Credentials",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Configured: ${(i.config_keys_set||[]).map(k=>`<span class="chip c-dim" style="margin:2px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"none"}</div>`+(missing.length?`<div class="note" style="margin-top:8px">Missing for live: ${missing.map(esc).join(", ")} — runs in demo until set.</div>`:"")+(i.local?`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored <b>encrypted in this browser</b> (AES-GCM, unlocked by your passphrase). Sent to the server only to run a sync \u2014 never saved there.</div>`:`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored encrypted (Fernet) on the server; values are never displayed.</div>`))+
-      dsec("Coverage",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Feeds normalized evidence into the same control fields as every other source — so multiple accounts of one type each contribute independently.</div>`),
+      dsec("Evidence types",`<div style="font-size:12.5px;color:var(--body);line-height:1.55;margin-bottom:8px">${connDescribe(c)}</div><div class="flex wrap">${evTypeChips(c.evidence_types||evTypesFor(i.connector_key))}</div>`)+
+      dsec("Coverage",kvlist([["Controls covered",(controlsFor(i.connector_key)!=null?String(controlsFor(i.connector_key)):"—")],["Category",c.category?titlecase(c.category):"—"],["Registry key",c.registry_key||i.connector_key]])+`<div style="font-size:11.5px;color:var(--steel);line-height:1.55;margin-top:8px">Feeds normalized evidence into shared control fields — so multiple accounts of one type each contribute independently.</div>`),
     actions:`<button class="btn sm primary" onclick="instSync('${esc(i.id)}','${esc(i.label)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button> <button class="btn sm" onclick="instTestInline('${esc(i.id)}')">Test connection</button><div style="flex:1"></div><button class="btn sm" onclick="instDelete('${esc(i.id)}','${esc(i.label)}')">Remove</button>${closeBtn}`});
 };
 </script>
