@@ -923,12 +923,14 @@ RENDER.overview = async function(){
   const host=el("div");m.appendChild(host);
   host.innerHTML=`<div class="loading"><span class="spin"></span> Reading instruments…</div>`;
 
-  const[sum,tr,fnd,fw]=await Promise.all([
+  const[sum,tr,fnd,fw,ut]=await Promise.all([
     load(withTenant("/summary"),D.summary),
     load(withTenant("/trends"),D.trends),
     load(withTenant("/findings?limit=200"),D.findings),
     load("/catalog/frameworks",D.frameworks),
+    load(withTenant("/v1/grc-trust/unified"),D.unifiedTrust),
   ]);
+  const trust=ut.data||{};
   const s=sum.data, bs=s.by_status||{}, live=sum.live;
   const seg=[
     {label:"Pass",v:bs.pass||0,color:"var(--pass)"},
@@ -948,6 +950,7 @@ RENDER.overview = async function(){
   host.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Compliance score${liveBadge(live)}</div><div class="v num">${fmtPct(s.compliance_score)}<small>%</small></div><div class="s ${delta>=0?'up':'dn'}">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(1)} pts · 35d</div></div>
+    <div class="ro drill" onclick="STATE.active='trusttelemetry';render()" title="Fused from connector, policy, enforcement, attestation and follow-through evidence"><div class="k"><span class="tick" style="background:var(--iris,var(--focus))"></span>Verified trust</div><div class="v num">${trust.unified_trust_score!=null?trust.unified_trust_score:'—'}${trust.unified_trust_score!=null?'<small>/100</small>':''}</div><div class="s">${trust.band?trustChip(trust.band):(trust.controls_scored?trust.controls_scored+' scored':'no signal yet')} →</div></div>
     <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Risk-weighted</div><div class="v num">${fmtPct(s.risk_weighted_score)}<small>%</small></div><div class="s">severity-adjusted</div></div>
     <div class="ro drill" onclick="STATE.active='findings';render()"><div class="k"><span class="tick" style="background:var(--fail)"></span>Open exposure</div><div class="v num">${fmtPct(s.risk_exposure)}<small>%</small></div><div class="s">${crit.length} high / critical →</div></div>
     <div class="ro drill" onclick="STATE.active='controls';render()"><div class="k"><span class="tick" style="background:var(--steel)"></span>Controls evaluated</div><div class="v num">${s.total||0}</div><div class="s">${s.waived||0} waived →</div></div>
@@ -994,8 +997,9 @@ RENDER.controls = async function(){
   m.innerHTML=viewHead("Control catalog","Every control, crosswalked to NIST, ISO 27001, SOC 2, CIS and AI frameworks. Filter by framework to score against one standard.",
     `<input id="ctlq" placeholder="Search controls…" style="width:220px;height:32px" value="${esc(CTL.q)}"/>`,"posture / 02");
   const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
-  const[ctl]=await Promise.all([load("/controls",D.controls)]);
+  const[ctl,ut]=await Promise.all([load("/controls",D.controls),load(withTenant("/v1/grc-trust/unified"),D.unifiedTrust)]);
   const _i=loadIssue(ctl,{title:"Couldn't load the control catalog"});if(_i){host.innerHTML=_i;return;}
+  const trustBy={};((ut.data||{}).controls||[]).forEach(c=>{trustBy[c.control_id]={trust:c.trust,band:c.band,lanes:c.lanes,lane_coverage:c.lane_coverage};});CACHE.trustBy=trustBy;
   let rows=ctl.data||[];
   const fws=["ALL",...new Set(rows.flatMap(r=>Object.keys(r.frameworks||{})))];
   const counts={pass:0,fail:0,error:0,other:0};rows.forEach(r=>{counts[r.status]!=null?counts[r.status]++:counts.other++;});
@@ -1013,13 +1017,14 @@ RENDER.controls = async function(){
     <div class="panel">
       <div class="panel-h"><div class="seg" id="ctlseg">${fws.map(f=>`<button class="${CTL.fw===f?'on':''}" data-fw="${esc(f)}">${esc(f)}</button>`).join("")}</div><div class="sp"></div><div class="sub">${r.length} shown</div></div>
       <div class="panel-b flush"><div class="tbl-scroll"><table>
-        <thead><tr><th>Control</th><th>Domain</th><th>Severity</th><th>Status</th><th>Crosswalk</th></tr></thead>
+        <thead><tr><th>Control</th><th>Domain</th><th>Severity</th><th>Status</th><th>Verified trust</th><th>Crosswalk</th></tr></thead>
         <tbody data-ent="controls">${r.map(x=>`<tr>
           <td><div class="id">${esc(x.control_id)}</div><div class="t2">${esc(x.title)}</div></td>
           <td style="color:var(--body)">${esc(x.domain||"—")}</td>
           <td>${sevChip(x.severity)}</td><td>${statusChip(x.status||"pending")}</td>
+          <td>${trustBy[x.control_id]?trustChip(trustBy[x.control_id].band,trustBy[x.control_id].trust):'<span style="color:var(--faint)" title="no independent trust signal fused for this control yet">—</span>'}</td>
           <td>${Object.entries(x.frameworks||{}).slice(0,4).map(([k,v])=>`<span class="chip c-out" title="${esc(k)}">${esc(k)} ${esc((v||[])[0]||"")}</span>`).join(" ")||'<span style="color:var(--faint)">—</span>'}</td>
-        </tr>`).join("")||`<tr><td colspan="5">${emptyState("No matches","Adjust the framework filter or search.")}</td></tr>`}</tbody>
+        </tr>`).join("")||`<tr><td colspan="6">${emptyState("No matches","Adjust the framework filter or search.")}</td></tr>`}</tbody>
       </table></div></div>
     </div>`;
     host.querySelectorAll("#ctlseg button").forEach(b=>b.onclick=()=>{CTL.fw=b.dataset.fw;draw();});
@@ -1437,6 +1442,10 @@ DETAIL.controls=function(c){
   openDrawer({eyebrow:"control · "+c.control_id,title:esc(c.control_id)+" — "+esc(c.title),
     sub:esc(c.domain||""),badges:sevChip(c.severity)+statusChip(c.status||"pending"),
     body:
+      ((tb)=>tb?dsec("Verified trust",
+        `<div class="drow link" onclick="closeDrawer();STATE.active='trusttelemetry';render()">`+
+        `<span style="flex:1;font-size:12.5px;color:var(--body)">Fused trust <b>${tb.trust}/100</b> across ${esc(tb.lane_coverage||'')} lanes</span>${trustChip(tb.band,tb.trust)}<span class="go">breakdown ›</span></div>`+
+        `<div style="font-size:11px;color:var(--steel);margin-top:6px">Lanes: ${Object.keys(tb.lanes||{}).map(l=>esc(LANE_LABEL[l]||l)).join(", ")||'none'}</div>`):"")((CACHE.trustBy||{})[c.control_id])+
       dsec("Framework crosswalk",`<div class="flex wrap">${Object.entries(c.frameworks||{}).map(([k,v])=>`<span class="chip c-out">${esc(k)} ${esc((v||[]).join(", "))}</span>`).join("")||'<span style="color:var(--faint)">No mappings</span>'}</div>`)+
       dsec("What this checks",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">The <b>${esc(c.title)}</b> control verifies the ${esc((c.domain||"relevant").toLowerCase())} requirement is enforced across every connected system that exposes it, and produces signed evidence on each evaluation.</div>`)+
       dsec("Related findings ("+rel.length+")",rel.length?rel.map((f,i)=>drow(`${sevChip(f.severity)}<span style="flex:1">${esc(f.title)}</span><span class="go">open ›</span>`,`openFindingByControl('${esc(c.control_id)}',${i})`)).join(""):`<div style="font-size:12.5px;color:var(--steel)">No open findings — this control is clean.</div>`),
@@ -2350,7 +2359,7 @@ RENDER.trusttelemetry = async function(){
   <div class="readouts">
     <div class="ro"><div class="k">Unified trust</div><div class="v num">${u.unified_trust_score!=null?u.unified_trust_score:'—'}${u.unified_trust_score!=null?'<small>/100</small>':''}</div><div class="s">${trustChip(u.band)}</div></div>
     <div class="ro"><div class="k">Controls scored</div><div class="v num">${scored}</div><div class="s">across ${laneNames.length} lanes</div></div>
-    <div class="ro drill" onclick="STATE.active='crawlers';render()"><div class="k"><span class="tick" style="background:var(--warn)"></span>External drift · ${drift.window_days||14}d</div><div class="v num">${drift.recent_changes||0}</div><div class="s">${drift.recent_changes?'sources changed →':'stable'}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>External drift · ${drift.window_days||14}d</div><div class="v num">${drift.recent_changes||0}</div><div class="s">${drift.recent_changes?'sources changed':'stable'}</div></div>
     <div class="ro"><div class="k">Weakest control</div><div class="v" style="font-size:18px;font-family:var(--mono)">${(u.weakest&&u.weakest[0])?esc(u.weakest[0].control_id):'—'}</div><div class="s">${(u.weakest&&u.weakest[0])?trustChip(u.weakest[0].band,u.weakest[0].trust):''}</div></div>
   </div>
 
