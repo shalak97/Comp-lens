@@ -24,7 +24,19 @@ services:
       - key: EVIDENCE_BACKEND
         value: local
       - key: EVIDENCE_LOCAL_PATH
-        value: /tmp/evidence_store
+        value: /tmp/evidence_store          # NOTE: /tmp is ephemeral on Render — evidence artifacts reset on restart; use a persistent disk or object backend for durability
+      # Run scheduled connector syncs / assessments in-process. Render web
+      # services are always-on, so the background runner ticks here. Without
+      # this the runner is a no-op and schedules created in the UI/API never
+      # execute automatically.
+      - key: ENABLE_SCHEDULER
+        value: true
+      # Required in production — the app refuses to start without these.
+      # Set them in the Render dashboard (sync: false keeps them out of git):
+      # - key: COMP_LENS_API_KEYS
+      #   sync: false          # e.g. "adminkey:*"
+      # - key: EVIDENCE_SIGNING_KEY
+      #   sync: false          # HMAC key for evidence tamper-evidence
       # Uncomment and fill in the connectors you use:
       # - key: AWS_REGION
       #   value: us-east-1
@@ -44,8 +56,6 @@ services:
       #   sync: false
       # - key: JIRA_API_TOKEN
       #   sync: false
-      # - key: COMP_LENS_API_KEYS
-      #   sync: false          # e.g. "adminkey:*"
 
 databases:
   - name: comp-lens-db
