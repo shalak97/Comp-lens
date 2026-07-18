@@ -24,6 +24,11 @@ class Settings(BaseSettings):
 
     # Production hardening
     rate_limit_per_minute: int = Field(default=120)
+    # Trusted reverse-proxy hop count for rate-limit client-ip resolution. 0 keeps
+    # the socket peer (safe default); set to 1 behind Render so anonymous requests
+    # are keyed on the real client ip from X-Forwarded-For. Only set when actually
+    # behind that many trusted proxies — otherwise the header is spoofable.
+    trusted_proxy_hops: int = Field(default=0)
     enable_hsts: bool = Field(default=True)
 
     # Gate the synthetic DEMO connector. Defaults OFF in production so nobody

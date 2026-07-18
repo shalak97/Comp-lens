@@ -67,18 +67,35 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, max_requests: int = 120, window_seconds: int = 60,
                  exempt_paths: tuple[str, ...] = ("/health", "/docs", "/openapi.json",
-                                                  "/redoc", "/dashboard")):
+                                                  "/redoc", "/dashboard"),
+                 trusted_proxy_hops: int = 0):
         super().__init__(app)
         self.limiter = SlidingWindowLimiter(max_requests, window_seconds)
         self.exempt = exempt_paths
+        # Number of trusted reverse proxies in front of the app. 0 (default) uses
+        # the socket peer, which behind a proxy is the PROXY ip — so every
+        # anonymous caller shares one bucket. Set to the real hop count (e.g. 1
+        # on Render) to key anonymous requests on the true client ip from
+        # X-Forwarded-For instead. Only enable when actually behind that many
+        # trusted proxies, or the header becomes spoofable.
+        self.trusted_proxy_hops = max(0, int(trusted_proxy_hops))
         self._n = 0
+
+    def _client_ip(self, request: Request) -> str:
+        if self.trusted_proxy_hops > 0:
+            xff = request.headers.get("x-forwarded-for", "")
+            chain = [h.strip() for h in xff.split(",") if h.strip()]
+            # the (hops)-th entry from the right is the ip the outermost trusted
+            # proxy saw; anything further left is client-supplied and untrusted
+            if len(chain) >= self.trusted_proxy_hops:
+                return chain[-self.trusted_proxy_hops]
+        return request.client.host if request.client else "unknown"
 
     def _key(self, request: Request) -> str:
         api_key = request.headers.get("x-api-key")
         if api_key:
             return "k:" + api_key[:12]
-        client = request.client.host if request.client else "unknown"
-        return "ip:" + client
+        return "ip:" + self._client_ip(request)
 
     async def dispatch(self, request: Request, call_next: Callable):
         path = request.url.path

@@ -122,7 +122,8 @@ app.add_middleware(SecurityHeadersMiddleware, hsts=getattr(settings, "enable_hst
 app.add_middleware(RateLimitMiddleware,
                    max_requests=(1_000_000 if getattr(settings, "app_env", "production") == "test"
                                  else getattr(settings, "rate_limit_per_minute", 120)),
-                   window_seconds=60)
+                   window_seconds=60,
+                   trusted_proxy_hops=getattr(settings, "trusted_proxy_hops", 0))
 app.add_middleware(RequestContextMiddleware)
 install_exception_handlers(app)
 
@@ -653,12 +654,12 @@ def import_policy(req: _PolicyImport, p: Principal = Depends(require_principal))
     # If policy YAML is supplied, validate it and reload the engine; otherwise the
     # import is acknowledged (the built-in catalog is file-managed, not persisted here).
     if req.yaml:
-        import yaml as _yaml
-
         from app.policy_as_code import reload_engine
-        from app.policy_as_code.engine import load_policy
+        from app.policy_as_code.engine import load_policy, parse_policy_yaml
         try:
-            doc = _yaml.safe_load(req.yaml)
+            # size-capped, alias-free parse: bounds body size and blocks the
+            # billion-laughs anchor/alias expansion before it hits the evaluator
+            doc = parse_policy_yaml(req.yaml)
             pol = load_policy(doc, source=req.name or "import")
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=400, detail=f"invalid policy: {e}") from e
@@ -1141,9 +1142,10 @@ def delete_evidence_document(doc_id: str, db: Session = Depends(get_db),
                              p: Principal = Depends(require_principal)) -> dict:
     from app.models import EvidenceDocument
     doc = db.get(EvidenceDocument, doc_id)
-    if not doc:
+    # Return 404 for both "missing" and "not yours" so the response can't be used
+    # as a cross-tenant existence oracle for document ids.
+    if not doc or not p.can_access(doc.tenant_id):
         raise HTTPException(status_code=404, detail="document not found")
-    authorize_tenant(p, doc.tenant_id)  # prevent cross-tenant deletion
     _EvidenceService(db).delete_document(doc_id, doc.tenant_id)
     return {"deleted": doc_id}
 

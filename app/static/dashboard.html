@@ -1581,8 +1581,11 @@ DETAIL.kev=function(k){
     actions:`<button class="btn sm primary" onclick="createTicket('${esc(k.cve)}','high','Remediate '+'${esc(k.cve)}')">Create remediation</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.policies=function(p){
+  // esc() the free-text fields BEFORE they enter the code block — this string is
+  // injected via innerHTML (with keyword-highlight replacements), so an unescaped
+  // policy title/version like `<img src=x onerror=...>` would be stored XSS.
   const code=`package complens.${(p.id||"policy").toLowerCase().replace(/[^a-z0-9]+/g,"_")}\n\n`+
-    `# ${p.title} (v${p.version})\ndefault allow := false\n\nallow if {\n    input.resource.${(p.id||"x").toLowerCase().includes("encrypt")?"encryption.enabled":"setting.enforced"} == true\n    input.evidence.signed == true\n}`;
+    `# ${esc(p.title)} (v${esc(p.version)})\ndefault allow := false\n\nallow if {\n    input.resource.${(p.id||"x").toLowerCase().includes("encrypt")?"encryption.enabled":"setting.enforced"} == true\n    input.evidence.signed == true\n}`;
   openDrawer({eyebrow:"policy · "+p.id,title:esc(p.title),sub:"Maps to "+esc(p.id)+" · v"+esc(p.version),
     badges:statusChip(p.status)+`<span class="chip c-out">${esc(p.lang)}</span>`,
     body:
