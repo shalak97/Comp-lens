@@ -125,6 +125,42 @@ class PolicyValidationError(Exception):
     pass
 
 
+_MAX_POLICY_YAML_BYTES = 256 * 1024  # 256 KB — policies are small; bounds a memory-bomb body
+
+
+class _NoAliasSafeLoader(yaml.SafeLoader):
+    """SafeLoader that refuses YAML aliases. Anchors alone are harmless, but an
+    alias that references an anchor repeatedly (and aliases-of-aliases) is the
+    'billion laughs' expansion — a few KB that safe_load blows up into GBs. Real
+    policies never need aliases, so we reject them outright."""
+
+    def compose_node(self, parent, index):
+        if self.check_event(yaml.events.AliasEvent):
+            event = self.get_event()
+            raise PolicyValidationError(
+                f"YAML aliases are not allowed in policies (anchor {event.anchor!r})")
+        return super().compose_node(parent, index)
+
+
+def parse_policy_yaml(text: str) -> dict[str, Any]:
+    """Size-capped, alias-free YAML parse for untrusted policy documents.
+
+    Guards POST /policies/import against oversized bodies and anchor/alias
+    expansion DoS before the document ever reaches load_policy / the evaluator.
+    """
+    if not isinstance(text, str):
+        raise PolicyValidationError("policy YAML must be a string")
+    if len(text.encode("utf-8")) > _MAX_POLICY_YAML_BYTES:
+        raise PolicyValidationError("policy YAML exceeds the 256 KB limit")
+    try:
+        doc = yaml.load(text, Loader=_NoAliasSafeLoader)
+    except yaml.YAMLError as exc:
+        raise PolicyValidationError(f"invalid policy YAML: {exc}") from exc
+    if not isinstance(doc, dict):
+        raise PolicyValidationError("policy YAML must be a mapping")
+    return doc
+
+
 def load_policy(data: dict[str, Any], source: str = "") -> Policy:
     if "control" not in data:
         raise PolicyValidationError(f"policy missing 'control' ({source})")
