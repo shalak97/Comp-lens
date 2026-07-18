@@ -744,7 +744,11 @@ def enforcement_decisions(limit: int = Query(100, ge=1, le=1000),
 
 @app.post("/enforcement/systems/{host}/mode", tags=["enforcement"])
 def enforcement_set_mode(host: str, body: dict,
-                         _: Principal = Depends(require_principal)) -> dict:
+                         p: Principal = Depends(require_principal)) -> dict:
+    # Flipping a system between shadow/enforce rewrites the shared policy bundle —
+    # a fleet-wide privileged action, so require an admin (all-tenant) key.
+    if not p.is_admin:
+        raise HTTPException(status_code=403, detail="enforcement mode changes require an admin key")
     from app.services import enforcement as _enf
     try:
         return _enf.set_mode(host, (body or {}).get("mode"))

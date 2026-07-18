@@ -23,6 +23,7 @@ Each layer fails closed: when in doubt, demo. Decisions are explained via
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from typing import Any
@@ -51,16 +52,18 @@ def apply_ssh_host_key_policy(client) -> None:
     REJECTS unknown hosts (MITM protection) unless SSH_TRUST_UNKNOWN_HOSTS=true
     is set to explicitly opt back into the old auto-accept behaviour."""
     import paramiko
-    for load in (client.load_system_host_keys, client.load_host_keys):
-        try:
-            if load is client.load_host_keys:
-                path = os.path.expanduser("~/.ssh/known_hosts")
-                if os.path.exists(path):
-                    load(path)
-            else:
-                load()
-        except Exception:  # noqa: BLE001 — missing known_hosts is fine
-            pass
+    # Load the system host keys and the user's ~/.ssh/known_hosts (if present).
+    # These two paramiko calls have different signatures — load_system_host_keys()
+    # takes no arg, load_host_keys() requires a path — so they can't be looped over
+    # uniformly. (A prior `load is client.load_host_keys` identity check compared
+    # against a freshly-bound method and was always False, so user known_hosts were
+    # never actually loaded.)
+    with contextlib.suppress(Exception):  # missing system store is fine
+        client.load_system_host_keys()
+    user_known_hosts = os.path.expanduser("~/.ssh/known_hosts")
+    if os.path.exists(user_known_hosts):
+        with contextlib.suppress(Exception):  # unreadable/malformed known_hosts is fine
+            client.load_host_keys(user_known_hosts)
     if os.getenv(SSH_TRUST_UNKNOWN_ENV, "false").strip().lower() == "true":
         logger.warning("SSH host-key verification disabled (%s=true) — MITM risk.",
                        SSH_TRUST_UNKNOWN_ENV)
