@@ -20,7 +20,13 @@ class Settings(BaseSettings):
     app_env: str = Field(default="local")  # local | staging | production
     log_level: str = Field(default="INFO")
     request_timeout_seconds: int = Field(default=15)
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    # Secure by default: no cross-origin access. The bundled dashboard is
+    # same-origin and needs none; set an explicit allowlist for real integrators.
+    cors_origins: list[str] = Field(default_factory=list)
+    # Interactive API docs (/docs, /redoc, /openapi.json) are served outside
+    # production; set true to expose them in production too (discloses the full
+    # API surface, so keep it off unless you mean it).
+    expose_api_docs: bool = Field(default=False)
 
     # Production hardening
     rate_limit_per_minute: int = Field(default=120)

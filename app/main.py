@@ -114,7 +114,13 @@ async def lifespan(app: FastAPI):
     stop_background_runner()
 
 
-app = FastAPI(title=settings.app_name, version="1.2.0", lifespan=lifespan)
+# Interactive docs / OpenAPI schema are disabled in production (unless explicitly
+# exposed) so the full API surface isn't disclosed to anonymous callers.
+_docs_on = (not settings.is_production) or getattr(settings, "expose_api_docs", False)
+app = FastAPI(title=settings.app_name, version="1.2.0", lifespan=lifespan,
+              docs_url="/docs" if _docs_on else None,
+              redoc_url="/redoc" if _docs_on else None,
+              openapi_url="/openapi.json" if _docs_on else None)
 
 # ── production hardening stack (outermost first) ──
 
