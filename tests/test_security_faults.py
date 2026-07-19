@@ -48,7 +48,9 @@ def test_policies_import_rejects_yaml_bomb():
     with TestClient(app) as c:
         r = c.post("/policies/import", json={"yaml": bomb})
         assert r.status_code == 400
-        assert "alias" in r.json()["detail"].lower()
+        # error envelope differs (FastAPI 'detail' vs the app's {"error": {...}}),
+        # so just assert the alias rejection surfaced somewhere in the body
+        assert "alias" in r.text.lower()
 
 
 # ── rate-limit client-ip resolution ──
