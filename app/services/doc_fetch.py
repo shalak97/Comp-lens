@@ -54,6 +54,26 @@ def _assert_safe(url: str) -> None:
             raise FetchError("Refusing to fetch an internal/private address.")
 
 
+def _connected_peer_ip(resp) -> str | None:
+    """The IP the socket actually connected to — best effort.
+
+    _assert_safe validates the host's DNS *before* the request, but requests
+    resolves again for the real connection, so a rebinding DNS server could
+    return a public IP to the check and a private one to the fetch. Re-checking
+    the live socket's peer closes that TOCTOU. Returns None if the socket can't
+    be introspected on this urllib3 version — in which case the caller simply
+    keeps the pre-flight guarantee (no regression, never a false block)."""
+    try:
+        raw = getattr(resp, "raw", None)
+        conn = getattr(raw, "_connection", None) or getattr(raw, "connection", None)
+        sock = getattr(conn, "sock", None)
+        if sock is None:
+            return None
+        return sock.getpeername()[0]
+    except Exception:  # noqa: BLE001 — introspection is best-effort
+        return None
+
+
 class _TextExtractor(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -103,6 +123,12 @@ def fetch_url_text(url: str) -> tuple[str, str]:
         _assert_safe(current)
         resp = session.get(current, timeout=TIMEOUT, stream=True,
                            allow_redirects=False, headers={"User-Agent": _UA})
+        # defend against DNS rebinding between the pre-flight resolve and this
+        # connection: re-check the IP the socket actually landed on
+        peer = _connected_peer_ip(resp)
+        if peer and _is_blocked_ip(peer):
+            resp.close()
+            raise FetchError("Refusing to fetch an internal/private address.")
         if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
             loc = resp.headers.get("Location")
             resp.close()
