@@ -213,7 +213,7 @@ class GRCPlatformConnector(abc.ABC):
             # relationship, lower only when the edge is explicitly narrower).
             conf = mapping.confidence
             return (mapping.control_id, conf,
-                    f"{mapping.quality}/{mapping.relationship.value} match via {fw}: "
+                    f"{mapping.quality} match via {fw} [{mapping.relationship.value}]: "
                     f"{control_ref}→{mapping.control_id} ({mapping.note})")
         fws = ", ".join(p.speaks_frameworks) or "none declared"
         return None, 0.4, f"unmapped: no crosswalk entry for {control_ref} (frameworks: {fws})"
