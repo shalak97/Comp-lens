@@ -284,6 +284,45 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 .dialog-b{padding:18px}
 .dialog-f{padding:13px 18px;border-top:1px solid var(--etch);display:flex;gap:9px;justify-content:flex-end}
 
+/* ---- sync progress dialog (GRC platforms) ---- */
+.syncdlg{width:470px}
+.syncsteps{list-style:none;display:flex;flex-direction:column;gap:1px}
+.syncstep{display:flex;align-items:center;gap:11px;padding:7px 0;font-size:12.5px;color:var(--faint);transition:color .2s}
+.syncstep .d{flex:none;width:15px;height:15px;border-radius:50%;border:1.5px solid var(--rule2);display:flex;align-items:center;
+  justify-content:center;font-size:9px;line-height:1;font-weight:700;transition:border-color .2s,background .2s,color .2s}
+.syncstep[data-s="active"]{color:var(--ink)}
+.syncstep[data-s="active"] .d{border-color:var(--focus);border-right-color:transparent;animation:syncspin .7s linear infinite}
+.syncstep[data-s="done"]{color:var(--body)}
+.syncstep[data-s="done"] .d{border-color:var(--pass);background:var(--pass-soft);color:var(--pass)}
+.syncstep[data-s="done"] .d:after{content:"\2713"}
+.syncstep[data-s="fail"]{color:var(--fail)}
+.syncstep[data-s="fail"] .d{border-color:var(--fail);background:var(--fail-soft);color:var(--fail)}
+.syncstep[data-s="fail"] .d:after{content:"\2715"}
+.syncstep[data-s="skip"]{color:var(--faint);opacity:.55}
+.syncstep[data-s="skip"] .d{border-style:dashed}
+@keyframes syncspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.syncstep[data-s="active"] .d{animation:none;border-right-color:var(--focus);opacity:.5}}
+.syncpanel{margin-top:14px;border-radius:var(--rad);padding:12px 13px;font-size:12.5px;line-height:1.55;border:1px solid}
+.syncpanel h4{font-family:var(--sans);font-size:12.5px;font-weight:600;margin-bottom:4px}
+.syncpanel p{margin-bottom:7px}
+.syncpanel p:last-child{margin-bottom:0}
+.syncpanel.fail{border-color:var(--fail);background:var(--fail-soft);color:var(--ink)}
+.syncpanel.fail h4{color:var(--fail)}
+.syncpanel.ok{border-color:var(--pass);background:var(--pass-soft);color:var(--ink)}
+.syncpanel.ok h4{color:var(--pass)}
+.syncpanel code{font-family:var(--mono);font-size:11px;background:var(--field);border:1px solid var(--rule);
+  border-radius:var(--rad2);padding:1px 5px;white-space:nowrap}
+.syncfix{margin:5px 0 0;padding-left:17px}
+.syncfix li{margin:3px 0}
+.syncraw{margin-top:10px;border-top:1px solid var(--rule);padding-top:8px}
+.syncraw summary{cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--steel);list-style:none;outline:none}
+.syncraw summary::-webkit-details-marker{display:none}
+.syncraw summary:before{content:"\25B8 ";display:inline-block;transition:transform .15s}
+.syncraw[open] summary:before{transform:rotate(90deg)}
+.syncraw pre{margin-top:8px;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--steel);
+  white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto}
+
 #cmd{position:fixed;inset:0;z-index:90;display:none;align-items:flex-start;justify-content:center;padding-top:13vh;background:rgba(19,24,29,.4)}
 [data-theme="dark"] #cmd{background:rgba(0,0,0,.55)}
 #cmd.on{display:flex}
@@ -418,6 +457,7 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
 </div>
 <div id="consent" class="consent" role="dialog" aria-label="Privacy choices" aria-live="polite"></div>
 <div class="scrim" id="settings"></div>
+<div class="scrim" id="scrim2" style="z-index:88"></div>
 <div class="dscrim" id="dscrim" onclick="closeDrawer()"></div>
 <div class="drawer" id="drawer"></div>
 <div id="cmd"></div>
@@ -599,7 +639,17 @@ async function api(path,opts){
   const headers={"Content-Type":"application/json"};
   if(CFG.key)headers["X-API-Key"]=CFG.key;
   const r=await fetch(url,{...opts,headers});
-  if(!r.ok)throw new Error("HTTP "+r.status);
+  if(!r.ok){
+    /* keep the server's own explanation — it is usually the actionable part
+       (e.g. "VANTA: not configured — set VANTA_CLIENT_ID ..."). Callers that
+       only match /HTTP (\d+)/ keep working; richer callers read .status/.body. */
+    const text=await r.text().catch(()=>"");
+    let body=null; try{ body=JSON.parse(text); }catch(e){}
+    const detail=(body&&body.error&&body.error.message)||(body&&(body.message||body.detail))||"";
+    const err=new Error(detail?("HTTP "+r.status+": "+detail):("HTTP "+r.status));
+    err.status=r.status; err.body=body; err.text=text; err.endpoint=url;
+    throw err;
+  }
   return r.json();
 }
 const apiGET=p=>api(p);
@@ -1619,7 +1669,7 @@ function graphNodeDetail(model,n){
 }
 function openFindingByControl(cid,i){const f=relFindings(cid)[i];if(f){closeDrawer();setTimeout(()=>DETAIL.findings(f),120);}}
 function openAuditDetail(i){const a=(CACHE.audits||[])[i];if(a)DETAIL.audits(a);}
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#drawer").classList.contains("on"))closeDrawer();});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#scrim2")&&$("#scrim2").classList.contains("on")){syncClose();return;}if($("#drawer").classList.contains("on"))closeDrawer();});
 </script>
 <script>
 /* ===================== ENFORCEMENT (shadow-first PEP/PDP) ===================== */
@@ -2295,12 +2345,110 @@ function grcPlatTable(plats){
       <td class="right"><button class="btn sm" onclick="event.stopPropagation();syncGrcPlatform('${esc(p.key)}','${esc(p.name)}')">Sync now</button></td></tr>`).join("")}</tbody>
   </table></div></div></div>`;
 }
-async function syncGrcPlatform(key,name){
-  if(STATE.demo){toast("Synced "+name+" (demo)","pass");return;}
-  try{const r=await apiPOST(withTenant("/v1/grc-sync/"+encodeURIComponent(key)),{});
-    toast(name+": "+r.ingested+" attestations ingested ("+r.mapped+" mapped)","pass");render();}
-  catch(e){toast(name+": "+(e.message||e),"warn");}
+/* ---------- Sync now: connecting dialog with per-step progress ----------
+   Replaces the old one-line toast. The server's connectors fail closed
+   without credentials, so "why it is not connected" is the important
+   half of this interaction, not the status code. */
+const SYNC_STEPS=["Resolving sync endpoint","Checking server credentials","Authenticating with {name}","Pulling attestations","Mapping to controls"];
+
+function syncClassify(e,name){
+  const st=e&&e.status, msg=(e&&e.message)||"";
+  if(!st&&/Failed to fetch|NetworkError|abort/i.test(msg))
+    return{step:0,title:"Could not reach Comp-Lens",why:`The browser never got a response${CFG.base?` from ${esc(hostOf(CFG.base))}`:""}, so the sync never started.`,
+      fix:["Check the API is running — a sleeping instance can take up to 30s to wake.","Retry in a few seconds."]};
+  if(st===404)
+    return{step:0,title:"Sync endpoint not found",why:"The server has no sync route for this platform, so nothing was attempted.",
+      fix:[`Confirm ${name} is registered in the GRC platform registry on the server.`]};
+  if(st===400&&/not configured|credential|api[_ ]?key|client_id|client_secret/i.test(msg)){
+    const vars=[...new Set(msg.match(/[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+/g)||[])];
+    return{step:1,title:`${name} is not connected yet`,
+      why:`This connector is read-only and credential-gated — it fails closed until its API credentials exist on the server. Nothing was sent to ${name}.`,
+      vars,fix:vars.length?[`Set ${vars.join(" and ")} in the server environment.`,"Redeploy or restart the API so it picks the values up."]
+                          :[`Add ${name}'s API credentials to the server environment, then restart the API.`]};
+  }
+  if(st===400||st===422)
+    return{step:1,title:"The server rejected the sync request",why:msg.replace(/^HTTP \d+:\s*/,"")||"The request was malformed or missing a required field.",
+      fix:["Check the tenant id being sent with the request."]};
+  if(st===401||st===403)
+    return{step:2,title:`${name} rejected the credentials`,
+      why:`Credentials are present on the server, but ${name} refused them — expired, revoked, or scoped too narrowly.`,
+      fix:[`Reissue the API credentials in ${name} and update the server environment.`,"Confirm the token has read scope for attestations."]};
+  if(st===429)
+    return{step:2,title:`${name} rate-limited the request`,why:"Too many sync attempts in a short window.",fix:["Wait a minute, then sync again."]};
+  if(st>=500)
+    return{step:3,title:"The sync failed part-way through",why:msg.replace(/^HTTP \d+:\s*/,"")||"The server errored while pulling attestations. No evidence was written.",
+      fix:["Retry once.","If it repeats, check the API logs using the request id below."]};
+  return{step:1,title:"Sync did not complete",why:msg||"The server responded with an unexpected result.",
+    fix:["Retry, then check the API logs using the request id below."]};
 }
+
+function syncRaw(endpoint,e){
+  const b=e&&e.body, rid=(b&&b.error&&b.error.request_id)||(b&&b.request_id)||"—";
+  const resp=e?((e.text||e.message||"").slice(0,1200)):"—";
+  return `<details class="syncraw"><summary>Technical detail</summary><pre>POST ${esc(endpoint)}
+status     ${e&&e.status?e.status:"no response"}
+request_id ${esc(rid)}
+response   ${esc(resp)}</pre></details>`;
+}
+
+async function syncGrcPlatform(key,name){
+  const steps=SYNC_STEPS.map(s=>s.replace("{name}",name));
+  const path=withTenant("/v1/grc-sync/"+encodeURIComponent(key));
+  const endpoint=CFG.base.replace(/\/$/,"")+path;
+  const sc=$("#scrim2");
+  sc.innerHTML=`<div class="dialog syncdlg" role="dialog" aria-modal="true" aria-label="Syncing ${esc(name)}">
+    <div class="dialog-h"><h3 id="sync-t">Connecting to ${esc(name)}…</h3><span class="x" onclick="syncClose()">✕</span></div>
+    <div class="dialog-b">
+      <div class="sub" id="sync-s" style="font-size:12.5px;color:var(--steel);margin-bottom:14px">Read-only attestation sync. Nothing is written back to ${esc(name)}.</div>
+      <ul class="syncsteps" id="sync-l">${steps.map(s=>`<li class="syncstep" data-s="idle"><span class="d"></span><span>${esc(s)}</span></li>`).join("")}</ul>
+      <div id="sync-p"></div>
+    </div>
+    <div class="dialog-f" id="sync-f"><button class="btn sm ghost" onclick="syncClose()">Cancel</button></div>
+  </div>`;
+  sc.classList.add("on");
+
+  const nodes=[...sc.querySelectorAll(".syncstep")];
+  const set=(i,s)=>{ if(nodes[i])nodes[i].setAttribute("data-s",s); };
+  let cur=-1,timers=[],settled=false;
+  const tick=()=>{ if(settled)return; if(cur>=0)set(cur,"done"); cur=Math.min(cur+1,nodes.length-1);
+    set(cur,"active"); if(cur<nodes.length-1)timers.push(setTimeout(tick,470+Math.random()*250)); };
+  tick();
+  const stop=()=>{ timers.forEach(clearTimeout); timers=[]; };
+  const started=Date.now();
+  const dwell=fn=>setTimeout(fn,Math.max(0,900-(Date.now()-started)));
+
+  const finish=(retry)=>{ $("#sync-f").innerHTML=(retry?`<button class="btn sm ghost" onclick="syncClose();syncGrcPlatform('${esc(key)}','${esc(name)}')">Try again</button>`:"")
+    +`<button class="btn sm primary" onclick="syncClose()">Close</button>`; };
+
+  const fail=(e)=>{ settled=true; stop();
+    const info=syncClassify(e,name);
+    nodes.forEach((_,i)=>set(i,i<info.step?"done":i===info.step?"fail":"skip"));
+    $("#sync-t").textContent="Not connected";
+    $("#sync-s").textContent=`The sync stopped at “${steps[info.step]}”.`;
+    $("#sync-p").innerHTML=`<div class="syncpanel fail"><h4>${esc(info.title)}</h4><p>${esc(info.why)}</p>`
+      +(info.vars&&info.vars.length?`<p>Missing on the server: ${info.vars.map(v=>`<code>${esc(v)}</code>`).join(" ")}</p>`:"")
+      +(info.fix&&info.fix.length?`<ul class="syncfix">${info.fix.map(f=>`<li>${esc(f)}</li>`).join("")}</ul>`:"")
+      +syncRaw(endpoint,e)+`</div>`;
+    finish(true); };
+
+  const ok=(r)=>{ settled=true; stop(); nodes.forEach((_,i)=>set(i,"done"));
+    $("#sync-t").textContent="Connected";
+    $("#sync-s").textContent=`${name} attestations are in. They are stored separately from native connector evidence.`;
+    $("#sync-p").innerHTML=`<div class="syncpanel ok"><h4>Sync complete</h4><p>${r.ingested||0} attestations ingested, ${r.mapped||0} mapped to controls.</p></div>`;
+    finish(false); render(); };
+
+  if(STATE.demo){
+    dwell(()=>{ settled=true; stop(); nodes.forEach((_,i)=>set(i,"done"));
+      $("#sync-t").textContent="Synced (demo)";
+      $("#sync-s").textContent="Sample dataset — no request was sent to "+name+".";
+      $("#sync-p").innerHTML=`<div class="syncpanel ok"><h4>Demo data</h4><p>This is a simulated result from the sample dataset. Your live environment was not contacted.</p></div>`;
+      finish(false); });
+    return;
+  }
+  try{ const r=await apiPOST(path,{}); dwell(()=>ok(r)); }
+  catch(e){ if(!settled)dwell(()=>fail(e)); }
+}
+function syncClose(){ const sc=$("#scrim2"); sc.classList.remove("on"); sc.innerHTML=""; }
 
 /* ---------- KNOWLEDGE / TRUST GRAPH (2D + 3D) ---------- */
 let GMODE="2d";
