@@ -1,0 +1,470 @@
+/*!
+ * grc-sync-modal.js — Comp-Lens
+ * Replaces the bare "HTTP 400" alert on GRC platform "Sync now" with a
+ * connecting window that shows the steps, and, when it fails, says why.
+ *
+ * Drop in:
+ *   <script src="/static/grc-sync-modal.js"></script>
+ *   GrcSync.attach();                      // wires every [data-grc-sync] button
+ *   // or call it directly:
+ *   GrcSync.open({ platform: 'VANTA', label: 'Vanta', tenantId: 'default' });
+ *
+ * Markup it looks for with attach():
+ *   <button data-grc-sync="VANTA" data-grc-label="Vanta">Sync now</button>
+ *
+ * No dependencies. Injects its own CSS once. Safe to load on every page.
+ */
+(function (global) {
+  'use strict';
+
+  var STYLE_ID = 'grc-sync-modal-style';
+
+  var CSS = [
+    '.gsm-backdrop{position:fixed;inset:0;background:rgba(5,8,12,.72);backdrop-filter:blur(2px);',
+    'display:flex;align-items:center;justify-content:center;z-index:9999;padding:24px;',
+    'font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;',
+    'opacity:0;transition:opacity .14s ease}',
+    '.gsm-backdrop.gsm-in{opacity:1}',
+
+    '.gsm-card{width:100%;max-width:520px;background:#0f141b;border:1px solid #1e2733;border-radius:10px;',
+    'box-shadow:0 24px 64px rgba(0,0,0,.55);color:#c9d4e0;overflow:hidden;',
+    'transform:translateY(6px);transition:transform .14s ease}',
+    '.gsm-backdrop.gsm-in .gsm-card{transform:none}',
+
+    '.gsm-head{padding:18px 20px 14px;border-bottom:1px solid #1a2230}',
+    '.gsm-eyebrow{font:600 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;',
+    'text-transform:uppercase;color:#5d6b7d;margin:0 0 8px}',
+    '.gsm-title{margin:0;font-size:17px;font-weight:600;color:#e6edf5;letter-spacing:-.01em}',
+    '.gsm-sub{margin:5px 0 0;font-size:13px;color:#7d8b9c;line-height:1.45}',
+
+    '.gsm-body{padding:16px 20px}',
+
+    '.gsm-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}',
+    '.gsm-step{display:flex;align-items:center;gap:11px;padding:7px 0;font-size:13.5px;color:#5f6d7e;',
+    'transition:color .2s ease}',
+    '.gsm-step .gsm-dot{flex:none;width:16px;height:16px;border-radius:50%;border:1.5px solid #2b3646;',
+    'display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;',
+    'transition:border-color .2s ease,background .2s ease}',
+    '.gsm-step[data-state="active"]{color:#dbe6f2}',
+    '.gsm-step[data-state="active"] .gsm-dot{border-color:#3b82f6;border-right-color:transparent;',
+    'animation:gsm-spin .7s linear infinite}',
+    '.gsm-step[data-state="done"]{color:#9fb0c2}',
+    '.gsm-step[data-state="done"] .gsm-dot{border-color:#1f7a4d;background:#12331f;color:#4ade80}',
+    '.gsm-step[data-state="fail"]{color:#f7b0a8}',
+    '.gsm-step[data-state="fail"] .gsm-dot{border-color:#7f2b25;background:#3a1512;color:#fca5a5}',
+    '.gsm-step[data-state="skip"]{color:#3c4655}',
+    '.gsm-step[data-state="skip"] .gsm-dot{border-style:dashed;border-color:#252f3d}',
+    '@keyframes gsm-spin{to{transform:rotate(360deg)}}',
+    '@media (prefers-reduced-motion:reduce){.gsm-step[data-state="active"] .gsm-dot{animation:none;border-right-color:#3b82f6;opacity:.5}}',
+
+    '.gsm-panel{margin-top:14px;border-radius:8px;padding:13px 14px;font-size:13px;line-height:1.5;border:1px solid}',
+    '.gsm-panel-fail{background:#1e0f0e;border-color:#4a1f1a;color:#f0b7b0}',
+    '.gsm-panel-ok{background:#0d1e15;border-color:#1c4732;color:#9be3bd}',
+    '.gsm-panel h4{margin:0 0 5px;font-size:13.5px;font-weight:600;color:#fff}',
+    '.gsm-panel-ok h4{color:#c6f6dd}',
+    '.gsm-panel p{margin:0 0 8px}',
+    '.gsm-panel p:last-child{margin-bottom:0}',
+    '.gsm-panel code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(255,255,255,.07);',
+    'padding:1px 5px;border-radius:4px;color:#fff;white-space:nowrap}',
+    '.gsm-fixlist{margin:6px 0 0;padding-left:18px}',
+    '.gsm-fixlist li{margin:3px 0}',
+
+    '.gsm-raw{margin-top:11px;border-top:1px solid rgba(255,255,255,.08);padding-top:9px}',
+    '.gsm-raw summary{cursor:pointer;font:600 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;',
+    'letter-spacing:.12em;text-transform:uppercase;color:#8a97a8;list-style:none;outline:none}',
+    '.gsm-raw summary::-webkit-details-marker{display:none}',
+    '.gsm-raw summary:before{content:"\\25B8 ";display:inline-block;transition:transform .15s ease}',
+    '.gsm-raw[open] summary:before{transform:rotate(90deg)}',
+    '.gsm-raw pre{margin:9px 0 0;font:11.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;',
+    'color:#93a2b4;white-space:pre-wrap;word-break:break-word;max-height:190px;overflow:auto}',
+
+    '.gsm-foot{display:flex;align-items:center;gap:10px;padding:13px 20px;border-top:1px solid #1a2230;',
+    'background:#0c1118}',
+    '.gsm-foot .gsm-spacer{flex:1}',
+    '.gsm-btn{font:inherit;font-size:13px;font-weight:500;padding:7px 15px;border-radius:6px;cursor:pointer;',
+    'border:1px solid transparent;transition:background .12s ease,border-color .12s ease}',
+    '.gsm-btn-primary{background:#2563eb;color:#fff}',
+    '.gsm-btn-primary:hover{background:#1d4ed8}',
+    '.gsm-btn-ghost{background:transparent;color:#8b98a9;border-color:#232d3b}',
+    '.gsm-btn-ghost:hover{color:#cbd6e2;border-color:#33404f}',
+    '.gsm-btn:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}'
+  ].join('');
+
+  function injectStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    var s = document.createElement('style');
+    s.id = STYLE_ID;
+    s.textContent = CSS;
+    document.head.appendChild(s);
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  var DEFAULT_STEPS = [
+    'Resolving sync endpoint',
+    'Checking server credentials',
+    'Authenticating with {label}',
+    'Pulling attestations',
+    'Mapping to controls'
+  ];
+
+  // ---------------------------------------------------------------------------
+  // Failure classification: turn an HTTP response into a step index + plain
+  // English "why it is not connected".
+  // ---------------------------------------------------------------------------
+  function classify(ctx) {
+    var status = ctx.status;
+    var body = ctx.body || {};
+    var err = (body && body.error) || {};
+    var msg = err.message || body.message || body.detail || ctx.text || '';
+    var label = ctx.label;
+
+    // No response at all.
+    if (ctx.networkError) {
+      return {
+        step: 0,
+        title: 'Could not reach Comp-Lens',
+        why: 'The browser never got a response from the server, so the sync never started.',
+        fix: [
+          'Check that the API service is running and not asleep (Render free instances spin down).',
+          'Retry in a few seconds — a cold start can take up to 30s.'
+        ]
+      };
+    }
+
+    if (status === 404) {
+      return {
+        step: 0,
+        title: 'Sync endpoint not found',
+        why: 'The server has no route for this platform, so nothing was attempted.',
+        fix: ['Confirm the connector is registered on the server for ' + label + '.']
+      };
+    }
+
+    // The credential-gated "fails closed" case — this is the HTTP 400 you saw.
+    if (status === 400 && /not configured|credential|api key|client_id|client_secret/i.test(msg)) {
+      var vars = (msg.match(/[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+/g) || []);
+      var uniq = vars.filter(function (v, i) { return vars.indexOf(v) === i; });
+      return {
+        step: 1,
+        title: label + ' is not connected yet',
+        why: 'This connector is read-only and credential-gated — it fails closed until its API '
+           + 'credentials exist on the server. Nothing was sent to ' + label + '.',
+        vars: uniq,
+        fix: uniq.length
+          ? ['Set ' + uniq.join(' and ') + ' in the server environment.', 'Restart the API service so it picks the values up.']
+          : ['Add this platform’s API credentials to the server environment, then restart the API service.']
+      };
+    }
+
+    if (status === 400 || status === 422) {
+      return {
+        step: 1,
+        title: 'The server rejected the sync request',
+        why: msg || 'The request was malformed or missing a required field.',
+        fix: ['Check the tenant id being sent with the request.']
+      };
+    }
+
+    if (status === 401 || status === 403) {
+      return {
+        step: 2,
+        title: label + ' rejected the credentials',
+        why: 'Credentials are present on the server, but ' + label + ' refused them — expired, revoked, or scoped too narrowly.',
+        fix: [
+          'Reissue the API credentials in ' + label + ' and update the server environment.',
+          'Confirm the token has read scope for attestations.'
+        ]
+      };
+    }
+
+    if (status === 429) {
+      return {
+        step: 2,
+        title: label + ' rate-limited the request',
+        why: 'Too many sync attempts in a short window.',
+        fix: ['Wait a minute, then sync again.']
+      };
+    }
+
+    if (status >= 500) {
+      return {
+        step: 3,
+        title: 'The sync failed part-way through',
+        why: msg || 'The server errored while pulling attestations. No evidence was written.',
+        fix: ['Retry once.', 'If it repeats, check the API logs using the request id below.']
+      };
+    }
+
+    return {
+      step: 1,
+      title: 'Sync did not complete',
+      why: msg || ('The server responded with HTTP ' + status + '.'),
+      fix: ['Retry, then check the API logs using the request id below.']
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Modal
+  // ---------------------------------------------------------------------------
+  function open(opts) {
+    injectStyle();
+
+    opts = opts || {};
+    var platform = opts.platform || 'UNKNOWN';
+    var label = opts.label || platform.charAt(0) + platform.slice(1).toLowerCase();
+    var tenantId = opts.tenantId || 'default';
+    var endpoint = typeof opts.endpoint === 'function'
+      ? opts.endpoint(platform, tenantId)
+      : (opts.endpoint || '/v1/grc-sync/' + encodeURIComponent(platform)
+          + '?tenant_id=' + encodeURIComponent(tenantId));
+    var transport = opts.transport || defaultTransport;
+
+    var stepLabels = (opts.steps || DEFAULT_STEPS).map(function (s) {
+      return s.replace('{label}', label);
+    });
+
+    var backdrop = el('div', 'gsm-backdrop');
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-modal', 'true');
+    backdrop.setAttribute('aria-label', 'Syncing ' + label);
+
+    var card = el('div', 'gsm-card');
+    var head = el('div', 'gsm-head');
+    head.appendChild(el('p', 'gsm-eyebrow', 'GRC platform · ' + platform));
+    var title = el('h3', 'gsm-title', 'Connecting to ' + label + '…');
+    var sub = el('p', 'gsm-sub', 'Read-only attestation sync. Nothing is written back to ' + label + '.');
+    head.appendChild(title);
+    head.appendChild(sub);
+
+    var body = el('div', 'gsm-body');
+    var list = el('ul', 'gsm-steps');
+    var nodes = stepLabels.map(function (text) {
+      var li = el('li', 'gsm-step');
+      li.setAttribute('data-state', 'idle');
+      li.appendChild(el('span', 'gsm-dot'));
+      li.appendChild(el('span', null, text));
+      list.appendChild(li);
+      return li;
+    });
+    body.appendChild(list);
+
+    var foot = el('div', 'gsm-foot');
+    foot.appendChild(el('span', 'gsm-spacer'));
+    var cancelBtn = el('button', 'gsm-btn gsm-btn-ghost', 'Cancel');
+    foot.appendChild(cancelBtn);
+
+    card.appendChild(head);
+    card.appendChild(body);
+    card.appendChild(foot);
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+    requestAnimationFrame(function () { backdrop.classList.add('gsm-in'); });
+
+    var prevFocus = document.activeElement;
+    cancelBtn.focus();
+
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var settled = false;
+    var cursor = -1;
+    var timers = [];
+
+    function setState(i, state) {
+      if (nodes[i]) nodes[i].setAttribute('data-state', state);
+    }
+
+    function advance() {
+      if (settled) return;
+      if (cursor >= 0) setState(cursor, 'done');
+      cursor++;
+      if (cursor >= nodes.length - 1) { cursor = nodes.length - 1; }
+      setState(cursor, 'active');
+      if (cursor < nodes.length - 1) {
+        timers.push(setTimeout(advance, 480 + Math.random() * 260));
+      }
+    }
+    advance();
+
+    function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+    function close() {
+      clearTimers();
+      if (controller) { try { controller.abort(); } catch (e) {} }
+      backdrop.classList.remove('gsm-in');
+      setTimeout(function () {
+        if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        if (prevFocus && prevFocus.focus) prevFocus.focus();
+      }, 140);
+      document.removeEventListener('keydown', onKey);
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    }
+    document.addEventListener('keydown', onKey);
+    cancelBtn.addEventListener('click', close);
+    backdrop.addEventListener('mousedown', function (e) {
+      if (e.target === backdrop) close();
+    });
+
+    function finishFooter(retry) {
+      foot.innerHTML = '';
+      foot.appendChild(el('span', 'gsm-spacer'));
+      if (retry) {
+        var again = el('button', 'gsm-btn gsm-btn-ghost', 'Try again');
+        again.addEventListener('click', function () { close(); open(opts); });
+        foot.appendChild(again);
+      }
+      var done = el('button', 'gsm-btn gsm-btn-primary', 'Close');
+      done.addEventListener('click', close);
+      foot.appendChild(done);
+      done.focus();
+    }
+
+    function rawBlock(ctx) {
+      var d = el('details', 'gsm-raw');
+      var s = el('summary', null, 'Technical detail');
+      var pre = el('pre');
+      var reqId = (ctx.body && ctx.body.error && ctx.body.error.request_id)
+        || (ctx.body && ctx.body.request_id) || '—';
+      pre.textContent =
+        'POST ' + endpoint + '\n' +
+        'status     ' + (ctx.networkError ? 'no response' : ctx.status) + '\n' +
+        'request_id ' + reqId + '\n' +
+        'response   ' + (ctx.text ? ctx.text.slice(0, 1200) : String(ctx.errorText || '—'));
+      d.appendChild(s);
+      d.appendChild(pre);
+      return d;
+    }
+
+    function onFailure(ctx) {
+      settled = true;
+      clearTimers();
+      if (ctx.label == null) ctx.label = label;
+      var info = classify(ctx);
+
+      for (var i = 0; i < nodes.length; i++) {
+        if (i < info.step) setState(i, 'done');
+        else if (i === info.step) setState(i, 'fail');
+        else setState(i, 'skip');
+      }
+
+      title.textContent = 'Not connected';
+      sub.textContent = 'The sync stopped at “' + stepLabels[info.step] + '”.';
+
+      var p = el('div', 'gsm-panel gsm-panel-fail');
+      p.appendChild(el('h4', null, info.title));
+      p.appendChild(el('p', null, info.why));
+
+      if (info.vars && info.vars.length) {
+        var vp = el('p');
+        vp.innerHTML = 'Missing on the server: ' + info.vars.map(function (v) {
+          return '<code>' + esc(v) + '</code>';
+        }).join(' ');
+        p.appendChild(vp);
+      }
+
+      if (info.fix && info.fix.length) {
+        var ul = el('ul', 'gsm-fixlist');
+        info.fix.forEach(function (f) { ul.appendChild(el('li', null, f)); });
+        p.appendChild(ul);
+      }
+
+      p.appendChild(rawBlock(ctx));
+      body.appendChild(p);
+      finishFooter(true);
+
+      if (typeof opts.onError === 'function') opts.onError(ctx, info);
+    }
+
+    function onSuccess(ctx) {
+      settled = true;
+      clearTimers();
+      nodes.forEach(function (_, i) { setState(i, 'done'); });
+
+      var d = ctx.body || {};
+      var ingested = d.ingested != null ? d.ingested : (d.attestations_ingested != null ? d.attestations_ingested : null);
+      var mapped = d.mapped != null ? d.mapped : (d.mapped_to_controls != null ? d.mapped_to_controls : null);
+
+      title.textContent = 'Connected';
+      sub.textContent = label + ' attestations are in. They are stored separately from native connector evidence.';
+
+      var p = el('div', 'gsm-panel gsm-panel-ok');
+      p.appendChild(el('h4', null, 'Sync complete'));
+      p.appendChild(el('p', null,
+        (ingested != null ? ingested : '—') + ' attestations ingested'
+        + (mapped != null ? ', ' + mapped + ' mapped to controls' : '') + '.'));
+      p.appendChild(rawBlock(ctx));
+      body.appendChild(p);
+      finishFooter(false);
+
+      if (typeof opts.onSuccess === 'function') opts.onSuccess(d);
+    }
+
+    // Minimum dwell so the window never flashes past the reader.
+    var started = Date.now();
+    function settle(fn, ctx) {
+      var wait = Math.max(0, 900 - (Date.now() - started));
+      setTimeout(function () { if (!settled) fn(ctx); }, wait);
+    }
+
+    transport(endpoint, controller ? controller.signal : undefined)
+      .then(function (ctx) {
+        settle(ctx.ok ? onSuccess : onFailure, ctx);
+      })
+      .catch(function (e) {
+        if (e && e.name === 'AbortError') return;
+        settle(onFailure, { networkError: true, errorText: String(e && e.message || e) });
+      });
+
+    return { close: close };
+  }
+
+  function defaultTransport(url, signal) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      signal: signal
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var body = null;
+        try { body = JSON.parse(text); } catch (e) {}
+        return { ok: res.ok, status: res.status, text: text, body: body };
+      });
+    });
+  }
+
+  function attach(selector, defaults) {
+    var sel = selector || '[data-grc-sync]';
+    var nodes = document.querySelectorAll(sel);
+    Array.prototype.forEach.call(nodes, function (btn) {
+      if (btn.__gsmBound) return;
+      btn.__gsmBound = true;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var o = {};
+        for (var k in (defaults || {})) o[k] = defaults[k];
+        o.platform = btn.getAttribute('data-grc-sync') || o.platform;
+        o.label = btn.getAttribute('data-grc-label') || o.label;
+        o.tenantId = btn.getAttribute('data-grc-tenant') || o.tenantId;
+        open(o);
+      });
+    });
+    return nodes.length;
+  }
+
+  global.GrcSync = { open: open, attach: attach, classify: classify };
+})(window);
