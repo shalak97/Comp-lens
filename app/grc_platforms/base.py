@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from app.grc_platforms.crosswalk import QUALITY_CONFIDENCE, resolve_best
+from app.grc_platforms.crosswalk import resolve_best
 
 
 @dataclass
@@ -208,10 +208,13 @@ class GRCPlatformConnector(abc.ABC):
             return declared, 0.9, f"exact match: platform-declared mapping {control_ref}→{declared}"
         mapping, fw = resolve_best(control_ref, p.speaks_frameworks or None)
         if mapping:
-            conf = QUALITY_CONFIDENCE.get(mapping.quality, 0.5)
+            # Propagate the crosswalk's single first-class confidence (a strict
+            # generalisation of the old quality table — same value for the default
+            # relationship, lower only when the edge is explicitly narrower).
+            conf = mapping.confidence
             return (mapping.control_id, conf,
-                    f"{mapping.quality} match via {fw}: {control_ref}→{mapping.control_id}"
-                    f" ({mapping.note})")
+                    f"{mapping.quality} match via {fw} [{mapping.relationship.value}]: "
+                    f"{control_ref}→{mapping.control_id} ({mapping.note})")
         fws = ", ".join(p.speaks_frameworks) or "none declared"
         return None, 0.4, f"unmapped: no crosswalk entry for {control_ref} (frameworks: {fws})"
 
