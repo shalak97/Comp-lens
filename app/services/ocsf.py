@@ -162,6 +162,7 @@ class NormalizedEvidence:
     telemetry: dict[str, Any] = field(default_factory=dict)
     concepts: list[str] = field(default_factory=list)
     controls: list[dict[str, Any]] = field(default_factory=list)
+    findings: list[dict[str, Any]] = field(default_factory=list)
     provenance: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -170,7 +171,8 @@ class NormalizedEvidence:
             "observed_at": self.observed_at, "asset_id": self.asset_id,
             "asset_type": self.asset_type, "severity": self.severity,
             "telemetry": self.telemetry, "concepts": self.concepts,
-            "controls": self.controls, "provenance": self.provenance,
+            "controls": self.controls, "findings": self.findings,
+            "provenance": self.provenance,
         }
 
 

@@ -148,10 +148,13 @@ the internal normalized evidence — a flat telemetry dict, evidenced lexicon co
 control results lifted from OCSF Compliance Findings — and `to_ocsf_compliance_finding()`
 renders a Comp-Lens decision back as a standard OCSF Compliance Finding (class 2003). It
 is pure and covered by `tests/test_ocsf_adapter.py` (14 cases, incl. a round-trip and a
-live guard that every emittable concept exists in the lexicon). Still open: the rest of
-the vocabulary family — SARIF, CycloneDX/SPDX, in-toto/SLSA, Sigstore, STIX — and the
-`confidence` field still lacks a named identification-technique (the CycloneDX 1.7
-evidence-object primitive).
+live guard that every emittable concept exists in the lexicon). `app/services/sarif.py`
+adds the static-analysis half: `from_sarif()` maps CodeQL/Semgrep/GitHub-code-scanning
+findings to normalized evidence, `sarif_rollup()` produces the `critical_vulnerabilities`
+policy field (RA-5), and `to_sarif()` renders Comp-Lens control failures as a SARIF 2.1.0
+log uploadable to GitHub code scanning (`tests/test_sarif_adapter.py`, 11 cases). Still
+open: CycloneDX/SPDX, in-toto/SLSA, Sigstore, STIX — and the `confidence` field still
+lacks a named identification-technique (the CycloneDX 1.7 evidence-object primitive).
 
 ---
 
