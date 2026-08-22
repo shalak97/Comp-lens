@@ -89,12 +89,16 @@ source framework had to be inferred.
 - `app/services/crosswalk.py` — concept-lexicon equivalence join
 - `app/frameworks.py`, `app/data/frameworks/*.json` — framework catalogs
 
-**The gap.** Grading is not typing. There is no relationship *type* or direction
-(subset-of / intersects / equal), only a quality bucket — so a partial map in one
-direction is indistinguishable from a partial map in the other. And
-`app/services/crosswalk.py` treats two controls as equivalent whenever they share ≥1
-concept in the lexicon — an overlap-count join with no ground truth, the field's
-canonical failure mode. Framework JSON carries no version field.
+**The gap — partially closed.** `app/grc_platforms/crosswalk.py` now carries a typed,
+scored STRM edge: a NIST IR 8477 `RelationshipType` (equivalent / subset / superset /
+intersects / not-related) with a direction, plus a single first-class `confidence` that
+propagates downstream and a per-crosswalk source/revision (`CROSSWALK_META`,
+`SCHEMA_VERSION`). Confidence is a strict generalisation of the old quality table — every
+existing edge keeps its exact legacy value (regression-guarded in
+`tests/test_crosswalk_strm.py`). What remains: `app/services/crosswalk.py` still treats
+two controls as equivalent whenever they share ≥1 concept in the lexicon — an
+overlap-count join with no ground truth, the field's canonical failure mode — and the
+framework catalog JSON still carries no version field.
 
 ---
 
@@ -220,12 +224,14 @@ slots into an existing seam rather than a rewrite.
    `ControlAttestation` and `EvidenceMeta` bitemporal columns and stop the in-place
    `updated_at` overwrite. This alone unlocks "as-of" reconstruction and closes failure
    mode #3.
-2. **Promote crosswalk `quality` to a typed, scored STRM edge.** Carry a relationship type
-   and direction, not just a bucket — the same edge schema then generalises beyond
+2. **Promote crosswalk `quality` to a typed, scored STRM edge.** *(Done —
+   `app/grc_platforms/crosswalk.py`.)* Each edge carries a NIST IR 8477 relationship type
+   and direction plus a numeric strength; the same edge schema generalises beyond
    crosswalks to the whole graph.
-3. **Make one `confidence` field propagate end-to-end.** Confidence already exists at the
-   hit, the crosswalk, the draft and the trust lane — but as four local notions. Thread
-   one number from evidence → control → framework → compliance claim.
+3. **Make one `confidence` field propagate end-to-end.** *(Started — the crosswalk now
+   emits a single first-class `confidence`, consumed by the connector base.)* Confidence
+   also exists at the hit, the draft and the trust lane as local notions; thread the one
+   number the rest of the way, evidence → control → framework → compliance claim.
 4. **Pin the framework version on every assertion, and give controls resolvable URIs.**
    Closes failure mode #4 and replaces bare tenant-scoped control strings with stable
    identifiers — the identifier discipline the model calls "the whole ballgame."
