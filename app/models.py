@@ -122,6 +122,10 @@ class Posture(Base):
     last_finding_id: Mapped[str] = mapped_column(String(36))
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    # Freshness guarantee: the validation cadence and when this row goes stale.
+    # updated_at is the last-validated time; next_validation = updated_at + cadence.
+    cadence: Mapped[str] = mapped_column(String(32), default="monthly", server_default="monthly")
+    next_validation: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class EvidenceMeta(Base):
