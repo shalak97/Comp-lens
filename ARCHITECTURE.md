@@ -152,9 +152,25 @@ live guard that every emittable concept exists in the lexicon). `app/services/sa
 adds the static-analysis half: `from_sarif()` maps CodeQL/Semgrep/GitHub-code-scanning
 findings to normalized evidence, `sarif_rollup()` produces the `critical_vulnerabilities`
 policy field (RA-5), and `to_sarif()` renders Comp-Lens control failures as a SARIF 2.1.0
-log uploadable to GitHub code scanning (`tests/test_sarif_adapter.py`, 11 cases). Still
-open: CycloneDX/SPDX, in-toto/SLSA, Sigstore, STIX — and the `confidence` field still
-lacks a named identification-technique (the CycloneDX 1.7 evidence-object primitive).
+log uploadable to GitHub code scanning (`tests/test_sarif_adapter.py`, 11 cases).
+`app/services/cyclonedx.py` adds SBOM + VEX: `from_cyclonedx()` maps vulnerabilities to
+normalized evidence while honouring VEX (`not_affected` / `false_positive` are not counted
+as open findings), `sbom_summary()` produces the `critical_vulnerabilities` policy field,
+and — the headline — `to_cdx_evidence()` / `component_evidence()` implement the CycloneDX
+evidence object (**field + confidence + named identification technique**), so the bare
+`confidence` numbers (a crosswalk edge's included) can finally be expressed with a named
+technique. That closes the identification-technique gap this section used to flag.
+
+The rest of the vocabulary family now has boundary adapters too, all pure and tested:
+`app/services/spdx.py` (the other SBOM standard — inventory + security externalRefs),
+`app/services/intoto.py` (in-toto/SLSA build provenance, with a DSSE codec),
+`app/services/stix.py` (STIX 2.1 threat intel → `threat_intelligence` /
+`malware_protection` concepts), and `app/services/sigstore.py` (signed-attestation +
+Rekor transparency metadata — explicitly structural, never a crypto verdict). So L3 now
+speaks OCSF, SARIF, CycloneDX, SPDX, in-toto/SLSA, STIX and Sigstore at the seam. What
+remains is not more vocabularies but **wiring these boundaries into the live DB ingestion
+path** — a model-touching follow-up — and the internal lexicon staying the pivot they all
+normalise into.
 
 ---
 
