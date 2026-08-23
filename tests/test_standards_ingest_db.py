@@ -54,14 +54,34 @@ def test_cyclonedx_vuln_persisted_as_ra5(db_session):
 
 
 def test_ingestion_is_idempotent(db_session):
-    from app.services.sarif import to_sarif
-    log = to_sarif([{"control_id": "RA-5", "status": "fail", "severity": "high",
-                     "message": "unpatched CVE"}])
-    first = _ingest(db_session, "t_idem", "sarif", log)
-    second = _ingest(db_session, "t_idem", "sarif", log)
+    # A real vulnerability (carries the vulnerability_management concept, so it
+    # persists as an RA-5 finding); re-ingesting the same doc must be a no-op.
+    from app.services.cyclonedx import to_cyclonedx, vulnerability
+    bom = to_cyclonedx(vulnerabilities=[
+        vulnerability(vid="CVE-IDEM-1", severity="high", affects_ref="pkg:pypi/z@1")])
+    first = _ingest(db_session, "t_idem", "cyclonedx", bom)
+    second = _ingest(db_session, "t_idem", "cyclonedx", bom)
     assert first["ingested"] == 1
     assert second["ingested"] == 0 and second["skipped"] == 1
     assert len(_findings(db_session, "t_idem")) == 1
+
+
+def test_sarif_security_finding_persisted_as_ra5(db_session):
+    # A real code-scanning finding (CWE-tagged) carries vulnerability_management,
+    # so it lands as an RA-5 finding with severity from its CVSS score.
+    log = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "CodeQL", "rules": [
+        {"id": "py/sql-injection", "shortDescription": {"text": "SQL injection"},
+         "properties": {"security-severity": "9.8", "tags": ["security", "cwe-89"]}}]}},
+        "results": [{"ruleId": "py/sql-injection", "level": "error",
+                     "message": {"text": "user input reaches a query"},
+                     "locations": [{"physicalLocation": {
+                         "artifactLocation": {"uri": "app/db.py"}}}]}]}]}
+    out = _ingest(db_session, "t_sarif", "sarif", log)
+    assert out["ingested"] == 1
+    rows = _findings(db_session, "t_sarif")
+    assert rows[0].control_id == "RA-5"
+    assert rows[0].severity.value == "critical"   # CVSS 9.8
+    assert rows[0].source_system == "CODEQL"
 
 
 def test_provenance_is_observed_not_persisted(db_session):
