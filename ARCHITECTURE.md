@@ -160,7 +160,17 @@ and — the headline — `to_cdx_evidence()` / `component_evidence()` implement 
 evidence object (**field + confidence + named identification technique**), so the bare
 `confidence` numbers (a crosswalk edge's included) can finally be expressed with a named
 technique. That closes the identification-technique gap this section used to flag.
-Still open: SPDX, in-toto/SLSA, Sigstore, STIX.
+
+The rest of the vocabulary family now has boundary adapters too, all pure and tested:
+`app/services/spdx.py` (the other SBOM standard — inventory + security externalRefs),
+`app/services/intoto.py` (in-toto/SLSA build provenance, with a DSSE codec),
+`app/services/stix.py` (STIX 2.1 threat intel → `threat_intelligence` /
+`malware_protection` concepts), and `app/services/sigstore.py` (signed-attestation +
+Rekor transparency metadata — explicitly structural, never a crypto verdict). So L3 now
+speaks OCSF, SARIF, CycloneDX, SPDX, in-toto/SLSA, STIX and Sigstore at the seam. What
+remains is not more vocabularies but **wiring these boundaries into the live DB ingestion
+path** — a model-touching follow-up — and the internal lexicon staying the pivot they all
+normalise into.
 
 ---
 
