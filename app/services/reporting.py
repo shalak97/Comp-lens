@@ -78,6 +78,32 @@ class ReportService:
             }
         }
 
+    def _fdict(self, f) -> dict:
+        return {
+            "control_id": f.control_id,
+            "status": getattr(f.status, "value", f.status),
+            "severity": getattr(f.severity, "value", f.severity),
+            "description": f.description, "asset_id": f.asset_id,
+            "source_system": f.source_system, "finding_id": f.finding_id,
+        }
+
+    def oscal_poam(self, tenant_id: str) -> dict:
+        """OSCAL Plan of Action & Milestones — one item per open finding."""
+        from app.services.oscal_poam import build_poam
+        findings = [self._fdict(f) for f in self._findings(tenant_id)]
+        return build_poam(tenant_id, findings)
+
+    def oscal_components(self, tenant_id: str) -> dict:
+        """OSCAL Component Definition, derived from the source systems in scope
+        and the controls each has produced evidence for."""
+        from app.services.oscal_poam import build_component_definition
+        by_src: dict[str, set] = {}
+        for f in self._findings(tenant_id):
+            by_src.setdefault(f.source_system, set()).add(f.control_id)
+        components = [{"name": src, "type": "service", "controls": sorted(ctrls)}
+                      for src, ctrls in sorted(by_src.items())]
+        return build_component_definition(components)
+
     def pdf_bytes(self, tenant_id: str) -> bytes:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter

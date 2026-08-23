@@ -176,9 +176,10 @@ what to persist (a pure, unit-tested step), and lands it through the same idempo
 standard-format evidence folds into findings, posture, drift and the OSCAL export with no
 new write path. OCSF control verdicts are crosswalked into the canonical NIST namespace on
 the way in (reusing the L1 STRM crosswalk — e.g. SOC2 `CC6.7` → `SC-28`); vulnerability
-findings map to their NIST control (`RA-5`); build provenance, signatures and threat
-context are counted but never turned into an invented verdict. `POST /v1/evidence/ingest?format=…`
-exposes it. The internal lexicon stays the pivot everything normalises into.
+findings map to their NIST control (`RA-5`); build provenance (in-toto/SLSA) and
+signatures (Sigstore) now persist as PASS attestations against `SR-3` / `SI-7`; only
+threat-intel context stays observed-only. `POST /v1/evidence/ingest?format=…` exposes it.
+The internal lexicon stays the pivot everything normalises into.
 
 ---
 
@@ -201,11 +202,15 @@ evidence a control truly works.
 - `app/audit_models.py` — models the 3PAO engagement (planning → fieldwork → review →
   complete) with an `auto_status` bridge from live posture
 
-**The gap.** OSCAL is one model of seven — Assessment Results only; `import-ap` dangles
-to an assessment plan that does not exist, and there is no SSP, POA&M, catalog, profile,
-or component-definition, so the package cannot be the *system of record* the model
-describes. The trust score decays with age but has no explicit `next_validation` field —
-decay-by-age is not a freshness *guarantee*, the property that turns a control status
+**The gap — narrowing.** OSCAL now emits three of seven models: Assessment Results, plus
+**POA&M** (`/reports/oscal-poam`) and **Component Definition** (`/reports/oscal-components`)
+via the pure builders in `app/services/oscal_poam.py`. Still missing: SSP, catalog, profile,
+and a real assessment-plan (the `import-ap` href still dangles), so the package isn't yet
+the full *system of record*. On freshness, `app/services/freshness.py` adds the explicit
+`next_validation` primitive (cadence → expiry, `is_stale`); wiring it onto stored trust/
+posture rows is the remaining step. As it stands the trust score still decays with age but
+carries no per-row expiry — decay-by-age is not a freshness *guarantee*, the property that
+turns a control status
 into a control claim with an expiry.
 
 ---
@@ -239,7 +244,7 @@ log, and there is no MCP layer.
 |---|---|---|
 | **1. Mapping without ground truth** *(the deepest)* | **Exposed** | Concept-overlap equivalence and quality-graded crosswalks, neither validated against an authoritative source. Partly mitigated by the honest `heuristic` downgrade — but no inter-run agreement or confidence routed to review. |
 | **2. Evidence ≠ effectiveness** | **Partial** | The enforcement lane scoring live PEP/PDP traffic is the correct instinct — proof a control blocks real requests. Other lanes are point-in-time and sampled, not full-population. |
-| **3. Bitemporality** | **Exposed** | Only `created_at`/`updated_at`, overwritten in place. No valid-time vs system-time axis, so an "as-of" posture — the exact thing an auditor asks for — cannot be reconstructed. |
+| **3. Bitemporality** | **Foundation built** | The ORM still overwrites `updated_at` in place, but `app/services/bitemporal.py` now implements (and unit-tests) the append-only valid-time `TemporalLog` with `as_of()` reconstruction — the algorithm the "as-of posture" needs. What remains is the Alembic migration + writing history instead of overwriting. |
 | **4. Schema & framework drift** | **Exposed** | Framework catalogs and stored assertions pin no version. When SCF/OSCAL/a framework revises, past claims lose the version they were made under. |
 | **5. Goodhart on indicators** | **Partial** | Keeping all five lanes individually visible is the right defence against gaming a single number, and failures route to obligations. But the composite is still a proxy, and control failures do not yet feed risk scenarios. |
 
