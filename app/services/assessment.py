@@ -16,7 +16,7 @@ import logging
 import random
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -81,17 +81,23 @@ class AssessmentService:
                 Posture.source_system == source_system.upper(), Posture.asset_key == asset_key,
             )
         ).scalar_one_or_none()
+        from app.services.freshness import DEFAULT_CADENCE, cadence_days
+        now = datetime.now(UTC)
         if p:
+            cadence = p.cadence or DEFAULT_CADENCE
             p.prev_status = p.status
             p.status = status
             p.severity = severity
             p.last_finding_id = finding_id
-            p.updated_at = datetime.now(UTC)
+            p.updated_at = now
+            p.next_validation = now + timedelta(days=cadence_days(cadence))
         else:
             self.db.add(Posture(
                 tenant_id=tenant_id, control_id=control_id, source_system=source_system.upper(),
                 asset_id=asset_id, asset_key=asset_key, status=status, prev_status=None,
                 severity=severity, last_finding_id=finding_id,
+                cadence=DEFAULT_CADENCE,
+                next_validation=now + timedelta(days=cadence_days(DEFAULT_CADENCE)),
             ))
 
     def _commit_finding(self, *, tenant_id, framework, control_id, source_system, asset_id,
