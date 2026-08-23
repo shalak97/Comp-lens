@@ -861,6 +861,34 @@ def ingest_report(payload: dict, tenant_id: str = "default", source: str = "PROW
     return IngestionService(db).from_report(tenant_id, source, findings)
 
 
+@app.post("/v1/evidence/ingest", tags=["evidence"])
+def ingest_standard_evidence(
+    payload: dict,
+    format: str = Query(..., description="ocsf | sarif | cyclonedx | spdx | intoto | stix | sigstore"),
+    tenant_id: str = "default",
+    db: Session = Depends(get_db), p: Principal = Depends(require_principal),
+) -> dict:
+    """Ingest an open-standard evidence document into findings + posture.
+
+    Body is the raw standard document (an OCSF event, SARIF log, CycloneDX or SPDX
+    BOM, in-toto/SLSA statement, STIX bundle, or Sigstore bundle); `format` selects
+    the adapter. Control verdicts and vulnerability findings are persisted (the
+    latter mapped to their NIST control); positive/context evidence is counted only.
+    """
+    authorize_tenant(p, tenant_id)
+    from app.services.standards_ingest import (
+        StandardsIngestionService,
+        UnsupportedFormat,
+    )
+    try:
+        return StandardsIngestionService(db).ingest(tenant_id, format, payload)
+    except UnsupportedFormat as exc:
+        raise HTTPException(400, str(exc)) from None
+    except Exception:  # noqa: BLE001
+        logger.exception("standards evidence ingest failed")
+        raise _server_error() from None
+
+
 # ── static dashboard console ──
 
 
