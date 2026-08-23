@@ -167,10 +167,18 @@ The rest of the vocabulary family now has boundary adapters too, all pure and te
 `app/services/stix.py` (STIX 2.1 threat intel → `threat_intelligence` /
 `malware_protection` concepts), and `app/services/sigstore.py` (signed-attestation +
 Rekor transparency metadata — explicitly structural, never a crypto verdict). So L3 now
-speaks OCSF, SARIF, CycloneDX, SPDX, in-toto/SLSA, STIX and Sigstore at the seam. What
-remains is not more vocabularies but **wiring these boundaries into the live DB ingestion
-path** — a model-touching follow-up — and the internal lexicon staying the pivot they all
-normalise into.
+speaks OCSF, SARIF, CycloneDX, SPDX, in-toto/SLSA, STIX and Sigstore at the seam.
+
+**These boundaries are now wired into the live ingestion path.**
+`app/services/standards_ingest.py` normalises a standard document to evidence, *plans*
+what to persist (a pure, unit-tested step), and lands it through the same idempotent
+`record_external_finding` sink the Security Hub / Prowler ingestion uses — so
+standard-format evidence folds into findings, posture, drift and the OSCAL export with no
+new write path. OCSF control verdicts are crosswalked into the canonical NIST namespace on
+the way in (reusing the L1 STRM crosswalk — e.g. SOC2 `CC6.7` → `SC-28`); vulnerability
+findings map to their NIST control (`RA-5`); build provenance, signatures and threat
+context are counted but never turned into an invented verdict. `POST /v1/evidence/ingest?format=…`
+exposes it. The internal lexicon stays the pivot everything normalises into.
 
 ---
 
