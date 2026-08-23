@@ -835,6 +835,22 @@ def report_oscal(tenant_id: str = "default", db: Session = Depends(get_db),
     return ReportService(db).oscal_results(tenant_id)
 
 
+@app.get("/reports/oscal-poam")
+def report_oscal_poam(tenant_id: str = "default", db: Session = Depends(get_db),
+                      p: Principal = Depends(require_principal)) -> dict:
+    """OSCAL Plan of Action & Milestones — one item per open finding."""
+    authorize_tenant(p, tenant_id)
+    return ReportService(db).oscal_poam(tenant_id)
+
+
+@app.get("/reports/oscal-components")
+def report_oscal_components(tenant_id: str = "default", db: Session = Depends(get_db),
+                            p: Principal = Depends(require_principal)) -> dict:
+    """OSCAL Component Definition — components and the controls they implement."""
+    authorize_tenant(p, tenant_id)
+    return ReportService(db).oscal_components(tenant_id)
+
+
 # ── ingestion from external scanners ──
 @app.post("/ingest/securityhub")
 def ingest_securityhub(tenant_id: str = "default", max_findings: int = Query(100, ge=1, le=500),

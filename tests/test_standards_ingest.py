@@ -80,10 +80,24 @@ class Planning(unittest.TestCase):
         self.assertEqual(len(plans), 1)
         self.assertEqual(plans[0].control_id, "RA-5")
 
-    def test_provenance_and_signatures_are_observed_only(self):
+    def test_provenance_persists_as_pass_sr3(self):
         stmt = to_intoto_statement(subject_name="pkg:app@1", sha256="a" * 64,
                                    predicate_type=SLSA_PROVENANCE_V1)
-        self.assertEqual(plan_findings(normalize("intoto", stmt)), [])
+        plans = plan_findings(normalize("intoto", stmt))
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].control_id, "SR-3")   # supply_chain_security
+        self.assertEqual(plans[0].status, "pass")
+
+    def test_sigstore_signature_persists_as_pass_si7(self):
+        from app.services.intoto import dsse_encode
+        env = dsse_encode(to_intoto_statement(subject_name="pkg:app@1", sha256="a" * 64,
+                                              predicate_type=SLSA_PROVENANCE_V1))
+        env["signatures"] = [{"sig": "AA"}]
+        bundle = {"verificationMaterial": {"certificate": {"rawBytes": "x"},
+                                           "tlogEntries": [{"logIndex": "1"}]},
+                  "dsseEnvelope": env}
+        plans = plan_findings(normalize("sigstore", bundle))
+        self.assertEqual([(p.control_id, p.status) for p in plans], [("SI-7", "pass")])
 
     def test_distinct_findings_do_not_collide_on_external_id(self):
         # Two different STIX vulnerabilities that share a name but differ by CVE

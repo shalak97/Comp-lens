@@ -84,11 +84,22 @@ def test_sarif_security_finding_persisted_as_ra5(db_session):
     assert rows[0].source_system == "CODEQL"
 
 
-def test_provenance_is_observed_not_persisted(db_session):
+def test_provenance_persists_as_pass_attestation(db_session):
     from app.services.intoto import SLSA_PROVENANCE_V1, to_intoto_statement
     stmt = to_intoto_statement(subject_name="pkg:app@1", sha256="a" * 64,
                                predicate_type=SLSA_PROVENANCE_V1)
     out = _ingest(db_session, "t_prov", "intoto", stmt)
+    assert out["ingested"] == 1
+    rows = _findings(db_session, "t_prov")
+    assert rows[0].control_id == "SR-3"          # supply_chain_security attested
+    assert rows[0].status.value == "pass"
+
+
+def test_threat_context_is_observed_not_persisted(db_session):
+    # A STIX indicator carries only threat_intelligence — context, not a verdict.
+    from app.services.stix import indicator, to_stix_bundle
+    bundle = to_stix_bundle([indicator(name="ip", pattern="[ipv4-addr:value='1.1.1.1']")])
+    out = _ingest(db_session, "t_ctx", "stix", bundle)
     assert out["ingested"] == 0
-    assert out["evidences"] == 1          # it flowed through, just no verdict
-    assert _findings(db_session, "t_prov") == []
+    assert out["evidences"] == 1 and out["observed_only"] == 1
+    assert _findings(db_session, "t_ctx") == []

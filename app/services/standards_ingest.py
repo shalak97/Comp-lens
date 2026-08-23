@@ -18,9 +18,10 @@ Persistence policy (deliberately conservative — we never invent a control verd
      when the shared STRM crosswalk knows it;
   2. vulnerability findings (a `vulnerability_management` concept) become FAIL
      findings against the mapped NIST control (RA-5), one per finding id;
-  3. everything else — build provenance, signatures, threat-intel context, secret
-     or inventory findings without a vuln concept — is counted and returned, but
-     not turned into a control verdict.
+  3. positive attestations (build provenance -> SR-3, signatures -> SI-7) become
+     PASS findings against their concept's canonical control;
+  4. anything left — threat-intel context, non-vuln findings — is counted as
+     observed-only and never turned into a control verdict.
 """
 from __future__ import annotations
 
@@ -38,6 +39,15 @@ from app.services.ocsf import NormalizedEvidence
 _LEXICON = os.path.join(os.path.dirname(__file__), "..", "data", "concept_lexicon.json")
 _CANONICAL_FRAMEWORK = "NIST_800_53"
 _VULN_CONCEPT = "vulnerability_management"
+
+# Positive attestations: a truthy telemetry flag evidences a concept, persisted as a
+# PASS finding against that concept's canonical NIST control. This is how build
+# provenance (in-toto/SLSA) and signatures (Sigstore) land as evidence rather than
+# being merely observed — the one thing that was previously counted but not persisted.
+_POSITIVE_SIGNALS = {
+    "build_provenance": "supply_chain_security",   # in-toto / SLSA  -> SR-3
+    "evidence_signed": "data_integrity",           # Sigstore signature -> SI-7
+}
 
 
 def _wrap_single(fn: Callable[[dict], NormalizedEvidence | None]):
@@ -124,17 +134,19 @@ def _finding_key(f: dict[str, Any]) -> str:
     return "|".join(parts) or "finding"
 
 
-def _yields_finding(ne: NormalizedEvidence) -> bool:
-    """Whether this evidence produces at least one persisted finding."""
-    return bool(ne.controls) or (_VULN_CONCEPT in ne.concepts and bool(ne.findings))
+def plan_for_evidence(ne: NormalizedEvidence,
+                      concept_ctrl: dict[str, str] | None = None) -> list[FindingPlan]:
+    """Plan the findings for a single evidence. Pure — no DB.
 
+    Exactly one of three branches fires: explicit control verdicts, vulnerability
+    findings, or positive attestations. This is the authoritative unit — both
+    plan_findings() and the observed-only count derive from it, so they never drift.
+    """
+    concept_ctrl = concept_ctrl if concept_ctrl is not None else _concept_nist_control()
+    out: list[FindingPlan] = []
 
-def plan_findings(evidences: list[NormalizedEvidence]) -> list[FindingPlan]:
-    """Decide what to persist from a batch of evidence. Pure — no DB."""
-    concept_ctrl = _concept_nist_control()
-    plans: list[FindingPlan] = []
-    for ne in evidences:
-        # 1. explicit control verdicts (crosswalked into the canonical namespace)
+    # 1. explicit control verdicts (crosswalked into the canonical namespace)
+    if ne.controls:
         for c in ne.controls:
             ref = str(c.get("control_ref") or "")
             standards = c.get("standards") or []
@@ -150,30 +162,56 @@ def plan_findings(evidences: list[NormalizedEvidence]) -> list[FindingPlan]:
                 raw_extra = {"source_control_ref": ref, "source_standards": standards}
             status = str(c.get("status") or "").lower()
             status = status if status in ("pass", "fail") else "error"
-            plans.append(FindingPlan(
+            out.append(FindingPlan(
                 framework=framework, control_id=control_id,
                 source_system=ne.source_system, asset_id=ne.asset_id,
                 status=status, severity=ne.severity or "medium",
                 description=f"{ne.source_system} {control_id}: {status}"[:480],
                 external_id=f"{ne.source_system}:{ref}:{ne.asset_id or ''}",
                 raw={**raw_extra, "plane": ne.plane}))
-            continue
+        return out
 
-        # 2. vulnerability findings -> the mapped NIST control (RA-5), FAIL each
-        if ne.controls or _VULN_CONCEPT not in ne.concepts or not ne.findings:
-            continue
+    # 2. vulnerability findings -> the mapped NIST control (RA-5), FAIL each
+    if _VULN_CONCEPT in ne.concepts and ne.findings:
         control_id = concept_ctrl.get(_VULN_CONCEPT, "RA-5")
         for f in ne.findings:
             fid = _finding_key(f)
             desc = str(f.get("description") or f.get("message") or f.get("name") or fid)
-            plans.append(FindingPlan(
+            out.append(FindingPlan(
                 framework=_CANONICAL_FRAMEWORK, control_id=control_id,
                 source_system=ne.source_system, asset_id=ne.asset_id,
                 status="fail", severity=ne.severity or "medium",
                 description=f"{fid}: {desc}"[:480],
                 external_id=f"{ne.source_system}:{fid}",
                 raw={"finding": f, "concepts": ne.concepts, "plane": ne.plane}))
-    return plans
+        return out
+
+    # 3. positive attestations (build provenance / signatures) -> PASS
+    for flag, concept in _POSITIVE_SIGNALS.items():
+        if not ne.telemetry.get(flag) or concept not in ne.concepts:
+            continue
+        cid = concept_ctrl.get(concept)
+        if not cid:
+            continue
+        out.append(FindingPlan(
+            framework=_CANONICAL_FRAMEWORK, control_id=cid,
+            source_system=ne.source_system, asset_id=ne.asset_id,
+            status="pass", severity="info",
+            description=f"{ne.source_system}: {concept} attested for {ne.asset_id or 'artifact'}"[:480],
+            external_id=f"{ne.source_system}:{concept}:{ne.asset_id or ''}",
+            raw={"attestation": concept, "telemetry": ne.telemetry, "plane": ne.plane}))
+    return out
+
+
+def _yields_finding(ne: NormalizedEvidence) -> bool:
+    """Whether this evidence produces at least one persisted finding."""
+    return bool(plan_for_evidence(ne))
+
+
+def plan_findings(evidences: list[NormalizedEvidence]) -> list[FindingPlan]:
+    """Decide what to persist from a batch of evidence. Pure — no DB."""
+    concept_ctrl = _concept_nist_control()
+    return [p for ne in evidences for p in plan_for_evidence(ne, concept_ctrl)]
 
 
 class StandardsIngestionService:
@@ -189,7 +227,15 @@ class StandardsIngestionService:
         from app.services.ingestion import _severity, _status
 
         evidences = normalize(fmt, payload)
-        plans = plan_findings(evidences)
+        concept_ctrl = _concept_nist_control()
+        plans: list[FindingPlan] = []
+        observed_only = 0
+        for ne in evidences:
+            ep = plan_for_evidence(ne, concept_ctrl)
+            if ep:
+                plans.extend(ep)
+            else:
+                observed_only += 1  # threat context / non-vuln findings — no verdict
         ingested, skipped = 0, 0
         for pl in plans:
             res = self._ing.svc.record_external_finding(
@@ -207,13 +253,11 @@ class StandardsIngestionService:
             "planned": len(plans),
             "ingested": ingested,
             "skipped": skipped,
-            # observed-but-not-persisted evidence (provenance, signatures, threat
-            # context, non-vuln findings) — surfaced so callers see the full signal.
-            "observed_only": sum(1 for ne in evidences if not _yields_finding(ne)),
+            "observed_only": observed_only,
         }
 
 
 __all__ = [
     "SUPPORTED_FORMATS", "UnsupportedFormat", "normalize", "plan_findings",
-    "FindingPlan", "StandardsIngestionService",
+    "plan_for_evidence", "FindingPlan", "StandardsIngestionService",
 ]
