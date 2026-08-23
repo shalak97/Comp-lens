@@ -128,6 +128,34 @@ class Posture(Base):
     next_validation: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class PostureHistory(Base):
+    """Append-only, valid-time history of control status per cell.
+
+    Posture is the materialized *current* state (overwritten in place); this table
+    keeps the timeline so posture "as of" any date can be reconstructed. One row per
+    status transition: [valid_from, valid_to) with valid_to NULL for the still-current
+    interval. recorded_at is the system/transaction time the transition was learned.
+    This is the persisted form of services/bitemporal.TemporalLog.
+    """
+    __tablename__ = "posture_history"
+    __table_args__ = (
+        Index("ix_posture_history_key", "tenant_id", "control_id", "source_system", "asset_key"),
+        Index("ix_posture_history_valid", "tenant_id", "valid_from"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128))
+    control_id: Mapped[str] = mapped_column(String(128))
+    source_system: Mapped[str] = mapped_column(String(64))
+    asset_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    asset_key: Mapped[str] = mapped_column(String(256), default="")
+    status: Mapped[ControlStatus] = mapped_column(Enum(ControlStatus))
+    severity: Mapped[Severity] = mapped_column(Enum(Severity), default=Severity.MEDIUM)
+    finding_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class EvidenceMeta(Base):
     __tablename__ = "evidence_metadata"
     evidence_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
