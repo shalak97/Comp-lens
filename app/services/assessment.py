@@ -136,8 +136,10 @@ class AssessmentService:
             remediation = {"summary": f"Remediate control {control_id}",
                            "detail": reason, "requires_approval": True}
 
+        from app.services.framework_versions import version_of
         finding = Finding(
             finding_id=str(uuid.uuid4()), tenant_id=tenant_id, run_id=run_id, framework=framework,
+            framework_version=version_of(framework),
             control_id=control_id, source_system=source_system.upper(), asset_id=asset_id,
             status=status, severity=severity, owner=owner, description=reason,
             remediation=remediation, evidence_ids=[evidence_id] if telemetry is not None else [],

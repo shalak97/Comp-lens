@@ -80,6 +80,8 @@ class Finding(Base):
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     run_id: Mapped[str] = mapped_column(String(36), index=True)
     framework: Mapped[str] = mapped_column(String(64))
+    # The framework revision this assertion was made under (drift-proofing).
+    framework_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     control_id: Mapped[str] = mapped_column(String(128), index=True)
     source_system: Mapped[str] = mapped_column(String(64))
     asset_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
