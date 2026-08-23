@@ -81,8 +81,13 @@ class AssessmentService:
                 Posture.source_system == source_system.upper(), Posture.asset_key == asset_key,
             )
         ).scalar_one_or_none()
+        from sqlalchemy import update as sa_update
+
+        from app.models import PostureHistory
         from app.services.freshness import DEFAULT_CADENCE, cadence_days
         now = datetime.now(UTC)
+        # A status transition (or a brand-new cell) opens a new history interval.
+        changed = (p is None) or (p.status != status)
         if p:
             cadence = p.cadence or DEFAULT_CADENCE
             p.prev_status = p.status
@@ -99,6 +104,22 @@ class AssessmentService:
                 cadence=DEFAULT_CADENCE,
                 next_validation=now + timedelta(days=cadence_days(DEFAULT_CADENCE)),
             ))
+
+        if changed:
+            # Close the previously-open interval for this cell, then open a new one.
+            self.db.execute(
+                sa_update(PostureHistory)
+                .where(PostureHistory.tenant_id == tenant_id,
+                       PostureHistory.control_id == control_id,
+                       PostureHistory.source_system == source_system.upper(),
+                       PostureHistory.asset_key == asset_key,
+                       PostureHistory.valid_to.is_(None))
+                .values(valid_to=now))
+            self.db.add(PostureHistory(
+                tenant_id=tenant_id, control_id=control_id,
+                source_system=source_system.upper(), asset_id=asset_id, asset_key=asset_key,
+                status=status, severity=severity, finding_id=finding_id,
+                valid_from=now, valid_to=None, recorded_at=now))
 
     def _commit_finding(self, *, tenant_id, framework, control_id, source_system, asset_id,
                         status: ControlStatus, severity: Severity, reason: str | None,

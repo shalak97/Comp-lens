@@ -851,6 +851,31 @@ def report_oscal_components(tenant_id: str = "default", db: Session = Depends(ge
     return ReportService(db).oscal_components(tenant_id)
 
 
+@app.get("/v1/posture/as-of", tags=["posture"])
+def posture_as_of(at: str = Query(..., description="ISO 8601 timestamp, e.g. 2026-02-01T00:00:00Z"),
+                  tenant_id: str = "default", db: Session = Depends(get_db),
+                  p: Principal = Depends(require_principal)) -> dict:
+    """Reconstruct compliance posture as it stood at a point in time."""
+    from datetime import datetime
+    authorize_tenant(p, tenant_id)
+    try:
+        t = datetime.fromisoformat(at.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(400, "invalid 'at' timestamp; use ISO 8601") from None
+    from app.services.posture_history import as_of
+    return {"as_of": t.isoformat(), "controls": as_of(db, tenant_id, t)}
+
+
+@app.get("/v1/posture/timeline", tags=["posture"])
+def posture_timeline(control_id: str = Query(...), tenant_id: str = "default",
+                     db: Session = Depends(get_db),
+                     p: Principal = Depends(require_principal)) -> dict:
+    """The full status-transition timeline for one control."""
+    authorize_tenant(p, tenant_id)
+    from app.services.posture_history import timeline
+    return {"control_id": control_id, "intervals": timeline(db, tenant_id, control_id)}
+
+
 # ── ingestion from external scanners ──
 @app.post("/ingest/securityhub")
 def ingest_securityhub(tenant_id: str = "default", max_findings: int = Query(100, ge=1, le=500),
