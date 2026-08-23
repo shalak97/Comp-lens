@@ -560,6 +560,39 @@ class ConnectorInstance(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class AgentIdentity(Base):
+    """A verifiable identity for an autonomous or assistive agent, so every action
+    can be attributed to a known actor (which agent, which model)."""
+    __tablename__ = "agent_identities"
+    __table_args__ = (UniqueConstraint("name", "kind", name="uq_agent_name_kind"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(128))
+    kind: Mapped[str] = mapped_column(String(32))          # llm | deterministic | human_assisted
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AgentAction(Base):
+    """Append-only, hash-chained log of agent decisions — which agent did what,
+    under whose authorization, with what confidence. record_hash chains to prev_hash
+    so the trail is tamper-evident (any altered or removed entry breaks the chain)."""
+    __tablename__ = "agent_actions"
+    __table_args__ = (Index("ix_agent_actions_tenant", "tenant_id", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(128))
+    agent_id: Mapped[str] = mapped_column(String(36))
+    agent_name: Mapped[str] = mapped_column(String(128))
+    action: Mapped[str] = mapped_column(String(64))
+    target: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    on_behalf_of: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    outcome: Mapped[str] = mapped_column(String(32), default="done")
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    record_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 # GRC Risk Register + TPRM (imported so Base registers tables)
 from app.ai_governance_models import AISystemPET  # noqa: E402,F401
 

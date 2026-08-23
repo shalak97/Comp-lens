@@ -94,6 +94,13 @@ class PolicyAuthoringService:
                         rego=rego, telemetry_field=field, confidence=confidence, status="pending")
         self.db.add(d)
         self.db.flush()
+        # Attribute the proposal to a verifiable agent identity in the tamper-evident log.
+        from app.services.agent_audit import record_action, register_agent
+        agent = register_agent(self.db, name="policy-author", kind="deterministic",
+                               model="keyword-mapper")
+        record_action(self.db, tenant_id=req.tenant_id, agent=agent, action="propose_policy",
+                      target=control_id, confidence=confidence, outcome="pending",
+                      detail={"telemetry_field": field, "draft_id": d.id})
         return d
 
     def decide(self, tenant_id: str, draft_id: str, approve: bool) -> PolicyDraft | None:
