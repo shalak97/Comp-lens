@@ -26,7 +26,7 @@ def _yaml_dir() -> str:
         os.path.dirname(__file__), "profiles_yaml")
 
 
-def load_yaml_profiles(directory: str = None) -> dict[str, PlatformProfile]:
+def load_yaml_profiles(directory: str | None = None) -> dict[str, PlatformProfile]:
     """Parse every *.yaml/*.yml in the profile directory into PlatformProfiles."""
     directory = directory or _yaml_dir()
     out: dict[str, PlatformProfile] = {}

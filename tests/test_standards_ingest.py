@@ -85,6 +85,41 @@ class Planning(unittest.TestCase):
                                    predicate_type=SLSA_PROVENANCE_V1)
         self.assertEqual(plan_findings(normalize("intoto", stmt)), [])
 
+    def test_distinct_findings_do_not_collide_on_external_id(self):
+        # Two different STIX vulnerabilities that share a name but differ by CVE
+        # must produce distinct external ids (else the second is silently dropped).
+        bundle = stix.to_stix_bundle([
+            stix.vulnerability(name="SAME", cve="CVE-1"),
+            stix.vulnerability(name="SAME", cve="CVE-2"),
+        ])
+        ids = {p.external_id for p in plan_findings(normalize("stix", bundle))}
+        self.assertEqual(len(ids), 2, f"distinct vulns collided: {ids}")
+
+    def test_same_sarif_rule_different_location_stays_distinct(self):
+        log = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Semgrep", "rules": [
+            {"id": "py/x", "properties": {"security-severity": "8.0", "tags": ["cwe"]}}]}},
+            "results": [
+                {"ruleId": "py/x", "level": "error", "message": {"text": "a"},
+                 "locations": [{"physicalLocation": {"artifactLocation": {"uri": "a.py"},
+                                                     "region": {"startLine": 1}}}]},
+                {"ruleId": "py/x", "level": "error", "message": {"text": "b"},
+                 "locations": [{"physicalLocation": {"artifactLocation": {"uri": "b.py"},
+                                                     "region": {"startLine": 2}}}]},
+            ]}]}
+        ids = {p.external_id for p in plan_findings(normalize("sarif", log))}
+        self.assertEqual(len(ids), 2, f"same-rule findings collided: {ids}")
+
+    def test_observed_only_counts_evidences_without_findings(self):
+        # one persisted vuln + one observed-only indicator -> observed_only == 1,
+        # robust even though both flatten through the same planner.
+        bundle = stix.to_stix_bundle([
+            stix.vulnerability(name="V", cve="CVE-9"),
+            stix.indicator(name="i", pattern="[ipv4-addr:value='1.1.1.1']"),
+        ])
+        from app.services.standards_ingest import _yields_finding
+        evs = normalize("stix", bundle)
+        self.assertEqual(sum(1 for e in evs if not _yields_finding(e)), 1)
+
     def test_dedup_external_ids_are_stable(self):
         bom = cyclonedx.to_cyclonedx(vulnerabilities=[
             cyclonedx.vulnerability(vid="CVE-1", severity="high", affects_ref="pkg:a")])

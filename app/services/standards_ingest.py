@@ -106,11 +106,27 @@ class FindingPlan:
     raw: dict[str, Any]
 
 
-def _finding_id(f: dict[str, Any]) -> str:
-    for k in ("id", "rule_id", "fingerprint", "name", "stix_id", "package"):
+def _finding_key(f: dict[str, Any]) -> str:
+    """A stable, collision-resistant identity for one finding.
+
+    Re-ingesting the SAME finding must dedup (idempotency), but two *different*
+    findings must never share a key. Prefer a globally-unique id (CVE, STIX id,
+    SARIF fingerprint, vuln id); when none exists, build a composite from the
+    identifying fields so findings that share a rule or package but differ by
+    location or version stay distinct — otherwise the idempotency check silently
+    drops the second one.
+    """
+    for k in ("cve", "id", "stix_id", "fingerprint"):
         if f.get(k):
             return str(f[k])
-    return "finding"
+    parts = [f"{k}={f[k]}" for k in ("rule_id", "package", "version", "name", "location", "line")
+             if f.get(k) is not None]
+    return "|".join(parts) or "finding"
+
+
+def _yields_finding(ne: NormalizedEvidence) -> bool:
+    """Whether this evidence produces at least one persisted finding."""
+    return bool(ne.controls) or (_VULN_CONCEPT in ne.concepts and bool(ne.findings))
 
 
 def plan_findings(evidences: list[NormalizedEvidence]) -> list[FindingPlan]:
@@ -148,7 +164,7 @@ def plan_findings(evidences: list[NormalizedEvidence]) -> list[FindingPlan]:
             continue
         control_id = concept_ctrl.get(_VULN_CONCEPT, "RA-5")
         for f in ne.findings:
-            fid = _finding_id(f)
+            fid = _finding_key(f)
             desc = str(f.get("description") or f.get("message") or f.get("name") or fid)
             plans.append(FindingPlan(
                 framework=_CANONICAL_FRAMEWORK, control_id=control_id,
@@ -193,7 +209,7 @@ class StandardsIngestionService:
             "skipped": skipped,
             # observed-but-not-persisted evidence (provenance, signatures, threat
             # context, non-vuln findings) — surfaced so callers see the full signal.
-            "observed_only": len(evidences) - len({p.external_id for p in plans}),
+            "observed_only": sum(1 for ne in evidences if not _yields_finding(ne)),
         }
 
 
