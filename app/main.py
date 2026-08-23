@@ -1757,7 +1757,7 @@ def integrate_threat_escalation(tenant_id: str = "default",
 
 
 @app.post("/v1/integrate/run", tags=["integration"])
-def integrate_run_all(payload: dict = None, tenant_id: str = "default",
+def integrate_run_all(payload: dict | None = None, tenant_id: str = "default",
                       db: Session = Depends(get_db),
                       p: Principal = Depends(require_principal)) -> dict:
     """Run the whole integrated pipeline: policy→findings, AI→risk, threat→escalation."""
