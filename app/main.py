@@ -876,6 +876,25 @@ def posture_timeline(control_id: str = Query(...), tenant_id: str = "default",
     return {"control_id": control_id, "intervals": timeline(db, tenant_id, control_id)}
 
 
+@app.get("/v1/agents/actions", tags=["agents"])
+def agent_actions(tenant_id: str = "default", limit: int = Query(100, ge=1, le=1000),
+                  db: Session = Depends(get_db),
+                  p: Principal = Depends(require_principal)) -> dict:
+    """The append-only log of agent decisions (which agent did what, for whom)."""
+    authorize_tenant(p, tenant_id)
+    from app.services.agent_audit import list_actions
+    return {"actions": list_actions(db, tenant_id, limit)}
+
+
+@app.get("/v1/agents/actions/verify", tags=["agents"])
+def agent_actions_verify(tenant_id: str = "default", db: Session = Depends(get_db),
+                         p: Principal = Depends(require_principal)) -> dict:
+    """Verify the tamper-evident hash chain of the agent-decision log."""
+    authorize_tenant(p, tenant_id)
+    from app.services.agent_audit import verify_chain
+    return verify_chain(db, tenant_id)
+
+
 # ── ingestion from external scanners ──
 @app.post("/ingest/securityhub")
 def ingest_securityhub(tenant_id: str = "default", max_findings: int = Query(100, ge=1, le=500),

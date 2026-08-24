@@ -229,12 +229,15 @@ boundary wrong.
 - `app/services/policy_authoring.py` — NL → policy drafting stays `status="pending"` and
   enforces nothing until a human approves.
 
-**The gap.** It is not yet agentic in the regulatory sense. `Principal` is human/tenant
-auth — there is no verifiable *agent* identity, so "which agent acted under whose
-authorisation" (Singapore IMDA, NIST CAISI) cannot be answered. The approval object is a
-bare boolean `decide(approve)` — no reasoning trace, estimated impact, rollback, or
-approval expiry. Integrity covers evidence records, not a tamper-evident *agent-decision*
-log, and there is no MCP layer.
+**The gap — largely closed.** `AgentIdentity` gives every autonomous/assistive actor a
+verifiable identity, and `services/agent_audit.py` records each action in an append-only,
+**hash-chained** log (`AgentAction`), so "which agent acted under whose authorisation"
+(Singapore IMDA, NIST CAISI) is answerable and the trail is tamper-evident —
+`verify_chain()` detects any altered or removed entry, exposed at
+`GET /v1/agents/actions{,/verify}`. The NL→policy authoring agent now logs every
+proposal against that identity. What remains: richer approvals (reasoning trace,
+estimated impact, rollback, expiry — today `decide(approve)` is still a bare boolean) and
+an MCP layer.
 
 ---
 
