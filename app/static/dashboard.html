@@ -1419,6 +1419,8 @@ RENDER.reports = async function(){
     ${card("Audit package · PDF","Board-ready posture report with control results and framework mappings.",dl("/reports/pdf","Download PDF"),"Rendered server-side via reportlab.")}
     ${card("Evidence export · CSV","Flat export of every finding and its collected evidence for spreadsheets.",dl("/reports/csv","Download CSV"))}
     ${card("OSCAL · JSON","Machine-readable assessment results in NIST OSCAL for GRC interchange.",dl("/reports/oscal","Download OSCAL"),"Imports into compatible GRC platforms.")}
+    ${card("OSCAL POA&M · JSON","Plan of Action &amp; Milestones — one item per open finding, tracked to remediation.",dl("/reports/oscal-poam","Download POA&M"),"Auditors track remediation against this.")}
+    ${card("OSCAL Components · JSON","Component Definition — the systems in scope and the controls each implements.",dl("/reports/oscal-components","Download components"),"Derived from source systems with evidence.")}
   </div>
   <div class="panel"><div class="panel-h"><h3>What's inside an audit pack</h3></div><div class="panel-b">
     <div class="dl">
@@ -1429,6 +1431,71 @@ RENDER.reports = async function(){
     </div>
   </div></div>`;
 };
+
+/* ---------- POSTURE AS-OF / TIMELINE ---------- */
+RENDER.postureasof = async function(){
+  const m=main();
+  m.innerHTML=viewHead("Posture as-of","Reconstruct compliance posture at any point in time from the append-only status history, or trace one control's full timeline.","","posture / 07");
+  const host=el("div");m.appendChild(host);
+  const nowLocal=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+  host.innerHTML=`
+  ${STATE.demo?`<div class="note">You're viewing <b>demo</b> data. As-of reconstruction calls the live API, so turn demo off to query your instance's real history.</div>`:""}
+  <div class="grid g-2">
+    <div class="panel"><div class="panel-h"><h3>Reconstruct as of a date</h3><div class="sub">What did posture look like at this moment?</div></div>
+      <div class="panel-b">
+        <div class="fld"><label>As of</label><input type="datetime-local" id="asof-dt" value="${esc(nowLocal)}"></div>
+        <button class="btn primary" onclick="runPostureAsOf()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 3'/></svg>Reconstruct</button>
+        <div id="asof-result" style="margin-top:14px"></div>
+      </div></div>
+    <div class="panel"><div class="panel-h"><h3>Control timeline</h3><div class="sub">Every status transition for one control.</div></div>
+      <div class="panel-b">
+        <div class="fld"><label>Control ID</label><input type="text" id="tl-control" placeholder="e.g. AC-2"></div>
+        <button class="btn primary" onclick="runPostureTimeline()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 17v-5M12 17v-3M15 17v-7M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z'/></svg>View timeline</button>
+        <div id="tl-result" style="margin-top:14px"></div>
+      </div></div>
+  </div>`;
+};
+async function runPostureAsOf(){
+  const dt=document.getElementById("asof-dt").value;
+  const box=document.getElementById("asof-result");
+  if(!dt){toast("Pick a date/time first","warn");return;}
+  box.innerHTML=`<div class="loading"><span class="spin"></span> Reconstructing…</div>`;
+  const at=new Date(dt).toISOString();
+  try{
+    const r=STATE.demo
+      ? {as_of:at,controls:[{control_id:"AC-2",source_system:"OKTA",asset_id:null,status:"fail",severity:"high"},
+                              {control_id:"SC-28",source_system:"AWS",asset_id:"bucket-1",status:"pass",severity:"medium"}]}
+      : await apiGET(withTenant("/v1/posture/as-of")+"&at="+encodeURIComponent(at));
+    if(!r.controls.length){box.innerHTML=emptyState("No history at this point","No control had a recorded status as of "+fmtDate(at)+".");return;}
+    box.innerHTML=`<div class="tbl-scroll"><table>
+      <thead><tr><th>Control</th><th>Source</th><th>Asset</th><th>Status</th><th>Severity</th></tr></thead>
+      <tbody>${r.controls.map(c=>`<tr>
+        <td class="id">${esc(c.control_id)}</td>
+        <td class="mono" style="font-size:12px">${esc(c.source_system)}</td>
+        <td class="mono" style="font-size:11px;color:var(--steel)">${esc(c.asset_id||"—")}</td>
+        <td>${statusChip(c.status)}</td>
+        <td>${sevChip(c.severity)}</td></tr>`).join("")}</tbody>
+    </table></div>`;
+  }catch(e){box.innerHTML=`<div class="note" style="border-left-color:var(--fail)">Could not reconstruct: ${esc(e.message||e)}</div>`;}
+}
+async function runPostureTimeline(){
+  const cid=document.getElementById("tl-control").value.trim();
+  const box=document.getElementById("tl-result");
+  if(!cid){toast("Enter a control id first","warn");return;}
+  box.innerHTML=`<div class="loading"><span class="spin"></span> Loading timeline…</div>`;
+  try{
+    const r=STATE.demo
+      ? {control_id:cid,intervals:[
+          {status:"fail",source_system:"OKTA",valid_from:new Date(Date.now()-30*864e5).toISOString(),valid_to:new Date(Date.now()-5*864e5).toISOString()},
+          {status:"pass",source_system:"OKTA",valid_from:new Date(Date.now()-5*864e5).toISOString(),valid_to:null}]}
+      : await apiGET(withTenant("/v1/posture/timeline")+"&control_id="+encodeURIComponent(cid));
+    if(!r.intervals.length){box.innerHTML=emptyState("No timeline yet","This control has no recorded status transitions.");return;}
+    box.innerHTML=`<div class="timeline">${r.intervals.map(iv=>`<div class="tl">
+      <div>${statusChip(iv.status)} <span class="mono" style="font-size:11px;color:var(--steel)">via ${esc(iv.source_system)}</span></div>
+      <div class="w">${esc(fmtDate(iv.valid_from))} → ${iv.valid_to?esc(fmtDate(iv.valid_to)):"now"}</div>
+    </div>`).join("")}</div>`;
+  }catch(e){box.innerHTML=`<div class="note" style="border-left-color:var(--fail)">Could not load timeline: ${esc(e.message||e)}</div>`;}
+}
 </script>
 
 <script>
@@ -2170,6 +2237,51 @@ function insertPolicyPdf(input){
     .catch(e=>toast("Import failed: "+((e&&e.message)||e),"warn"));
 }
 
+/* ---------- AGENT LOG ---------- */
+RENDER.agentlog = async function(){
+  const m=main();
+  m.innerHTML=viewHead("Agent Log","Every autonomous or assistive action, attributed to a verifiable agent identity and appended to a tamper-evident, hash-chained log.","","compliance-as-code / 03");
+  const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading agent actions…</div>`;
+  let actions,chain;
+  if(STATE.demo){
+    const now=Date.now();
+    actions=[
+      {agent:"policy-author",action:"propose_policy",target:"AC-7",on_behalf_of:null,confidence:0.82,outcome:"pending",created_at:new Date(now-2*36e5).toISOString()},
+      {agent:"extractor",action:"extract_concept",target:"mfa",on_behalf_of:"doc-ingest",confidence:0.91,outcome:"done",created_at:new Date(now-6*36e5).toISOString()},
+      {agent:"extractor",action:"extract_concept",target:"encryption_at_rest",on_behalf_of:"doc-ingest",confidence:0.74,outcome:"done",created_at:new Date(now-9*36e5).toISOString()},
+    ];
+    chain={ok:true,actions:actions.length,broken:[]};
+  }else{
+    try{
+      const[a,v]=await Promise.all([apiGET(withTenant("/v1/agents/actions")),apiGET(withTenant("/v1/agents/actions/verify"))]);
+      actions=(a.actions||[]).map(x=>({agent:x.agent,action:x.action,target:x.target,on_behalf_of:x.on_behalf_of,confidence:x.confidence,outcome:x.outcome,created_at:x.created_at}));
+      chain=v;
+    }catch(e){actions=[];chain={ok:null,actions:0,broken:[]};}
+  }
+  CACHE.agentActions=actions;
+  const agentCount=new Set(actions.map(a=>a.agent)).size;
+  if(!actions.length){host.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("No agent actions yet","Actions appear here the moment an agent proposes a policy, extracts evidence, or takes any autonomous step.")}</div></div>`;return;}
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Actions</div><div class="v num">${actions.length}</div></div>
+    <div class="ro"><div class="k">Agents</div><div class="v num">${agentCount}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:${chain.ok===false?'var(--fail)':'var(--pass)'}"></span>Chain integrity</div><div class="v" style="font-size:18px">${chain.ok===false?'<span class="chip c-fail"><span class="d"></span>Broken</span>':chain.ok===true?'<span class="chip c-pass"><span class="d"></span>Verified</span>':'<span class="chip c-dim"><span class="d"></span>Unknown</span>'}</div></div>
+    <div class="ro"><div class="k">Latest</div><div class="v num" style="font-size:18px">${actions[0]?ago(actions[0].created_at):"—"}</div></div>
+  </div>
+  ${chain.ok===false?`<div class="note" style="border-left-color:var(--fail)"><b>${chain.broken.length} record(s)</b> failed hash verification — the log may have been altered. Investigate immediately.</div>`:
+    `<div class="note">Each record's hash chains to the one before it (<code>prev_hash</code> → <code>record_hash</code>). Altering or removing any entry breaks every hash after it, so tampering is always detectable.</div>`}
+  <div class="panel"><div class="panel-h"><h3>Decision log</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Agent</th><th>Action</th><th>Target</th><th>On behalf of</th><th>Confidence</th><th>Outcome</th><th class="right">When</th></tr></thead>
+    <tbody>${actions.map(a=>`<tr>
+      <td><b>${esc(a.agent)}</b></td>
+      <td class="mono" style="font-size:12px">${esc(a.action)}</td>
+      <td class="id">${esc(a.target||"—")}</td>
+      <td class="mono" style="font-size:12px;color:var(--steel)">${esc(a.on_behalf_of||"—")}</td>
+      <td class="mono" style="font-size:12px">${a.confidence!=null?a.confidence.toFixed(2):"—"}</td>
+      <td>${statusChip(a.outcome)}</td>
+      <td class="right mono" style="font-size:11px;color:var(--steel)">${ago(a.created_at)}</td></tr>`).join("")}</tbody>
+  </table></div></div></div>`;
+};
 
 /* ---------- EVIDENCE HUB ---------- */
 RENDER.evidencehub = async function(){
@@ -2197,6 +2309,76 @@ RENDER.evidencehub = async function(){
       <td>${r.verified?'<span class="chip c-pass"><span class="d"></span>Verified</span>':'<span class="chip c-warn"><span class="d"></span>Pending</span>'}</td></tr>`).join("")}</tbody>
   </table></div></div></div>`;
 };
+
+/* ---------- STANDARDS INGEST ---------- */
+const INGEST_EXAMPLES={
+  ocsf:{control_id:"CC6.7",status:"fail",framework:"SOC2",severity:"high",message:"S3 bucket without default encryption"},
+  sarif:{version:"2.1.0",runs:[{tool:{driver:{name:"CodeQL",rules:[{id:"py/sql-injection",shortDescription:{text:"SQL injection"},properties:{"security-severity":"9.8",tags:["security","cwe-89"]}}]}},results:[{ruleId:"py/sql-injection",level:"error",message:{text:"User input flows to a SQL query."},locations:[{physicalLocation:{artifactLocation:{uri:"app/db.py"},region:{startLine:42}}}]}]}]},
+  cyclonedx:{bomFormat:"CycloneDX",specVersion:"1.6",version:1,vulnerabilities:[{id:"CVE-2023-0001",ratings:[{severity:"critical",score:9.8,method:"CVSSv31"}],affects:[{ref:"pkg:pypi/requests@2.0.0"}]}]},
+  spdx:{spdxVersion:"SPDX-2.3",dataLicense:"CC0-1.0",SPDXID:"SPDXRef-DOCUMENT",name:"example",creationInfo:{creators:["Tool: Syft"]},packages:[{SPDXID:"SPDXRef-Package-requests",name:"requests",versionInfo:"2.0.0",downloadLocation:"NOASSERTION",licenseConcluded:"Apache-2.0",externalRefs:[{referenceCategory:"SECURITY",referenceType:"advisory",referenceLocator:"CVE-2023-0001"}]}]},
+  intoto:{_type:"https://in-toto.io/Statement/v1",subject:[{name:"pkg:app@1.0",digest:{sha256:"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}],predicateType:"https://slsa.dev/provenance/v1",predicate:{runDetails:{builder:{id:"https://github.com/actions/runner"}}}},
+  stix:{type:"bundle",id:"bundle--example",spec_version:"2.1",objects:[{type:"vulnerability",spec_version:"2.1",id:"vulnerability--example",created:new Date().toISOString(),name:"Log4Shell",external_references:[{source_name:"cve",external_id:"CVE-2021-44228"}]}]},
+  sigstore:{mediaType:"application/vnd.dev.sigstore.bundle+json;version=0.3",verificationMaterial:{certificate:{rawBytes:"MIIB..."},tlogEntries:[{logIndex:"123456",integratedTime:"1700000000"}]},dsseEnvelope:{payloadType:"application/vnd.in-toto+json",payload:"e30=",signatures:[{sig:"AAAA"}]}},
+};
+RENDER.evidenceingest = async function(){
+  const m=main();
+  m.innerHTML=viewHead("Standards Ingest","Ingest evidence in an open standard format directly into findings and posture — OCSF, SARIF, CycloneDX, SPDX, in-toto/SLSA, STIX, or Sigstore.","","evidence / 05");
+  const host=el("div");m.appendChild(host);
+  host.innerHTML=`
+  <div class="panel"><div class="panel-h"><h3>Ingest a document</h3><div class="sub">Paste a standard-format document and format below</div></div>
+    <div class="panel-b">
+      <div class="grid g-2">
+        <div class="fld"><label>Format</label><select id="ing-fmt" onchange="loadIngestExample()">
+          <option value="ocsf">OCSF · Compliance Finding</option>
+          <option value="sarif">SARIF · Static analysis</option>
+          <option value="cyclonedx">CycloneDX · SBOM / VEX</option>
+          <option value="spdx">SPDX · SBOM</option>
+          <option value="intoto">in-toto / SLSA · Provenance</option>
+          <option value="stix">STIX · Threat intel</option>
+          <option value="sigstore">Sigstore · Signed attestation</option>
+        </select></div>
+        <div class="fld" style="display:flex;align-items:flex-end"><button class="btn" onclick="loadIngestExample()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>Load example</button></div>
+      </div>
+      <div class="fld"><label>Document (JSON)</label><textarea id="ing-body" rows="10" style="font-family:var(--mono);font-size:12px" placeholder="Paste an OCSF event, SARIF log, CycloneDX/SPDX BOM, in-toto statement, STIX bundle, or Sigstore bundle…"></textarea></div>
+      <button class="btn primary" onclick="runIngest()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7'/><path d='M3 12h5l2 3h4l2-3h5'/></svg>Ingest</button>
+      <div id="ing-result" style="margin-top:14px"></div>
+    </div></div>`;
+  document.getElementById("ing-body").value=JSON.stringify(INGEST_EXAMPLES.ocsf,null,2);
+};
+function loadIngestExample(){
+  const fmt=document.getElementById("ing-fmt").value;
+  document.getElementById("ing-body").value=JSON.stringify(INGEST_EXAMPLES[fmt],null,2);
+}
+async function runIngest(){
+  const fmt=document.getElementById("ing-fmt").value;
+  const box=document.getElementById("ing-result");
+  let payload;
+  try{payload=JSON.parse(document.getElementById("ing-body").value);}
+  catch(e){toast("Not valid JSON: "+e.message,"warn");return;}
+  box.innerHTML=`<div class="loading"><span class="spin"></span> Ingesting…</div>`;
+  if(STATE.demo){
+    setTimeout(()=>{
+      const r={format:fmt,evidences:1,planned:1,ingested:1,skipped:0,observed_only:0};
+      box.innerHTML=ingestResultHtml(r);
+      toast("Ingested (demo) — turn demo off to write to your instance","pass");
+    },500);
+    return;
+  }
+  try{
+    const r=await apiPOST(withTenant("/v1/evidence/ingest")+"&format="+encodeURIComponent(fmt),payload);
+    box.innerHTML=ingestResultHtml(r);
+    toast(r.ingested?`${r.ingested} finding(s) ingested`:"Ingested — no control verdict from this document","pass");
+  }catch(e){box.innerHTML=`<div class="note" style="border-left-color:var(--fail)">Ingest failed: ${esc(e.message||e)}</div>`;}
+}
+function ingestResultHtml(r){
+  return `<div class="readouts">
+    <div class="ro"><div class="k">Evidences</div><div class="v num">${r.evidences}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Ingested</div><div class="v num">${r.ingested}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--steel)"></span>Skipped (duplicate)</div><div class="v num">${r.skipped}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Observed only</div><div class="v num">${r.observed_only}</div></div>
+  </div>
+  <div class="note">${r.observed_only?`${r.observed_only} item(s) carried context (provenance, signatures, threat intel) with no control verdict to persist.`:"Every observed item produced a control verdict."}</div>`;
+}
 
 /* ---------- THREAT INTEL ---------- */
 RENDER.threat = async function(){
@@ -2773,11 +2955,14 @@ const ICON={
   vendors:'<path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-3"/>',
   trustgraph:'<circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>',
   trusttelemetry:'<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',
+  postureasof:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  agentlog:'<rect x="2" y="8" width="8" height="8" rx="4"/><rect x="14" y="8" width="8" height="8" rx="4"/><path d="M9 12h6"/>',
+  evidenceingest:'<path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7"/><path d="M3 12h5l2 3h4l2-3h5"/>',
 };
 const GROUPS=[
-  ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"]]],
-  ["Compliance as Code",[["policy","Policies"],["enforcement","Enforcement"]]],
-  ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"]]],
+  ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"],["postureasof","As-of / Timeline"]]],
+  ["Compliance as Code",[["policy","Policies"],["enforcement","Enforcement"],["agentlog","Agent Log"]]],
+  ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"],["evidenceingest","Standards Ingest"]]],
   ["Intelligence",[["response","Response"],["inventory","AI Inventory"],["threat","Threat Intel"]]],
   ["Risk & Vendors",[["risks","Risk Register"],["vendors","Vendors"],["trusttelemetry","Trust Telemetry"],["trustgraph","Trust Graph"]]],
 ];
