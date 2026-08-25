@@ -183,6 +183,51 @@ The internal lexicon stays the pivot everything normalises into.
 
 ---
 
+## L3.5 — Capability surface: coverage as content · **Implemented**
+
+**The problem.** Every connector used to decide which controls it supported by branching
+on `control_id` inside `collect_telemetry`, and every control needed a hand-written
+evaluator in `app/policy/engine.py` plus a `CROSSWALK` entry in `app/frameworks.py`.
+Adding one control meant three code edits across three files, so coverage scaled with
+engineering headcount. It stalled at **10 machine-verifiable controls against a
+1,196-control catalog** — 0.8%.
+
+**The inversion.** Connectors no longer know that controls exist.
+
+- `app/connectors/capabilities.py` — a connector declares **probes**: reusable telemetry
+  collectors bound to a vendor-neutral *asset type* (`object_storage`, `managed_database`,
+  `compute_instance`, `network_ruleset`, `cloud_account`, …), each advertising the
+  normalized **signals** it emits. Declarations are class-level data, so a capability
+  surface is readable with no credentials present.
+- `app/data/control_checks.json` — a control is data: the asset type it applies to, the
+  signals it needs, a boolean expression over them, its severity, and its own framework
+  crosswalk. It never names a vendor.
+- The resolver joins the two, picking the narrowest probe that covers a check's
+  requirement so a one-signal control doesn't trigger a wide, expensive probe.
+
+Expressions run through the existing sandboxed evaluator in
+`app/policy_as_code/evaluator.py` — no `eval()`, no dunder access — so check content stays
+data rather than executable code.
+
+**Why it compounds.** Checks merge into the two registries the platform already reads
+(`CONTROL_CATALOG` and `CROSSWALK`), so one JSON entry reaches assessment, coverage, the
+audit control list and OSCAL export with no further wiring. Twelve AWS probes emitting 55
+signals now satisfy **38 controls**; taking machine-verifiable coverage from 10 to 48.
+The same 38 checks required no edit at all when Azure and GCP declared probes — Azure's
+three probes immediately satisfied 6 of them and GCP's single probe satisfied 4, two of
+which are now verified identically across all three clouds from a single definition.
+
+**Tri-state honesty.** A missing signal returns `NOT_APPLICABLE`, never `FAIL`. "We could
+not observe this" and "we observed it and it is wrong" are different claims, and every
+cloud call is individually guarded so a missing IAM permission degrades to unobserved
+rather than fabricating a finding.
+
+**The guardrail.** `tests/test_capability_surface.py::test_no_orphan_checks` fails the
+build if the pack ever declares a control no connector can satisfy — precisely the drift
+that let the old `control_bindings.json` reference six connectors that did not exist.
+`GET /coverage/automation` and `GET /connectors/capabilities` expose the same metric at
+runtime.
+
 ## L4 — Assertion: compliance as queryable state · **Implemented (the standout)**
 
 **The layer.** Compliance becomes a queryable, continuously-validated state with

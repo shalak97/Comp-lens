@@ -184,6 +184,51 @@ for _cid, (_title, _domain, _sev, _field) in _AI_CONTROLS.items():
                              "evaluator": _flag(_field, _title)}
 
 
+# ── declarative checks (app/data/control_checks.json) ──
+# Controls defined as data are merged into the same catalog the hand-written
+# ones live in, wrapped so they satisfy the identical Evaluator signature. That
+# means every existing consumer — RuleEngine, the coverage endpoint, the audit
+# control list, OSCAL export — picks them up with no further wiring, and a new
+# control ships as a single JSON entry rather than three code edits.
+def _declarative_evaluator(check):
+    def _eval(t: dict[str, Any]) -> tuple[ControlStatus, str]:
+        from app.services.control_checks import evaluate as _evaluate
+        status, reason, _severity = _evaluate(check, t)
+        return status, reason
+    return _eval
+
+
+def _load_declarative_controls() -> int:
+    import logging
+
+    from app.services.control_checks import all_checks
+
+    log = logging.getLogger(__name__)
+    added = 0
+    for cid, check in all_checks().items():
+        if cid in CONTROL_CATALOG:
+            # A hand-written control always wins: the pack extends the catalog,
+            # it never silently redefines behaviour something already depends on.
+            log.warning(
+                "declarative check %s shadows a built-in control; keeping built-in", cid)
+            continue
+        CONTROL_CATALOG[cid] = {
+            "title": check.title,
+            "domain": check.domain,
+            "severity": check.severity,
+            "evaluator": _declarative_evaluator(check),
+            "declarative": True,
+            "asset_type": check.asset_type,
+            "plane": check.plane,
+            "remediation": check.remediation,
+        }
+        added += 1
+    return added
+
+
+_load_declarative_controls()
+
+
 class RuleEngine:
     """Built-in deterministic rule catalog (default)."""
 

@@ -1024,6 +1024,49 @@ def framework_coverage(framework: str, tenant_id: str = "default",
     return _AttestationService(db).coverage(tenant_id, framework)
 
 
+# ── machine-verifiable coverage (capability surface × declarative checks) ──
+@app.get("/coverage/automation", tags=["catalog"])
+def automation_coverage(_: Principal = Depends(require_principal)) -> dict:
+    """Which declarative controls can actually be machine-verified, and by whom.
+
+    This is the platform's core health metric: a control the catalog advertises
+    but no connector can observe is a promise that will break during an audit.
+    """
+    from app.services.control_checks import coverage_matrix
+
+    return coverage_matrix()
+
+
+@app.get("/connectors/capabilities", tags=["connectors"])
+def connector_capabilities(source_system: str | None = None,
+                           _: Principal = Depends(require_principal)) -> dict:
+    """The probes each connector declares, and the controls they unlock.
+
+    Reads class-level declarations only, so it works without credentials for
+    any connector — including ones this deployment has not configured.
+    """
+    from app.services.control_checks import all_checks
+
+    surfaces = registry.surfaces()
+    if source_system:
+        key = source_system.upper()
+        surfaces = {k: v for k, v in surfaces.items() if k == key}
+        if not surfaces:
+            raise HTTPException(status_code=404,
+                                detail=f"No capability surface for '{source_system}'.")
+
+    checks = all_checks()
+    out = []
+    for name, surface in sorted(surfaces.items()):
+        satisfied = sorted(
+            cid for cid, c in checks.items()
+            if surface.resolve(c.asset_type, c.requires) is not None)
+        out.append({**surface.as_dict(),
+                    "controls_satisfied": satisfied,
+                    "controls_satisfied_count": len(satisfied)})
+    return {"connectors": out, "total_checks": len(checks)}
+
+
 # ── evidence graph (LLM-grounded document → concept → control mindmap) ──
 
 
