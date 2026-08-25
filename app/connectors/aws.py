@@ -29,6 +29,7 @@ observed this and it is broken".
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -413,16 +414,12 @@ class AWSConnector(BaseConnector):
             blocked = False
 
         versioning = None
-        try:
+        with contextlib.suppress(Exception):
             versioning = s3.get_bucket_versioning(Bucket=bucket).get("Status") == "Enabled"
-        except Exception:  # noqa: BLE001
-            pass
 
         access_logging = None
-        try:
+        with contextlib.suppress(Exception):
             access_logging = bool(s3.get_bucket_logging(Bucket=bucket).get("LoggingEnabled"))
-        except Exception:  # noqa: BLE001
-            pass
 
         lifecycle = None
         try:
@@ -603,15 +600,11 @@ class AWSConnector(BaseConnector):
             raise ConnectorError("KMS control requires 'key_id' (or asset_id).")
         kms = self._session.client("kms")
         enabled = None
-        try:
+        with contextlib.suppress(Exception):
             enabled = bool(kms.describe_key(KeyId=key_id)["KeyMetadata"].get("Enabled"))
-        except Exception:  # noqa: BLE001
-            pass
         rotation = None
-        try:
+        with contextlib.suppress(Exception):
             rotation = bool(kms.get_key_rotation_status(KeyId=key_id).get("KeyRotationEnabled"))
-        except Exception:  # noqa: BLE001
-            pass
         return {"key_rotation_enabled": rotation, "key_enabled": enabled, "owner": "secops-team"}
 
     # ── account-wide security services ──

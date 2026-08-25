@@ -1057,7 +1057,7 @@ def connector_capabilities(source_system: str | None = None,
 
     checks = all_checks()
     out = []
-    for name, surface in sorted(surfaces.items()):
+    for _name, surface in sorted(surfaces.items()):
         satisfied = sorted(
             cid for cid, c in checks.items()
             if surface.resolve(c.asset_type, c.requires) is not None)

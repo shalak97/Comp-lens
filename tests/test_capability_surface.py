@@ -204,6 +204,10 @@ class _FakeConnector(BaseConnector):
               signals=("encryption_at_rest", "public_access_blocked")),
         Probe(probe_id="tenant", asset_type="fake_tenant", plane="configuration",
               requires_asset=False, signals=("logging_enabled",)),
+        # A real asset type, so the dispatch path can be exercised end to end
+        # against an actual check from the pack.
+        Probe(probe_id="bucket", asset_type="object_storage", plane="data_protection",
+              signals=("kms_encrypted",)),
     )
 
     def __init__(self):
@@ -218,7 +222,7 @@ class _FakeConnector(BaseConnector):
     def run_probe(self, probe_id, asset_id, params):
         self.calls.append((probe_id, asset_id))
         return {"encryption_at_rest": True, "public_access_blocked": True,
-                "logging_enabled": True}
+                "logging_enabled": True, "kms_encrypted": True}
 
 
 def test_unknown_control_is_rejected_clearly():
@@ -236,10 +240,20 @@ def test_control_with_no_matching_probe_is_rejected():
 
 
 def test_missing_asset_id_is_rejected_before_any_api_call():
+    """Input validation must happen before the probe fires, not inside it."""
     c = _FakeConnector()
+    # SC-28-OBJSTORE-KMS resolves to the fake object_storage probe, which needs
+    # an asset — so this exercises the asset check, not the resolution failure.
     with pytest.raises(ConnectorError, match="requires an asset_id"):
-        c.collect_telemetry("SC-28-BLOCKSTORE", None, {})
+        c.collect_telemetry("SC-28-OBJSTORE-KMS", None, {})
     assert c.calls == [], "connector must not probe before validating its input"
+
+
+def test_resolved_probe_is_actually_invoked():
+    c = _FakeConnector()
+    telemetry = c.collect_telemetry("SC-28-OBJSTORE-KMS", "bucket-1", {})
+    assert c.calls == [("bucket", "bucket-1")]
+    assert telemetry["kms_encrypted"] is True
 
 
 def test_aws_legacy_control_ids_still_use_handwritten_path():
@@ -269,17 +283,27 @@ def test_registry_exposes_surfaces_without_credentials():
 
 
 def test_declarative_controls_reach_the_policy_catalog():
-    """One JSON entry must surface everywhere the catalog is read."""
-    from app.policy.engine import CONTROL_CATALOG, policy_engine
+    """One JSON entry must surface everywhere the catalog is read.
+
+    Instantiates RuleEngine directly rather than using the module-level
+    `policy_engine` singleton: that singleton can be left pointing at an
+    OPAEngine by tests elsewhere that reload the module under POLICY_ENGINE=opa,
+    and what is under test here is the built-in catalog wiring, not which engine
+    the process happens to have selected.
+    """
+    from app.policy.engine import CONTROL_CATALOG, RuleEngine
 
     assert "IA-2-ROOT-MFA" in CONTROL_CATALOG
     meta = CONTROL_CATALOG["IA-2-ROOT-MFA"]
     assert meta["declarative"] is True
     assert meta["severity"] is Severity.CRITICAL
 
-    status, reason, sev = policy_engine.evaluate("IA-2-ROOT-MFA", {"root_mfa_enabled": False})
+    status, _reason, sev = RuleEngine().evaluate("IA-2-ROOT-MFA", {"root_mfa_enabled": False})
     assert status is ControlStatus.FAIL
     assert sev is Severity.CRITICAL
+
+    status, _reason, _sev = RuleEngine().evaluate("IA-2-ROOT-MFA", {"root_mfa_enabled": True})
+    assert status is ControlStatus.PASS
 
 
 def test_declarative_crosswalk_reaches_frameworks():
