@@ -136,6 +136,46 @@ class AssessmentService:
             remediation = {"summary": f"Remediate control {control_id}",
                            "detail": reason, "requires_approval": True}
 
+        # Durable-store the evidence artifact BEFORE any DB write, not after.
+        #
+        # The DB row for EvidenceMeta records a hash that promises "the
+        # artifact behind this hash exists in the store". Writing that promise
+        # to the DB first and the artifact second means a store outage
+        # (S3 down, disk full, retries exhausted) leaves a committed,
+        # unrecoverable DB row whose backing artifact was never written — and
+        # IntegrityService.verify() reports that exact state as
+        # "missing_in_store", identical to what deliberate tampering looks
+        # like. There is no way for an operator to tell the two apart after
+        # the fact. Doing the store write first closes that hole: if it fails,
+        # the function raises before touching the DB, so nothing is ever
+        # committed that the store can't back up, and a retry re-attempts the
+        # store write from scratch (the idempotency check above still runs
+        # first, so a retry after a real commit never re-stores).
+        #
+        # The residual failure — store succeeds, then the DB write fails for
+        # an unrelated reason (disk full, lost connection) — leaves an
+        # artifact with no DB row pointing at it. That is a materially
+        # different failure than the one above: verify() only walks EvidenceMeta
+        # rows and checks the store for each one, so an artifact nothing
+        # references is invisible to it — wasted storage, never a false
+        # tampering signal. Same trade-off applies to the ordinary idempotency
+        # race below: the losing writer's store() call still lands, orphaned
+        # but harmless for the same reason.
+        ev_uri: str | None = None
+        th: str | None = None
+        record_hash_value: str | None = None
+        if telemetry is not None:
+            th = telemetry_hash(telemetry)
+            from app.evidence import record_hash as _rec_hash
+            record_hash_value = _rec_hash(
+                evidence_id=evidence_id, tenant_id=tenant_id, run_id=run_id,
+                control_id=control_id, framework=framework,
+                status=status.value, telemetry_hash_value=th)
+            ev_uri = evidence_store.store(
+                evidence_id=evidence_id, tenant_id=tenant_id, run_id=run_id,
+                control_id=control_id, framework=framework,
+                status=status.value, telemetry=telemetry)
+
         from app.services.framework_versions import version_of
         finding = Finding(
             finding_id=str(uuid.uuid4()), tenant_id=tenant_id, run_id=run_id, framework=framework,
@@ -145,20 +185,14 @@ class AssessmentService:
             remediation=remediation, evidence_ids=[evidence_id] if telemetry is not None else [],
         )
 
-        ev_meta = None
         try:
             with self.db.begin_nested():
                 if telemetry is not None:
-                    th = telemetry_hash(telemetry)
-                    from app.evidence import record_hash as _rec_hash
                     ev_meta = EvidenceMeta(
                         evidence_id=evidence_id, tenant_id=tenant_id, run_id=run_id,
                         control_id=control_id, framework=framework,
-                        telemetry_hash=th,
-                        record_hash=_rec_hash(evidence_id=evidence_id, tenant_id=tenant_id,
-                                              run_id=run_id, control_id=control_id, framework=framework,
-                                              status=status.value, telemetry_hash_value=th),
-                        status=status, object_uri=None,
+                        telemetry_hash=th, record_hash=record_hash_value,
+                        status=status, object_uri=ev_uri,
                     )
                     self.db.add(ev_meta)
                 self.db.add(finding)
@@ -172,13 +206,6 @@ class AssessmentService:
             if winner:
                 return winner
             raise
-
-        if telemetry is not None:
-            uri = evidence_store.store(evidence_id=evidence_id, tenant_id=tenant_id, run_id=run_id,
-                                       control_id=control_id, framework=framework,
-                                       status=status.value, telemetry=telemetry)
-            if ev_meta is not None:
-                ev_meta.object_uri = uri  # still session-attached; no extra query
 
         try:
             from app.notifications import notify_finding
