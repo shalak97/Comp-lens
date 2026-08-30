@@ -34,12 +34,40 @@ CROSSWALK: dict[str, dict[str, list[str]]] = {
 FRAMEWORKS = ["NIST", "ISO27001", "SOC2", "CIS", "ISO42001", "NIST_AI_RMF", "EU_AI_ACT"]
 
 
+_MERGED = False
+
+
+def _merge_declarative_crosswalk() -> None:
+    """Fold the declarative check pack's crosswalk into CROSSWALK.
+
+    Each check in app/data/control_checks.json carries its own framework
+    references, so adding a control is one edit in one file rather than a
+    connector change plus an evaluator plus a crosswalk entry here. Merged
+    lazily and once, on first use, to avoid an import cycle at module load.
+
+    Hand-written entries above always win — the pack extends the crosswalk, it
+    never redefines a mapping something already depends on.
+    """
+    global _MERGED
+    if _MERGED:
+        return
+    _MERGED = True
+    try:
+        from app.services.control_checks import all_checks
+    except Exception:  # noqa: BLE001  — never let content break the core mapping
+        return
+    for cid, check in all_checks().items():
+        if cid not in CROSSWALK and check.crosswalk:
+            CROSSWALK[cid] = {k: list(v) for k, v in check.crosswalk.items()}
+
+
 def frameworks() -> list[str]:
     return list(FRAMEWORKS)
 
 
 def controls_for_framework(framework: str) -> list[str]:
     """Internal control_ids that map to a given framework."""
+    _merge_declarative_crosswalk()
     fw = framework.upper()
     if fw == "ALL":
         return list(CROSSWALK.keys())
@@ -47,4 +75,5 @@ def controls_for_framework(framework: str) -> list[str]:
 
 
 def crosswalk_for(control_id: str) -> dict[str, list[str]]:
+    _merge_declarative_crosswalk()
     return CROSSWALK.get(control_id, {})

@@ -18,6 +18,7 @@ import requests
 
 from app.config import settings
 from app.connectors.base import BaseConnector, ConnectorError
+from app.connectors.capabilities import Probe
 
 logger = logging.getLogger(__name__)
 
@@ -28,31 +29,82 @@ logger = logging.getLogger(__name__)
 class AzureConnector(BaseConnector):
     source_system = "AZURE"
 
+    # Capability surface. These probes emit the same normalized signal names as
+    # the AWS probes, which is what lets a single declarative check
+    # ("object storage must require TLS") run against either cloud with no
+    # change to the check pack.
+    PROBES = (
+        Probe(
+            probe_id="entra_user",
+            asset_type="iam_user",
+            plane="identity_access",
+            asset_param="user",
+            description="Entra ID principal authentication posture.",
+            signals=("mfa_enabled", "mfa_enforced", "principal", "owner"),
+        ),
+        Probe(
+            probe_id="storage_account",
+            asset_type="object_storage",
+            plane="data_protection",
+            asset_param="storage_account",
+            description="Azure Storage account protection posture.",
+            signals=(
+                "encryption_at_rest",
+                "kms_encrypted",
+                "public_access_blocked",
+                "tls_required",
+                "versioning_enabled",
+                "asset",
+                "owner",
+            ),
+        ),
+        Probe(
+            probe_id="sql_database",
+            asset_type="managed_database",
+            plane="data_protection",
+            asset_param="sql_server",
+            description="Azure SQL server protection posture.",
+            signals=(
+                "encryption_at_rest",
+                "publicly_accessible",
+                "auto_minor_version_upgrade",
+                "owner",
+            ),
+        ),
+    )
+
+    #: Azure resource probes need an ARM path, not just a name.
+    _ARM_API = "2023-01-01"
+
     def __init__(self) -> None:
         if not (settings.azure_tenant_id and settings.azure_client_id and settings.azure_client_secret):
             raise ConnectorError("AZURE_TENANT_ID / CLIENT_ID / CLIENT_SECRET required.")
-        self._token: str | None = None
-        self._token_exp: float = 0.0
+        # Graph and ARM are separate audiences, so tokens are cached per scope.
+        self._tokens: dict[str, tuple[str, float]] = {}
 
-    def _acquire_graph_token(self) -> str:
+    def _acquire_token(self, scope: str) -> str:
         import time
+        cached = self._tokens.get(scope)
         # refresh if missing or within 60s of expiry
-        if self._token and time.time() < self._token_exp - 60:
-            return self._token
+        if cached and time.time() < cached[1] - 60:
+            return cached[0]
         url = f"https://login.microsoftonline.com/{settings.azure_tenant_id}/oauth2/v2.0/token"
         data = {
             "client_id": settings.azure_client_id,
             "client_secret": settings.azure_client_secret,
-            "scope": "https://graph.microsoft.com/.default",
+            "scope": scope,
             "grant_type": "client_credentials",
         }
         r = requests.post(url, data=data, timeout=settings.request_timeout_seconds)
         if r.status_code >= 400:
             raise ConnectorError(f"Azure token error {r.status_code}: {r.text[:200]}")
         body = r.json()
-        self._token = body["access_token"]
-        self._token_exp = time.time() + int(body.get("expires_in", 3600))
-        return self._token
+        token = body["access_token"]
+        self._tokens[scope] = (token, time.time() + int(body.get("expires_in", 3600)))
+        return token
+
+    def _acquire_graph_token(self) -> str:
+        return self._acquire_token("https://graph.microsoft.com/.default")
 
     def _graph(self, path: str) -> Any:
         r = requests.get(
@@ -62,6 +114,23 @@ class AzureConnector(BaseConnector):
         )
         if r.status_code >= 400:
             raise ConnectorError(f"Graph API {r.status_code}: {r.text[:200]}")
+        return r.json()
+
+    def _arm(self, resource_path: str, api_version: str | None = None) -> Any:
+        """GET an Azure Resource Manager resource under the configured subscription."""
+        if not settings.azure_subscription_id:
+            raise ConnectorError("AZURE_SUBSCRIPTION_ID is required for resource controls.")
+        token = self._acquire_token("https://management.azure.com/.default")
+        url = (f"https://management.azure.com/subscriptions/"
+               f"{settings.azure_subscription_id}{resource_path}")
+        r = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            params={"api-version": api_version or self._ARM_API},
+            timeout=settings.request_timeout_seconds,
+        )
+        if r.status_code >= 400:
+            raise ConnectorError(f"Azure ARM {r.status_code}: {r.text[:200]}")
         return r.json()
 
     def healthcheck(self) -> bool:
@@ -77,16 +146,80 @@ class AzureConnector(BaseConnector):
         if control_id == "AC-2-7":
             if not user_ref:
                 raise ConnectorError("Azure AC-2-7 requires asset_id (user id/UPN).")
-            # Per-user MFA registration via reports API (needs AuditLog.Read.All)
-            data = self._graph(
-                f"/reports/authenticationMethods/userRegistrationDetails/{user_ref}"
-            )
-            return {
-                "mfa_enforced": bool(data.get("isMfaRegistered")),
-                "principal": user_ref,
-                "owner": "identity-team",
-            }
-        raise ConnectorError(f"Azure connector does not support control {control_id}")
+            return self._entra_user_telemetry(user_ref)
+        return self.collect_via_capability(control_id, asset_id, params)
+
+    def run_probe(self, probe_id, asset_id, params) -> dict[str, Any]:
+        probe = self.surface().probes.get(probe_id)
+        target = asset_id or (params.get(probe.asset_param) if probe and probe.asset_param else None)
+        if probe_id == "entra_user":
+            return self._entra_user_telemetry(target)
+        if probe_id == "storage_account":
+            return self._storage_account_telemetry(target, params)
+        if probe_id == "sql_database":
+            return self._sql_server_telemetry(target, params)
+        raise ConnectorError(f"Azure connector has no handler for probe '{probe_id}'.")
+
+    def _entra_user_telemetry(self, user_ref: str | None) -> dict[str, Any]:
+        if not user_ref:
+            raise ConnectorError("Azure identity control requires asset_id (user id/UPN).")
+        # Per-user MFA registration via reports API (needs AuditLog.Read.All)
+        data = self._graph(
+            f"/reports/authenticationMethods/userRegistrationDetails/{user_ref}"
+        )
+        registered = bool(data.get("isMfaRegistered"))
+        return {
+            "mfa_enforced": registered,
+            "mfa_enabled": registered,
+            "principal": user_ref,
+            "owner": "identity-team",
+        }
+
+    @staticmethod
+    def _resource_group(params: dict[str, Any]) -> str:
+        rg = params.get("resource_group")
+        if not rg:
+            raise ConnectorError(
+                "Azure resource controls require a 'resource_group' param.")
+        return rg
+
+    def _storage_account_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
+        if not name:
+            raise ConnectorError("Azure storage control requires asset_id (account name).")
+        rg = self._resource_group(params)
+        doc = self._arm(
+            f"/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}")
+        props = doc.get("properties", {})
+        enc = props.get("encryption", {})
+        key_source = enc.get("keySource")
+        return {
+            # Azure Storage is always encrypted at rest; the meaningful
+            # distinction is whether the key is customer-managed.
+            "encryption_at_rest": True,
+            "kms_encrypted": key_source == "Microsoft.Keyvault",
+            "public_access_blocked": props.get("allowBlobPublicAccess") is False,
+            "tls_required": bool(props.get("supportsHttpsTrafficOnly")),
+            "versioning_enabled": bool(
+                props.get("isVersioningEnabled", enc.get("isVersioningEnabled"))),
+            "asset": name,
+            "owner": "cloud-platform-team",
+        }
+
+    def _sql_server_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
+        if not name:
+            raise ConnectorError("Azure SQL control requires asset_id (server name).")
+        rg = self._resource_group(params)
+        doc = self._arm(
+            f"/resourceGroups/{rg}/providers/Microsoft.Sql/servers/{name}",
+            api_version="2021-11-01")
+        props = doc.get("properties", {})
+        return {
+            # Azure SQL enables Transparent Data Encryption by default.
+            "encryption_at_rest": True,
+            "publicly_accessible": props.get("publicNetworkAccess") == "Enabled",
+            "auto_minor_version_upgrade": True,  # platform-managed on Azure SQL
+            "owner": "data-platform-team",
+        }
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -94,6 +227,26 @@ class AzureConnector(BaseConnector):
 # ──────────────────────────────────────────────────────────────────────────
 class GCPConnector(BaseConnector):
     source_system = "GCP"
+
+    PROBES = (
+        Probe(
+            probe_id="gcs_bucket",
+            asset_type="object_storage",
+            plane="data_protection",
+            asset_param="bucket",
+            description="Cloud Storage bucket protection posture.",
+            signals=(
+                "encryption_at_rest",
+                "kms_encrypted",
+                "public_access_blocked",
+                "versioning_enabled",
+                "access_logging_enabled",
+                "lifecycle_configured",
+                "asset",
+                "owner",
+            ),
+        ),
+    )
 
     def __init__(self) -> None:
         if not settings.gcp_project_id:
@@ -112,26 +265,38 @@ class GCPConnector(BaseConnector):
 
     def collect_telemetry(self, control_id, asset_id, params) -> dict[str, Any]:
         if control_id in ("SC-28", "SC-7"):
-            from google.cloud import storage
+            return self._gcs_bucket_telemetry(asset_id or params.get("bucket"))
+        return self.collect_via_capability(control_id, asset_id, params)
 
-            bucket_name = asset_id or params.get("bucket")
-            if not bucket_name:
-                raise ConnectorError("GCP storage control requires asset_id (bucket).")
-            client = storage.Client(project=self._project)
-            bucket = client.get_bucket(bucket_name)
-            # uniform bucket-level access + default encryption (always on in GCS)
-            iam_cfg = bucket.iam_configuration
-            public = False
-            for member in bucket.get_iam_policy(requested_policy_version=3).bindings:
-                if "allUsers" in member.get("members", []) or "allAuthenticatedUsers" in member.get("members", []):
-                    public = True
-            return {
-                "encryption_at_rest": True,  # GCS encrypts at rest by default
-                "public_access_blocked": (not public) and bool(iam_cfg.uniform_bucket_level_access_enabled),
-                "asset": bucket_name,
-                "owner": "cloud-platform-team",
-            }
-        raise ConnectorError(f"GCP connector does not support control {control_id}")
+    def run_probe(self, probe_id, asset_id, params) -> dict[str, Any]:
+        if probe_id == "gcs_bucket":
+            return self._gcs_bucket_telemetry(asset_id or params.get("bucket"))
+        raise ConnectorError(f"GCP connector has no handler for probe '{probe_id}'.")
+
+    def _gcs_bucket_telemetry(self, bucket_name: str | None) -> dict[str, Any]:
+        from google.cloud import storage
+
+        if not bucket_name:
+            raise ConnectorError("GCP storage control requires asset_id (bucket).")
+        client = storage.Client(project=self._project)
+        bucket = client.get_bucket(bucket_name)
+        # uniform bucket-level access + default encryption (always on in GCS)
+        iam_cfg = bucket.iam_configuration
+        public = False
+        for member in bucket.get_iam_policy(requested_policy_version=3).bindings:
+            if "allUsers" in member.get("members", []) or "allAuthenticatedUsers" in member.get("members", []):
+                public = True
+        return {
+            "encryption_at_rest": True,  # GCS encrypts at rest by default
+            "public_access_blocked": (not public) and bool(iam_cfg.uniform_bucket_level_access_enabled),
+            "asset": bucket_name,
+            "owner": "cloud-platform-team",
+            # A customer-managed default KMS key is the GCS analogue of SSE-KMS.
+            "kms_encrypted": bool(getattr(bucket, "default_kms_key_name", None)),
+            "versioning_enabled": bool(getattr(bucket, "versioning_enabled", False)),
+            "access_logging_enabled": bool(getattr(bucket, "logging", None)),
+            "lifecycle_configured": bool(list(getattr(bucket, "lifecycle_rules", []) or [])),
+        }
 
 
 # ──────────────────────────────────────────────────────────────────────────

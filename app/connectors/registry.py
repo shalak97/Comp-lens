@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from app.connectors.base import BaseConnector, ConnectorError
 
@@ -69,6 +70,27 @@ class ConnectorRegistry:
 
     def supported(self) -> list[str]:
         return sorted(self._classes.keys())
+
+    # ── capability surfaces ──
+    # Read from the connector *class*, never an instance: surfaces are static
+    # declarations, and instantiating a connector requires live credentials the
+    # process may not have. This is what lets coverage be computed offline.
+    def surface(self, source_system: str):
+        cls = self._classes.get(source_system.upper())
+        return cls.surface() if cls is not None else None
+
+    def surfaces(self) -> dict[str, Any]:
+        """Every registered connector's capability surface, keyed by id.
+
+        Connectors with no declared probes are omitted — they're on the legacy
+        hardcoded path and contribute nothing to declarative coverage.
+        """
+        out = {}
+        for name, cls in self._classes.items():
+            surface = cls.surface()
+            if surface.probes:
+                out[name] = surface
+        return out
 
     def get(self, source_system: str) -> BaseConnector:
         key = source_system.upper()

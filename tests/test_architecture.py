@@ -82,12 +82,32 @@ def test_summary_query_count_constant_with_posture(client):
 
 
 # ── OPA policy engine ──
-def test_opa_engine_maps_decision(monkeypatch):
-    monkeypatch.setenv("POLICY_ENGINE", "opa")
+@pytest.fixture
+def opa_engine_env(monkeypatch):
+    """Reload config+engine under POLICY_ENGINE=opa, then put them back.
+
+    Reloading app.policy.engine rebinds its module-level `policy_engine`
+    singleton. monkeypatch restores the env var but cannot undo the reload, so
+    without the teardown below every later test in the session would read an
+    OPAEngine pointed at an unreachable localhost and get ERROR from any
+    evaluate() call.
+    """
     import app.config as cfg
-    importlib.reload(cfg)
     import app.policy.engine as pe
+
+    monkeypatch.setenv("POLICY_ENGINE", "opa")
+    importlib.reload(cfg)
     importlib.reload(pe)
+    try:
+        yield pe
+    finally:
+        monkeypatch.delenv("POLICY_ENGINE", raising=False)
+        importlib.reload(cfg)
+        importlib.reload(pe)
+
+
+def test_opa_engine_maps_decision(monkeypatch, opa_engine_env):
+    pe = opa_engine_env
     eng = pe.OPAEngine()
     class R:
         status_code = 200
@@ -99,17 +119,21 @@ def test_opa_engine_maps_decision(monkeypatch):
     assert status.value == "fail" and reason == "from OPA"
 
 
-def test_opa_engine_handles_unreachable(monkeypatch):
-    monkeypatch.setenv("POLICY_ENGINE", "opa")
-    import app.config as cfg
-    importlib.reload(cfg)
-    import app.policy.engine as pe
-    importlib.reload(pe)
+def test_opa_engine_handles_unreachable(monkeypatch, opa_engine_env):
+    pe = opa_engine_env
     eng = pe.OPAEngine()
     def boom(*a, **k): raise ConnectionError("no opa")
     monkeypatch.setattr("requests.post", boom)
     status, reason, sev = eng.evaluate("SC-7", {})
     assert status.value == "error"  # never crashes
+
+
+def test_policy_engine_singleton_is_restored_after_opa_tests():
+    """Guard the leak the fixture above closes: a reload must not strand the
+    process on an OPA engine for every test that follows."""
+    import app.policy.engine as pe
+
+    assert isinstance(pe.policy_engine, pe.RuleEngine)
 
 
 # ── Ingestion ──

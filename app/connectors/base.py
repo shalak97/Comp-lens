@@ -23,6 +23,8 @@ import abc
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.connectors.capabilities import CapabilitySurface, Probe, build_surface
+
 
 @dataclass
 class Asset:
@@ -41,6 +43,70 @@ class ConnectorError(RuntimeError):
 class BaseConnector(abc.ABC):
     #: short uppercase id, e.g. "AWS", "OKTA", "GITHUB"
     source_system: str = "BASE"
+
+    #: Capability surface — the probes this connector can run, declared as data.
+    #: Connectors that still use a hardcoded control_id if-chain leave this
+    #: empty and keep working unchanged; declaring probes is what opts a
+    #: connector into declarative (data-driven) control coverage.
+    PROBES: tuple[Probe, ...] = ()
+
+    # ── capability surface ──
+    @classmethod
+    def surface(cls) -> CapabilitySurface:
+        """This connector's capability surface.
+
+        Built from the class-level PROBES declaration, so it can be inspected
+        without instantiating the connector — which matters because
+        instantiation requires live credentials.
+        """
+        cached = cls.__dict__.get("_surface_cache")
+        if cached is None:
+            cached = build_surface(cls.source_system, cls.PROBES)
+            cls._surface_cache = cached
+        return cached
+
+    def run_probe(
+        self, probe_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Execute one declared probe and return its normalized signals.
+
+        Connectors that declare PROBES must implement this. The default exists
+        so legacy if-chain connectors don't have to.
+        """
+        raise ConnectorError(
+            f"{self.source_system} connector does not implement probe '{probe_id}'.")
+
+    def collect_via_capability(
+        self, control_id: str, asset_id: str | None, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Serve a control from the declarative check pack via a probe.
+
+        This is the inverted path: look up what the control *needs* (asset type
+        + signals), find a local probe that emits them, run it. The connector
+        never has to know the control exists.
+
+        Call this as the fallthrough at the end of `collect_telemetry` so
+        hand-written control handling still takes precedence where it exists.
+        """
+        from app.services import control_checks
+
+        check = control_checks.get(control_id)
+        if check is None:
+            raise ConnectorError(
+                f"{self.source_system} connector does not support control {control_id}")
+
+        probe = self.surface().resolve(check.asset_type, check.requires)
+        if probe is None:
+            raise ConnectorError(
+                f"{self.source_system} cannot satisfy control {control_id}: no probe emits "
+                f"{', '.join(check.requires)} for asset type '{check.asset_type}'.")
+
+        if probe.requires_asset and not (asset_id or params.get(probe.asset_param or "")):
+            raise ConnectorError(
+                f"Control {control_id} requires an asset_id "
+                f"({probe.asset_type}) for the {self.source_system} connector.")
+
+        return self.run_probe(probe.probe_id, asset_id, params)
 
     @abc.abstractmethod
     def healthcheck(self) -> bool:
