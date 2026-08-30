@@ -209,6 +209,14 @@ class Schedule(Base):
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    # Lease held by the worker currently executing this schedule. The background
+    # runner is one thread per process, so every replica used to find the same
+    # due schedules and run them simultaneously — duplicate connector calls,
+    # duplicate trend snapshots, and concurrent writes to the same posture rows.
+    # Claiming the lease is a single conditional UPDATE, so exactly one replica
+    # wins regardless of how many are running.
+    locked_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AssetRecord(Base):

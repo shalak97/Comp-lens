@@ -30,7 +30,7 @@ from app.audit_models import AuditPatch as _AuditPatch
 from app.audit_models import ControlReviewPatch as _CtrlPatch
 from app.audit_models import EvidenceRequestIn as _ReqIn
 from app.audit_models import EvidenceRequestPatch as _ReqPatch
-from app.auth import Principal, auth_enabled, authorize_tenant, require_principal
+from app.auth import Permission, Principal, auth_enabled, authorize_tenant, require
 from app.config import settings
 from app.connectors.base import ConnectorError
 from app.connectors.registry import registry
@@ -63,6 +63,7 @@ from app.models import (
     WaiverOut,
     WaiverRequest,
 )
+from app.observability import configure_logging as _configure_logging
 from app.policy.engine import CONTROL_CATALOG
 from app.policy_as_code import get_engine as _policy_engine
 from app.policy_as_code import reload_engine as _reload_policies
@@ -87,8 +88,9 @@ from app.services.trends import TrendService
 from app.services.trust_graph import TrustGraphService as _TrustGraph
 from app.services.waivers import WaiverService
 
-logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO),
-                    format="%(asctime)s %(levelname)s %(name)s %(message)s")
+# LOG_FORMAT=json switches to one JSON object per line for log aggregation;
+# the default stays human-readable so local development is unchanged.
+_configure_logging(settings.log_level)
 logger = logging.getLogger("comp-lens")
 
 
@@ -131,6 +133,30 @@ app.add_middleware(RateLimitMiddleware,
                    window_seconds=60,
                    trusted_proxy_hops=getattr(settings, "trusted_proxy_hops", 0))
 app.add_middleware(RequestContextMiddleware)
+
+
+@app.middleware("http")
+async def _record_metrics(request, call_next):
+    """Count and time every request.
+
+    Path labels are normalised (ids collapsed to {id}) so a metric series is
+    per-route rather than per-resource — otherwise every finding id ever
+    requested becomes its own time series.
+    """
+    import time as _time
+
+    from app.observability import REQUEST_SECONDS, REQUESTS, normalize_path
+
+    route = normalize_path(request.url.path)
+    started = _time.monotonic()
+    status = "500"
+    try:
+        response = await call_next(request)
+        status = str(response.status_code)
+        return response
+    finally:
+        REQUEST_SECONDS.labels(request.method, route).observe(_time.monotonic() - started)
+        REQUESTS.labels(request.method, route, status).inc()
 install_exception_handlers(app)
 
 _wildcard = "*" in settings.cors_origins
@@ -159,6 +185,16 @@ def root() -> dict:
 
 @app.get("/health/live")
 def live() -> dict: return {"status": "alive"}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    """Prometheus exposition. Unauthenticated by design — same posture as the
+    health probes, and it carries only aggregate counters, never tenant data."""
+    from fastapi.responses import Response
+
+    from app.observability import CONTENT_TYPE_LATEST, render_metrics
+    return Response(content=render_metrics(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/health/ready")
@@ -197,28 +233,28 @@ def crosswalk(control_id: str) -> dict:
 
 
 @app.get("/connectors")
-def list_connectors(_: Principal = Depends(require_principal)) -> list[dict]:
+def list_connectors(_: Principal = Depends(require(Permission.READ))) -> list[dict]:
     return [{"source_system": n, "healthy": registry.healthcheck(n)} for n in registry.supported()]
 
 
 # ── Connector framework v2 (marketplace) ──
 @app.get("/connectors/catalog", tags=["connectors"])
 def connectors_catalog(category: str | None = None,
-                       _: Principal = Depends(require_principal)) -> list[dict]:
+                       _: Principal = Depends(require(Permission.READ))) -> list[dict]:
     from app.connectors import catalog as ccat
     items = ccat.by_category(category) if category else ccat.all_connectors()
     return [dict(c.items()) for c in items]
 
 
 @app.get("/connectors/safety", tags=["connectors"])
-def connectors_safety(_: Principal = Depends(require_principal)) -> dict:
+def connectors_safety(_: Principal = Depends(require(Permission.READ))) -> dict:
     from app.connectors import safety as _sfty
     return _sfty.safety_state()
 
 
 @app.get("/connectors/status", tags=["connectors"])
 def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> list[dict]:
+                      p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.connectors import catalog as ccat
     from app.connectors import framework as cfw
@@ -244,7 +280,7 @@ class _EphemeralReq(_PydBase):
 
 @app.get("/connectors/instances", tags=["connectors"])
 def list_connector_instances(tenant_id: str = "default", db: Session = Depends(get_db),
-                             p: Principal = Depends(require_principal)) -> list[dict]:
+                             p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.services import connector_instances as _ci
     return _ci.list_instances(db, tenant_id)
@@ -252,7 +288,7 @@ def list_connector_instances(tenant_id: str = "default", db: Session = Depends(g
 
 @app.post("/connectors/instances", tags=["connectors"])
 def create_connector_instance(req: _InstanceCreate, db: Session = Depends(get_db),
-                              p: Principal = Depends(require_principal)) -> dict:
+                              p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, req.tenant_id)
     from app.services import connector_instances as _ci
     try:
@@ -263,7 +299,7 @@ def create_connector_instance(req: _InstanceCreate, db: Session = Depends(get_db
 
 @app.post("/connectors/instances/ephemeral/sync", tags=["connectors"])
 def ephemeral_sync_connector(req: _EphemeralReq, db: Session = Depends(get_db),
-                             p: Principal = Depends(require_principal)) -> dict:
+                             p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, req.tenant_id)
     from app.services import connector_instances as _ci
     try:
@@ -274,7 +310,7 @@ def ephemeral_sync_connector(req: _EphemeralReq, db: Session = Depends(get_db),
 
 @app.post("/connectors/instances/ephemeral/test", tags=["connectors"])
 def ephemeral_test_connector(req: _EphemeralReq,
-                             p: Principal = Depends(require_principal)) -> dict:
+                             p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, req.tenant_id)
     from app.services import connector_instances as _ci
     try:
@@ -286,7 +322,7 @@ def ephemeral_test_connector(req: _EphemeralReq,
 @app.post("/connectors/instances/{instance_id}/sync", tags=["connectors"])
 def sync_connector_instance(instance_id: str, tenant_id: str = "default",
                             db: Session = Depends(get_db),
-                            p: Principal = Depends(require_principal)) -> dict:
+                            p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services import connector_instances as _ci
     try:
@@ -300,7 +336,7 @@ def sync_connector_instance(instance_id: str, tenant_id: str = "default",
 @app.post("/connectors/instances/{instance_id}/test", tags=["connectors"])
 def test_connector_instance(instance_id: str, tenant_id: str = "default",
                             db: Session = Depends(get_db),
-                            p: Principal = Depends(require_principal)) -> dict:
+                            p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services import connector_instances as _ci
     try:
@@ -314,7 +350,7 @@ def test_connector_instance(instance_id: str, tenant_id: str = "default",
 @app.delete("/connectors/instances/{instance_id}", tags=["connectors"])
 def delete_connector_instance(instance_id: str, tenant_id: str = "default",
                               db: Session = Depends(get_db),
-                              p: Principal = Depends(require_principal)) -> dict:
+                              p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services import connector_instances as _ci
     if not _ci.delete_instance(db, tenant_id, instance_id):
@@ -327,7 +363,7 @@ def delete_connector_instance(instance_id: str, tenant_id: str = "default",
 # connector name and this endpoint would never be reachable.
 @app.get("/connectors/capabilities", tags=["connectors"])
 def connector_capabilities(source_system: str | None = None,
-                           _: Principal = Depends(require_principal)) -> dict:
+                           _: Principal = Depends(require(Permission.READ))) -> dict:
     """The probes each connector declares, and the controls they unlock.
 
     Reads class-level declarations only, so it works without credentials for
@@ -376,7 +412,7 @@ class _ConfirmRequest(_BaseModel):
 
 @app.get("/connectors/{name}", tags=["connectors"])
 def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                     p: Principal = Depends(require_principal)) -> dict:
+                     p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.connectors import catalog as ccat
     from app.connectors import framework as cfw
@@ -389,7 +425,7 @@ def connector_detail(name: str, tenant_id: str = "default", db: Session = Depend
 
 
 @app.post("/connectors/{name}/test", tags=["connectors"])
-def connector_test(name: str, p: Principal = Depends(require_principal)) -> dict:
+def connector_test(name: str, p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     from app.connectors import catalog as ccat
     from app.connectors import framework as cfw
     c = ccat.get(name)
@@ -408,7 +444,7 @@ class _SyncRequest(_PydBase):
 @app.post("/connectors/{name}/sync", tags=["connectors"])
 def connector_sync(name: str, req: _SyncRequest | None = None,
                    db: Session = Depends(get_db),
-                   p: Principal = Depends(require_principal)) -> dict:
+                   p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     req = req or _SyncRequest()
     authorize_tenant(p, req.tenant_id)
     from app.connectors import catalog as ccat
@@ -422,7 +458,7 @@ def connector_sync(name: str, req: _SyncRequest | None = None,
 @app.get("/connectors/{name}/evidence", tags=["connectors"])
 def connector_evidence(name: str, tenant_id: str = "default",
                        db: Session = Depends(get_db),
-                       p: Principal = Depends(require_principal)) -> list[dict]:
+                       p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.connectors import framework as cfw
     return cfw.evidence_for(db, name, tenant_id)
@@ -431,14 +467,14 @@ def connector_evidence(name: str, tenant_id: str = "default",
 @app.get("/evidence/by-connector/{name}", tags=["connectors"])
 def evidence_by_connector(name: str, tenant_id: str = "default",
                           db: Session = Depends(get_db),
-                          p: Principal = Depends(require_principal)) -> list[dict]:
+                          p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.connectors import framework as cfw
     return cfw.evidence_for(db, name, tenant_id)
 
 
 @app.get("/legacy/sources")
-def legacy_sources(_: Principal = Depends(require_principal)) -> list[dict]:
+def legacy_sources(_: Principal = Depends(require(Permission.READ))) -> list[dict]:
     # names + types only; connection strings/credentials are never exposed
     from app.legacy.sources import list_sources
     return list_sources()
@@ -447,7 +483,7 @@ def legacy_sources(_: Principal = Depends(require_principal)) -> list[dict]:
 # ── assessments ──
 @app.post("/assessments", response_model=FindingOut)
 def create_assessment(req: AssessmentRequest, db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> FindingOut:
+                      p: Principal = Depends(require(Permission.ASSESS))) -> FindingOut:
     authorize_tenant(p, req.tenant_id)
     try:
         return FindingOut.model_validate(AssessmentService(db).run_single(req))
@@ -462,7 +498,7 @@ def create_assessment(req: AssessmentRequest, db: Session = Depends(get_db),
 
 @app.post("/assessment-jobs")
 def create_batch(req: BatchAssessmentRequest, db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, req.tenant_id)
     try:
         return AssessmentService(db).run_batch(req.tenant_id, req.controls)
@@ -473,7 +509,7 @@ def create_batch(req: BatchAssessmentRequest, db: Session = Depends(get_db),
 
 @app.post("/assessments/bulk")
 def bulk_assess(req: BulkAssessRequest, db: Session = Depends(get_db),
-                p: Principal = Depends(require_principal)) -> dict:
+                p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, req.tenant_id)
     try:
         return InventoryService(db).bulk_assess(req.tenant_id, req.framework, req.control_id,
@@ -489,14 +525,14 @@ def bulk_assess(req: BulkAssessRequest, db: Session = Depends(get_db),
 @app.get("/findings", response_model=list[FindingOut])
 def list_findings(tenant_id: str = "default", control_id: str | None = None,
                   limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
-                  db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[FindingOut]:
+                  db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> list[FindingOut]:
     authorize_tenant(p, tenant_id)
     return [FindingOut.model_validate(f) for f in AssessmentService(db).list_findings(tenant_id, control_id, limit, offset)]
 
 
 @app.patch("/findings/{finding_id}", response_model=FindingOut)
 def update_finding(finding_id: str, upd: FindingUpdate, tenant_id: str = "default",
-                   db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> FindingOut:
+                   db: Session = Depends(get_db), p: Principal = Depends(require(Permission.WRITE))) -> FindingOut:
     authorize_tenant(p, tenant_id)
     f = AssessmentService(db).update_finding(tenant_id, finding_id, upd)
     if not f:
@@ -506,7 +542,7 @@ def update_finding(finding_id: str, upd: FindingUpdate, tenant_id: str = "defaul
 
 @app.get("/summary")
 def summary(tenant_id: str = "default", framework: str | None = None,
-            db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+            db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     return AssessmentService(db).compliance_summary(tenant_id, framework)
 
@@ -514,21 +550,21 @@ def summary(tenant_id: str = "default", framework: str | None = None,
 # ── waivers / exceptions ──
 @app.post("/waivers", response_model=WaiverOut)
 def create_waiver(req: WaiverRequest, db: Session = Depends(get_db),
-                  p: Principal = Depends(require_principal)) -> WaiverOut:
+                  p: Principal = Depends(require(Permission.APPROVE))) -> WaiverOut:
     authorize_tenant(p, req.tenant_id)
     return WaiverOut.model_validate(WaiverService(db).create(req))
 
 
 @app.get("/waivers", response_model=list[WaiverOut])
 def list_waivers(tenant_id: str = "default", db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> list[WaiverOut]:
+                 p: Principal = Depends(require(Permission.READ))) -> list[WaiverOut]:
     authorize_tenant(p, tenant_id)
     return [WaiverOut.model_validate(w) for w in WaiverService(db).list(tenant_id)]
 
 
 @app.delete("/waivers/{waiver_id}")
 def revoke_waiver(waiver_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                  p: Principal = Depends(require_principal)) -> dict:
+                  p: Principal = Depends(require(Permission.APPROVE))) -> dict:
     authorize_tenant(p, tenant_id)
     ok = WaiverService(db).revoke(tenant_id, waiver_id)
     if not ok:
@@ -539,7 +575,7 @@ def revoke_waiver(waiver_id: str, tenant_id: str = "default", db: Session = Depe
 # ── inventory / discovery ──
 @app.post("/inventory/discover")
 def discover(source_system: str, tenant_id: str = "default", db: Session = Depends(get_db),
-             p: Principal = Depends(require_principal)) -> dict:
+             p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, tenant_id)
     try:
         n = InventoryService(db).discover(tenant_id, source_system, {})
@@ -550,7 +586,7 @@ def discover(source_system: str, tenant_id: str = "default", db: Session = Depen
 
 @app.get("/inventory")
 def inventory(tenant_id: str = "default", source_system: str | None = None,
-              db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
+              db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return [{"asset_id": a.asset_id, "asset_type": a.asset_type, "source_system": a.source_system,
              "owner": a.owner, "criticality": a.criticality} for a in InventoryService(db).list(tenant_id, source_system)]
@@ -559,21 +595,21 @@ def inventory(tenant_id: str = "default", source_system: str | None = None,
 # ── schedules ──
 @app.post("/schedules", response_model=ScheduleOut)
 def create_schedule(req: ScheduleRequest, db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> ScheduleOut:
+                    p: Principal = Depends(require(Permission.WRITE))) -> ScheduleOut:
     authorize_tenant(p, req.tenant_id)
     return ScheduleOut.model_validate(ScheduleService(db).create(req))
 
 
 @app.get("/schedules", response_model=list[ScheduleOut])
 def list_schedules(tenant_id: str = "default", db: Session = Depends(get_db),
-                   p: Principal = Depends(require_principal)) -> list[ScheduleOut]:
+                   p: Principal = Depends(require(Permission.READ))) -> list[ScheduleOut]:
     authorize_tenant(p, tenant_id)
     return [ScheduleOut.model_validate(s) for s in ScheduleService(db).list(tenant_id)]
 
 
 @app.post("/schedules/{schedule_id}/run")
 def run_schedule(schedule_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, tenant_id)
     try:
         return ScheduleService(db).run(tenant_id, schedule_id)
@@ -583,7 +619,7 @@ def run_schedule(schedule_id: str, tenant_id: str = "default", db: Session = Dep
 
 @app.delete("/schedules/{schedule_id}")
 def delete_schedule(schedule_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     if not ScheduleService(db).delete(tenant_id, schedule_id):
         raise HTTPException(status_code=404, detail="Schedule not found.")
@@ -593,14 +629,14 @@ def delete_schedule(schedule_id: str, tenant_id: str = "default", db: Session = 
 # ── trends / drift ──
 @app.get("/trends")
 def trends(tenant_id: str = "default", db: Session = Depends(get_db),
-           p: Principal = Depends(require_principal)) -> list[dict]:
+           p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return TrendService(db).trends(tenant_id)
 
 
 @app.post("/trends/snapshot")
 def snapshot(tenant_id: str = "default", framework: str | None = None,
-             db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+             db: Session = Depends(get_db), p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     summary = AssessmentService(db).compliance_summary(tenant_id, framework)
     snap = TrendService(db).snapshot(tenant_id, summary, framework or "ALL")
@@ -609,14 +645,14 @@ def snapshot(tenant_id: str = "default", framework: str | None = None,
 
 @app.get("/drift")
 def drift(tenant_id: str = "default", db: Session = Depends(get_db),
-          p: Principal = Depends(require_principal)) -> dict:
+          p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     return TrendService(db).drift(tenant_id)
 
 
 @app.get("/remediation")
 def remediation(tenant_id: str = "default", top: int = Query(10, ge=1, le=100),
-                db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.remediation import RemediationService
     return RemediationService(db).priorities(tenant_id, top)
@@ -624,7 +660,7 @@ def remediation(tenant_id: str = "default", top: int = Query(10, ge=1, le=100),
 
 @app.get("/evidence/verify")
 def evidence_verify(tenant_id: str = "default", db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.integrity import IntegrityService
     return IntegrityService(db).verify(tenant_id)
@@ -633,7 +669,7 @@ def evidence_verify(tenant_id: str = "default", db: Session = Depends(get_db),
 @app.get("/evidence/{evidence_id}/verify", tags=["evidence-graph"])
 def verify_evidence_record(evidence_id: str, tenant_id: str = "default",
                            db: Session = Depends(get_db),
-                           p: Principal = Depends(require_principal)) -> dict:
+                           p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.integrity import IntegrityService
     res = IntegrityService(db).verify_one(tenant_id, evidence_id)
@@ -645,7 +681,7 @@ def verify_evidence_record(evidence_id: str, tenant_id: str = "default",
 # ── AI governance: register & assess the org's own AI systems ──
 @app.post("/ai-systems")
 def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
-                       p: Principal = Depends(require_principal)) -> dict:
+                       p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, req.tenant_id)
     from app.models import AISystem
     s = AISystem(tenant_id=req.tenant_id, name=req.name, owner=req.owner, risk_tier=req.risk_tier,
@@ -660,7 +696,7 @@ def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
 
 @app.get("/ai-systems")
 def list_ai_systems(tenant_id: str = "default", db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> list[dict]:
+                    p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.models import AISystem
     rows = db.execute(select(AISystem).where(AISystem.tenant_id == tenant_id)).scalars().all()
@@ -670,7 +706,7 @@ def list_ai_systems(tenant_id: str = "default", db: Session = Depends(get_db),
 # ── Merkle transparency log ──
 @app.post("/evidence/anchor")
 def evidence_anchor(tenant_id: str = "default", db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.ADMIN))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.merkle import MerkleService
     return MerkleService(db).anchor(tenant_id)
@@ -678,7 +714,7 @@ def evidence_anchor(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.get("/evidence/anchors")
 def evidence_anchors(tenant_id: str = "default", db: Session = Depends(get_db),
-                     p: Principal = Depends(require_principal)) -> list[dict]:
+                     p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.services.merkle import MerkleService
     return MerkleService(db).anchors(tenant_id)
@@ -686,7 +722,7 @@ def evidence_anchors(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.get("/evidence/proof")
 def evidence_proof(evidence_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                   p: Principal = Depends(require_principal)) -> dict:
+                   p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.merkle import MerkleService
     return MerkleService(db).proof(tenant_id, evidence_id)
@@ -695,7 +731,7 @@ def evidence_proof(evidence_id: str, tenant_id: str = "default", db: Session = D
 # ── dashboard-wired endpoints (policies list, evidence ledger, unified trust,
 #    ai->risk, remediation tickets, enforcement control plane) ──
 @app.get("/policies", tags=["policy-as-code"])
-def list_policies(_: Principal = Depends(require_principal)) -> list[dict]:
+def list_policies(_: Principal = Depends(require(Permission.READ))) -> list[dict]:
     from app.policy_as_code import get_engine
     return get_engine().list_policies()
 
@@ -707,7 +743,7 @@ class _PolicyImport(_PydBase):
 
 
 @app.post("/policies/import", tags=["policy-as-code"])
-def import_policy(req: _PolicyImport, p: Principal = Depends(require_principal)) -> dict:
+def import_policy(req: _PolicyImport, p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, req.tenant_id)
     # If policy YAML is supplied, validate it and reload the engine; otherwise the
     # import is acknowledged (the built-in catalog is file-managed, not persisted here).
@@ -730,7 +766,7 @@ def import_policy(req: _PolicyImport, p: Principal = Depends(require_principal))
 @app.get("/evidence", tags=["evidence-graph"])
 def evidence_ledger(tenant_id: str = "default", limit: int = Query(200, ge=1, le=1000),
                     db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> list[dict]:
+                    p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from sqlalchemy import desc, select
 
@@ -747,7 +783,7 @@ def evidence_ledger(tenant_id: str = "default", limit: int = Query(200, ge=1, le
 
 @app.post("/remediation/tickets", tags=["simulation"])
 def create_remediation_ticket(req: dict, db: Session = Depends(get_db),
-                              p: Principal = Depends(require_principal)) -> dict:
+                              p: Principal = Depends(require(Permission.WRITE))) -> dict:
     tenant_id = (req or {}).get("tenant_id", "default")
     authorize_tenant(p, tenant_id)
     from app.policy_models import ObligationDispatch
@@ -765,7 +801,7 @@ def create_remediation_ticket(req: dict, db: Session = Depends(get_db),
 
 @app.get("/v1/grc-trust/unified", tags=["grc-trust-telemetry"])
 def grc_trust_unified(tenant_id: str = "default", db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> dict:
+                      p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.trust_telemetry import unified_trust
     return unified_trust(db, tenant_id)
@@ -774,7 +810,7 @@ def grc_trust_unified(tenant_id: str = "default", db: Session = Depends(get_db),
 @app.post("/v1/integrate/ai-systems/{system_id}/to-risk", tags=["integration"])
 def integrate_ai_system_to_risk(system_id: str, req: dict | None = None,
                                 db: Session = Depends(get_db),
-                                p: Principal = Depends(require_principal)) -> dict:
+                                p: Principal = Depends(require(Permission.WRITE))) -> dict:
     tenant_id = (req or {}).get("tenant_id", "default")
     authorize_tenant(p, tenant_id)
     from app.services import integration
@@ -783,27 +819,27 @@ def integrate_ai_system_to_risk(system_id: str, req: dict | None = None,
 
 # ── enforcement control plane (read views + mode toggle) ──
 @app.get("/enforcement/status", tags=["enforcement"])
-def enforcement_status(_: Principal = Depends(require_principal)) -> dict:
+def enforcement_status(_: Principal = Depends(require(Permission.READ))) -> dict:
     from app.services import enforcement as _enf
     return _enf.status_snapshot()
 
 
 @app.get("/enforcement/systems", tags=["enforcement"])
-def enforcement_systems(_: Principal = Depends(require_principal)) -> list[dict]:
+def enforcement_systems(_: Principal = Depends(require(Permission.READ))) -> list[dict]:
     from app.services import enforcement as _enf
     return _enf.systems_list()
 
 
 @app.get("/enforcement/decisions", tags=["enforcement"])
 def enforcement_decisions(limit: int = Query(100, ge=1, le=1000),
-                          _: Principal = Depends(require_principal)) -> list[dict]:
+                          _: Principal = Depends(require(Permission.READ))) -> list[dict]:
     from app.services import enforcement as _enf
     return _enf.recent_decisions(limit)
 
 
 @app.post("/enforcement/systems/{host}/mode", tags=["enforcement"])
 def enforcement_set_mode(host: str, body: dict,
-                         p: Principal = Depends(require_principal)) -> dict:
+                         p: Principal = Depends(require(Permission.ADMIN))) -> dict:
     # Flipping a system between shadow/enforce rewrites the shared policy bundle —
     # a fleet-wide privileged action, so require an admin (all-tenant) key.
     if not p.is_admin:
@@ -822,7 +858,7 @@ def enforcement_set_mode(host: str, body: dict,
 # ── NL -> policy authoring (human-in-the-loop) ──
 @app.post("/policy/draft")
 def policy_draft(req: PolicyDraftRequest, db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, req.tenant_id)
     from app.services.policy_authoring import PolicyAuthoringService
     d = PolicyAuthoringService(db).draft(req)
@@ -832,7 +868,7 @@ def policy_draft(req: PolicyDraftRequest, db: Session = Depends(get_db),
 
 @app.get("/policy/drafts")
 def policy_drafts(tenant_id: str = "default", db: Session = Depends(get_db),
-                  p: Principal = Depends(require_principal)) -> list[dict]:
+                  p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.services.policy_authoring import PolicyAuthoringService
     return [{"id": d.id, "control_id": d.control_id, "confidence": d.confidence,
@@ -842,7 +878,7 @@ def policy_drafts(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.post("/policy/{draft_id}/approve")
 def policy_approve(draft_id: str, approve: bool = True, tenant_id: str = "default",
-                   db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                   db: Session = Depends(get_db), p: Principal = Depends(require(Permission.APPROVE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.policy_authoring import PolicyAuthoringService
     d = PolicyAuthoringService(db).decide(tenant_id, draft_id, approve)
@@ -855,7 +891,7 @@ def policy_approve(draft_id: str, approve: bool = True, tenant_id: str = "defaul
 @app.get("/forecast")
 def forecast(tenant_id: str = "default", horizon_days: int = Query(30, ge=1, le=365),
              threshold: float = Query(80.0, ge=0, le=100),
-             db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+             db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.forecast import ForecastService
     return ForecastService(db).forecast(tenant_id, horizon_days, threshold)
@@ -864,7 +900,7 @@ def forecast(tenant_id: str = "default", horizon_days: int = Query(30, ge=1, le=
 # ── reports ──
 @app.get("/reports/csv")
 def report_csv(tenant_id: str = "default", db: Session = Depends(get_db),
-               p: Principal = Depends(require_principal)) -> Response:
+               p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> Response:
     authorize_tenant(p, tenant_id)
     data = ReportService(db).csv_bytes(tenant_id)
     return Response(content=data, media_type="text/csv",
@@ -873,7 +909,7 @@ def report_csv(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.get("/reports/pdf")
 def report_pdf(tenant_id: str = "default", db: Session = Depends(get_db),
-               p: Principal = Depends(require_principal)) -> Response:
+               p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> Response:
     authorize_tenant(p, tenant_id)
     data = ReportService(db).pdf_bytes(tenant_id)
     return Response(content=data, media_type="application/pdf",
@@ -882,14 +918,14 @@ def report_pdf(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.get("/reports/oscal")
 def report_oscal(tenant_id: str = "default", db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     return ReportService(db).oscal_results(tenant_id)
 
 
 @app.get("/reports/oscal-poam")
 def report_oscal_poam(tenant_id: str = "default", db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> dict:
+                      p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     """OSCAL Plan of Action & Milestones — one item per open finding."""
     authorize_tenant(p, tenant_id)
     return ReportService(db).oscal_poam(tenant_id)
@@ -897,7 +933,7 @@ def report_oscal_poam(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.get("/reports/oscal-components")
 def report_oscal_components(tenant_id: str = "default", db: Session = Depends(get_db),
-                            p: Principal = Depends(require_principal)) -> dict:
+                            p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     """OSCAL Component Definition — components and the controls they implement."""
     authorize_tenant(p, tenant_id)
     return ReportService(db).oscal_components(tenant_id)
@@ -906,7 +942,7 @@ def report_oscal_components(tenant_id: str = "default", db: Session = Depends(ge
 @app.get("/v1/posture/as-of", tags=["posture"])
 def posture_as_of(at: str = Query(..., description="ISO 8601 timestamp, e.g. 2026-02-01T00:00:00Z"),
                   tenant_id: str = "default", db: Session = Depends(get_db),
-                  p: Principal = Depends(require_principal)) -> dict:
+                  p: Principal = Depends(require(Permission.READ))) -> dict:
     """Reconstruct compliance posture as it stood at a point in time."""
     from datetime import datetime
     authorize_tenant(p, tenant_id)
@@ -921,7 +957,7 @@ def posture_as_of(at: str = Query(..., description="ISO 8601 timestamp, e.g. 202
 @app.get("/v1/posture/timeline", tags=["posture"])
 def posture_timeline(control_id: str = Query(...), tenant_id: str = "default",
                      db: Session = Depends(get_db),
-                     p: Principal = Depends(require_principal)) -> dict:
+                     p: Principal = Depends(require(Permission.READ))) -> dict:
     """The full status-transition timeline for one control."""
     authorize_tenant(p, tenant_id)
     from app.services.posture_history import timeline
@@ -931,7 +967,7 @@ def posture_timeline(control_id: str = Query(...), tenant_id: str = "default",
 @app.get("/v1/agents/actions", tags=["agents"])
 def agent_actions(tenant_id: str = "default", limit: int = Query(100, ge=1, le=1000),
                   db: Session = Depends(get_db),
-                  p: Principal = Depends(require_principal)) -> dict:
+                  p: Principal = Depends(require(Permission.READ))) -> dict:
     """The append-only log of agent decisions (which agent did what, for whom)."""
     authorize_tenant(p, tenant_id)
     from app.services.agent_audit import list_actions
@@ -940,7 +976,7 @@ def agent_actions(tenant_id: str = "default", limit: int = Query(100, ge=1, le=1
 
 @app.get("/v1/agents/actions/verify", tags=["agents"])
 def agent_actions_verify(tenant_id: str = "default", db: Session = Depends(get_db),
-                         p: Principal = Depends(require_principal)) -> dict:
+                         p: Principal = Depends(require(Permission.READ))) -> dict:
     """Verify the tamper-evident hash chain of the agent-decision log."""
     authorize_tenant(p, tenant_id)
     from app.services.agent_audit import verify_chain
@@ -950,7 +986,7 @@ def agent_actions_verify(tenant_id: str = "default", db: Session = Depends(get_d
 # ── ingestion from external scanners ──
 @app.post("/ingest/securityhub")
 def ingest_securityhub(tenant_id: str = "default", max_findings: int = Query(100, ge=1, le=500),
-                       db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                       db: Session = Depends(get_db), p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.ingestion import IngestionService
     try:
@@ -962,7 +998,7 @@ def ingest_securityhub(tenant_id: str = "default", max_findings: int = Query(100
 
 @app.post("/ingest/report")
 def ingest_report(payload: dict, tenant_id: str = "default", source: str = "PROWLER",
-                  db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                  db: Session = Depends(get_db), p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     """Ingest a Prowler / Steampipe / Powerpipe JSON report.
 
     Body: {"findings": [ {control_id|check_id, status|result, asset_id|resource, severity, ...}, ... ]}
@@ -978,7 +1014,7 @@ def ingest_standard_evidence(
     payload: dict,
     format: str = Query(..., description="ocsf | sarif | cyclonedx | spdx | intoto | stix | sigstore"),
     tenant_id: str = "default",
-    db: Session = Depends(get_db), p: Principal = Depends(require_principal),
+    db: Session = Depends(get_db), p: Principal = Depends(require(Permission.ASSESS)),
 ) -> dict:
     """Ingest an open-standard evidence document into findings + posture.
 
@@ -1029,24 +1065,24 @@ class _AttestationRequest(_BaseModel):
 
 
 @app.get("/catalog/frameworks", tags=["catalog"])
-def catalog_frameworks(_: Principal = Depends(require_principal)) -> list[dict]:
+def catalog_frameworks(_: Principal = Depends(require(Permission.READ))) -> list[dict]:
     return _catalog.frameworks()
 
 
 @app.get("/catalog/families", tags=["catalog"])
-def catalog_families(framework: str, _: Principal = Depends(require_principal)) -> list[dict]:
+def catalog_families(framework: str, _: Principal = Depends(require(Permission.READ))) -> list[dict]:
     return _catalog.families(framework)
 
 
 @app.get("/catalog", tags=["catalog"])
 def catalog_controls(framework: str, family: str | None = None,
-                     _: Principal = Depends(require_principal)) -> list[dict]:
+                     _: Principal = Depends(require(Permission.READ))) -> list[dict]:
     return _catalog.controls(framework, family)
 
 
 @app.post("/attestations", tags=["catalog"])
 def upsert_attestation(req: _AttestationRequest, db: Session = Depends(get_db),
-                       p: Principal = Depends(require_principal)) -> dict:
+                       p: Principal = Depends(require(Permission.ATTEST))) -> dict:
     authorize_tenant(p, req.tenant_id)
     try:
         row = _AttestationService(db).upsert(req.tenant_id, req.framework, req.control_id,
@@ -1061,7 +1097,7 @@ def upsert_attestation(req: _AttestationRequest, db: Session = Depends(get_db),
 
 @app.get("/attestations", tags=["catalog"])
 def list_attestations(tenant_id: str = "default", framework: str | None = None,
-                      db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
+                      db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return [{"control_id": a.control_id, "framework": a.framework, "status": a.status.value,
              "owner": a.owner, "approver": a.approver, "note": a.note,
@@ -1071,14 +1107,14 @@ def list_attestations(tenant_id: str = "default", framework: str | None = None,
 
 @app.get("/coverage", tags=["catalog"])
 def framework_coverage(framework: str, tenant_id: str = "default",
-                       db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                       db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     return _AttestationService(db).coverage(tenant_id, framework)
 
 
 # ── machine-verifiable coverage (capability surface × declarative checks) ──
 @app.get("/coverage/automation", tags=["catalog"])
-def automation_coverage(_: Principal = Depends(require_principal)) -> dict:
+def automation_coverage(_: Principal = Depends(require(Permission.READ))) -> dict:
     """Which declarative controls can actually be machine-verified, and by whom.
 
     This is the platform's core health metric: a control the catalog advertises
@@ -1090,7 +1126,7 @@ def automation_coverage(_: Principal = Depends(require_principal)) -> dict:
 
 
 @app.get("/evidence/lexicon", tags=["evidence-graph"])
-def evidence_lexicon(_: Principal = Depends(require_principal)) -> dict:
+def evidence_lexicon(_: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     lex = _evg.lexicon()
     return {"concepts": len(lex), "llm_available": _llm.available(),
             "items": [{"id": c["id"], "label": c["label"], "controls": len(c["controls"])} for c in lex]}
@@ -1099,7 +1135,7 @@ def evidence_lexicon(_: Principal = Depends(require_principal)) -> dict:
 @app.get("/evidence/compliance", tags=["evidence-graph"])
 def evidence_compliance(control_id: str, framework: str = "NIST_800_53",
                         tenant_id: str = "default", db: Session = Depends(get_db),
-                        p: Principal = Depends(require_principal)) -> dict:
+                        p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services import evidence_policy
     return evidence_policy.evaluate(db, tenant_id, framework, control_id)
@@ -1120,7 +1156,7 @@ class _SimRequest(_BaseModel):
 
 @app.post("/simulate", tags=["simulation"])
 def simulate_blast_radius(req: _SimRequest,
-                          p: Principal = Depends(require_principal)) -> dict:
+                          p: Principal = Depends(require(Permission.WRITE))) -> dict:
     from app.services.simulator import simulate
     result = simulate(req.framework, [c.model_dump() for c in req.changes],
                       max_depth=req.max_depth, min_weight=req.min_weight,
@@ -1142,7 +1178,7 @@ def simulate_blast_radius(req: _SimRequest,
 
 
 @app.get("/controls/{control_id}/dependencies", tags=["simulation"])
-def control_dependencies(control_id: str, p: Principal = Depends(require_principal)) -> dict:
+def control_dependencies(control_id: str, p: Principal = Depends(require(Permission.READ))) -> dict:
     from app.services import dependency_graph as dg
     return {"control_id": control_id,
             "depends_on": dg.in_edges(control_id),
@@ -1153,7 +1189,7 @@ def control_dependencies(control_id: str, p: Principal = Depends(require_princip
 @app.get("/controls/{control_id}/fragility", tags=["simulation"])
 def control_fragility(control_id: str, framework: str = "NIST_800_53",
                       tenant_id: str = "default", db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> dict:
+                      p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.simulator import fragility
     return fragility(db, tenant_id, framework, control_id)
@@ -1168,7 +1204,7 @@ class _RemediationRequest(_BaseModel):
 
 @app.post("/remediation/plan", tags=["simulation"])
 def remediation_plan(req: _RemediationRequest, db: Session = Depends(get_db),
-                     p: Principal = Depends(require_principal)) -> dict:
+                     p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, req.tenant_id)
     from app.services import remediation_optimizer
     return remediation_optimizer.plan(db, req.tenant_id, req.framework,
@@ -1178,7 +1214,7 @@ def remediation_plan(req: _RemediationRequest, db: Session = Depends(get_db),
 @app.get("/controls/{control_id}/remediation", tags=["simulation"])
 def control_remediation(control_id: str, framework: str = "NIST_800_53",
                         tenant_id: str = "default", db: Session = Depends(get_db),
-                        p: Principal = Depends(require_principal)) -> dict:
+                        p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services import remediation_optimizer
     return remediation_optimizer.detail(db, tenant_id, framework, control_id)
@@ -1187,7 +1223,7 @@ def control_remediation(control_id: str, framework: str = "NIST_800_53",
 @app.get("/evidence/documents/{doc_id}/verify", tags=["evidence-graph"])
 def verify_evidence_document(doc_id: str, tenant_id: str = "default",
                             db: Session = Depends(get_db),
-                            p: Principal = Depends(require_principal)) -> dict:
+                            p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.models import EvidenceDocument
     from app.services.evidence_sign import verify
@@ -1204,7 +1240,7 @@ def verify_evidence_document(doc_id: str, tenant_id: str = "default",
 
 @app.get("/evidence/crosswalk", tags=["evidence-graph"])
 def control_crosswalk(control_id: str, framework: str = "NIST_800_53",
-                      p: Principal = Depends(require_principal)) -> dict:
+                      p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     from app.services.crosswalk import mapped_controls
     return {"control_id": control_id, "framework": framework,
             "mapped": mapped_controls(control_id, framework)}
@@ -1213,7 +1249,7 @@ def control_crosswalk(control_id: str, framework: str = "NIST_800_53",
 @app.get("/evidence/export/oscal", tags=["evidence-graph"])
 def export_oscal(framework: str = "NIST_800_53", tenant_id: str = "default",
                  db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     from app.services.oscal_export import export_assessment_results
     return export_assessment_results(db, tenant_id, framework)
@@ -1221,7 +1257,7 @@ def export_oscal(framework: str = "NIST_800_53", tenant_id: str = "default",
 
 @app.post("/evidence/documents", tags=["evidence-graph"])
 def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
-                          p: Principal = Depends(require_principal)) -> dict:
+                          p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, req.tenant_id)
     content, name, stype = req.content, req.name, req.source_type
     if req.content_base64:
@@ -1256,21 +1292,21 @@ def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
 
 @app.get("/evidence/documents", tags=["evidence-graph"])
 def list_evidence_documents(tenant_id: str = "default", db: Session = Depends(get_db),
-                            p: Principal = Depends(require_principal)) -> list[dict]:
+                            p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return _EvidenceService(db).list_documents(tenant_id)
 
 
 @app.get("/evidence/graph", tags=["evidence-graph"])
 def evidence_graph(tenant_id: str = "default", framework: str | None = None,
-                   db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                   db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     authorize_tenant(p, tenant_id)
     return _EvidenceService(db).graph(tenant_id, framework)
 
 
 @app.post("/evidence/hits/{hit_id}/confirm", tags=["evidence-graph"])
 def confirm_evidence_hit(hit_id: str, req: _ConfirmRequest, db: Session = Depends(get_db),
-                         p: Principal = Depends(require_principal)) -> dict:
+                         p: Principal = Depends(require(Permission.WRITE))) -> dict:
     try:
         return _EvidenceService(db).confirm_hit(hit_id, req.confirmed, req.auto_attest, req.approver)
     except ValueError as e:
@@ -1279,7 +1315,7 @@ def confirm_evidence_hit(hit_id: str, req: _ConfirmRequest, db: Session = Depend
 
 @app.delete("/evidence/documents/{doc_id}", tags=["evidence-graph"])
 def delete_evidence_document(doc_id: str, db: Session = Depends(get_db),
-                             p: Principal = Depends(require_principal)) -> dict:
+                             p: Principal = Depends(require(Permission.WRITE))) -> dict:
     from app.models import EvidenceDocument
     doc = db.get(EvidenceDocument, doc_id)
     # Return 404 for both "missing" and "not yours" so the response can't be used
@@ -1303,13 +1339,13 @@ class _ResolveRequest(_BaseModel):
 
 
 @app.get("/ontology/planes", tags=["ontology"])
-def ontology_planes(_: Principal = Depends(require_principal)) -> dict:
+def ontology_planes(_: Principal = Depends(require(Permission.READ))) -> dict:
     return _resolver.ontology()
 
 
 @app.get("/ontology/bindings", tags=["ontology"])
 def ontology_bindings(control_id: str, framework: str = "NIST_800_53",
-                      _: Principal = Depends(require_principal)) -> dict:
+                      _: Principal = Depends(require(Permission.READ))) -> dict:
     b = _resolver.control_binding(framework, control_id)
     if not b:
         raise HTTPException(status_code=404, detail=f"No binding for {control_id} in {framework}")
@@ -1318,7 +1354,7 @@ def ontology_bindings(control_id: str, framework: str = "NIST_800_53",
 
 @app.post("/resolve", tags=["ontology"])
 def resolve_control(req: _ResolveRequest, db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, req.tenant_id)
     try:
         return _resolver.resolve(db, req.tenant_id, req.framework, req.control_id,
@@ -1330,7 +1366,7 @@ def resolve_control(req: _ResolveRequest, db: Session = Depends(get_db),
 @app.get("/resolve/decisions", tags=["ontology"])
 def list_routing_decisions(tenant_id: str = "default", control_id: str | None = None,
                            db: Session = Depends(get_db),
-                           p: Principal = Depends(require_principal)) -> list[dict]:
+                           p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return [{"decision_id": d.id, "control_id": d.control_id, "framework": d.framework,
              "asset_type": d.asset_type, "plane": d.plane, "strategy_type": d.strategy_type,
@@ -1359,14 +1395,14 @@ def _serve_evidence_map():
 
 @app.get("/grc/risks", tags=["grc"])
 def grc_list_risks(tenant_id: str = "default", db: Session = Depends(get_db),
-                   p: Principal = Depends(require_principal)) -> list[dict]:
+                   p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return _RiskService(db).list(tenant_id)
 
 
 @app.get("/grc/risks/summary", tags=["grc"])
 def grc_risk_summary(tenant_id: str = "default", db: Session = Depends(get_db),
-                     p: Principal = Depends(require_principal)) -> dict:
+                     p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     return _RiskService(db).summary(tenant_id)
 
@@ -1374,7 +1410,7 @@ def grc_risk_summary(tenant_id: str = "default", db: Session = Depends(get_db),
 @app.post("/grc/risks", tags=["grc"])
 def grc_create_risk(data: _RiskIn, tenant_id: str = "default",
                     db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     return _RiskService(db).create(tenant_id, data)
 
@@ -1382,7 +1418,7 @@ def grc_create_risk(data: _RiskIn, tenant_id: str = "default",
 @app.patch("/grc/risks/{risk_id}", tags=["grc"])
 def grc_update_risk(risk_id: str, patch: _RiskPatch, tenant_id: str = "default",
                     db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     out = _RiskService(db).update(tenant_id, risk_id, patch)
     if out is None:
@@ -1393,7 +1429,7 @@ def grc_update_risk(risk_id: str, patch: _RiskPatch, tenant_id: str = "default",
 @app.delete("/grc/risks/{risk_id}", tags=["grc"])
 def grc_delete_risk(risk_id: str, tenant_id: str = "default",
                     db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     if not _RiskService(db).delete(tenant_id, risk_id):
         raise HTTPException(404, f"risk '{risk_id}' not found")
@@ -1402,14 +1438,14 @@ def grc_delete_risk(risk_id: str, tenant_id: str = "default",
 
 @app.get("/tprm/vendors", tags=["tprm"])
 def tprm_list_vendors(tenant_id: str = "default", db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> list[dict]:
+                      p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return _VendorService(db).list(tenant_id)
 
 
 @app.get("/tprm/vendors/summary", tags=["tprm"])
 def tprm_vendor_summary(tenant_id: str = "default", db: Session = Depends(get_db),
-                        p: Principal = Depends(require_principal)) -> dict:
+                        p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     return _VendorService(db).summary(tenant_id)
 
@@ -1417,7 +1453,7 @@ def tprm_vendor_summary(tenant_id: str = "default", db: Session = Depends(get_db
 @app.post("/tprm/vendors", tags=["tprm"])
 def tprm_create_vendor(data: _VendorIn, tenant_id: str = "default",
                        db: Session = Depends(get_db),
-                       p: Principal = Depends(require_principal)) -> dict:
+                       p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     return _VendorService(db).create(tenant_id, data)
 
@@ -1425,7 +1461,7 @@ def tprm_create_vendor(data: _VendorIn, tenant_id: str = "default",
 @app.patch("/tprm/vendors/{vendor_id}", tags=["tprm"])
 def tprm_update_vendor(vendor_id: str, patch: _VendorPatch, tenant_id: str = "default",
                        db: Session = Depends(get_db),
-                       p: Principal = Depends(require_principal)) -> dict:
+                       p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     out = _VendorService(db).update(tenant_id, vendor_id, patch)
     if out is None:
@@ -1436,7 +1472,7 @@ def tprm_update_vendor(vendor_id: str, patch: _VendorPatch, tenant_id: str = "de
 @app.delete("/tprm/vendors/{vendor_id}", tags=["tprm"])
 def tprm_delete_vendor(vendor_id: str, tenant_id: str = "default",
                        db: Session = Depends(get_db),
-                       p: Principal = Depends(require_principal)) -> dict:
+                       p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     if not _VendorService(db).delete(tenant_id, vendor_id):
         raise HTTPException(404, f"vendor '{vendor_id}' not found")
@@ -1447,13 +1483,13 @@ def tprm_delete_vendor(vendor_id: str, tenant_id: str = "default",
 
 
 @app.get("/trust/graph", tags=["trust"])
-def trust_graph(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+def trust_graph(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     return _TrustGraph(db).graph(tenant_id)
 
 
 @app.get("/trust/risk-telemetry", tags=["trust"])
-def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> list[dict]:
+def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return _TrustGraph(db).risk_telemetry(tenant_id)
 
@@ -1466,21 +1502,21 @@ def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_d
 
 @app.get("/audits", tags=["audit"])
 def audit_list(tenant_id: str = "default", db: Session = Depends(get_db),
-               p: Principal = Depends(require_principal)) -> list[dict]:
+               p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return _AuditSvc(db).list(tenant_id)
 
 
 @app.post("/audits", tags=["audit"])
 def audit_create(data: _AuditIn, tenant_id: str = "default", db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     return _AuditSvc(db).create(tenant_id, data)
 
 
 @app.get("/audits/{audit_id}", tags=["audit"])
 def audit_get(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-              p: Principal = Depends(require_principal)) -> dict:
+              p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     out = _AuditSvc(db).get(tenant_id, audit_id)
     if out is None:
@@ -1490,7 +1526,7 @@ def audit_get(audit_id: str, tenant_id: str = "default", db: Session = Depends(g
 
 @app.patch("/audits/{audit_id}", tags=["audit"])
 def audit_update(audit_id: str, patch: _AuditPatch, tenant_id: str = "default",
-                 db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                 db: Session = Depends(get_db), p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     out = _AuditSvc(db).update(tenant_id, audit_id, patch)
     if out is None:
@@ -1500,7 +1536,7 @@ def audit_update(audit_id: str, patch: _AuditPatch, tenant_id: str = "default",
 
 @app.delete("/audits/{audit_id}", tags=["audit"])
 def audit_delete(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     if not _AuditSvc(db).delete(tenant_id, audit_id):
         raise HTTPException(404, "audit not found")
@@ -1509,21 +1545,21 @@ def audit_delete(audit_id: str, tenant_id: str = "default", db: Session = Depend
 
 @app.post("/audits/{audit_id}/refresh-posture", tags=["audit"])
 def audit_refresh(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                  p: Principal = Depends(require_principal)) -> dict:
+                  p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     return _AuditSvc(db).refresh_posture(tenant_id, audit_id)
 
 
 @app.get("/audits/{audit_id}/controls", tags=["audit"])
 def audit_controls(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                   p: Principal = Depends(require_principal)) -> list[dict]:
+                   p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return _AuditSvc(db).list_controls(tenant_id, audit_id)
 
 
 @app.patch("/audits/controls/{control_row_id}", tags=["audit"])
 def audit_review_control(control_row_id: str, patch: _CtrlPatch, tenant_id: str = "default",
-                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                         db: Session = Depends(get_db), p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     out = _AuditSvc(db).review_control(tenant_id, control_row_id, patch)
     if out is None:
@@ -1533,21 +1569,21 @@ def audit_review_control(control_row_id: str, patch: _CtrlPatch, tenant_id: str 
 
 @app.get("/audits/{audit_id}/requests", tags=["audit"])
 def audit_requests(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                   p: Principal = Depends(require_principal)) -> list[dict]:
+                   p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     return _AuditSvc(db).list_requests(tenant_id, audit_id)
 
 
 @app.post("/audits/{audit_id}/requests", tags=["audit"])
 def audit_create_request(audit_id: str, data: _ReqIn, tenant_id: str = "default",
-                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                         db: Session = Depends(get_db), p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     return _AuditSvc(db).create_request(tenant_id, audit_id, data)
 
 
 @app.patch("/audits/requests/{req_id}", tags=["audit"])
 def audit_update_request(req_id: str, patch: _ReqPatch, tenant_id: str = "default",
-                         db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                         db: Session = Depends(get_db), p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     out = _AuditSvc(db).update_request(tenant_id, req_id, patch)
     if out is None:
@@ -1557,7 +1593,7 @@ def audit_update_request(req_id: str, patch: _ReqPatch, tenant_id: str = "defaul
 
 @app.delete("/audits/requests/{req_id}", tags=["audit"])
 def audit_delete_request(req_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                         p: Principal = Depends(require_principal)) -> dict:
+                         p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
     if not _AuditSvc(db).delete_request(tenant_id, req_id):
         raise HTTPException(404, "request not found")
@@ -1566,7 +1602,7 @@ def audit_delete_request(req_id: str, tenant_id: str = "default", db: Session = 
 
 @app.get("/audits/{audit_id}/export", tags=["audit"])
 def audit_export(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
-                 p: Principal = Depends(require_principal)) -> dict:
+                 p: Principal = Depends(require(Permission.READ))) -> dict:
     authorize_tenant(p, tenant_id)
     out = _AuditSvc(db).export_package(tenant_id, audit_id)
     if out is None:
@@ -1582,7 +1618,7 @@ def audit_export(audit_id: str, tenant_id: str = "default", db: Session = Depend
 
 @app.post("/v1/documents/extract", tags=["documents"])
 def doc_extract(payload: dict, tenant_id: str = "default",
-                p: Principal = Depends(require_principal)) -> dict:
+                p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Doc text → markdown → controls → events (preview, does not persist).
 
     Body: {"text": "<document content>", "source": "soc2_report"}
@@ -1598,7 +1634,7 @@ def doc_extract(payload: dict, tenant_id: str = "default",
 @app.post("/v1/documents/ingest", tags=["documents"])
 def doc_ingest_endpoint(payload: dict, tenant_id: str = "default",
                         db: Session = Depends(get_db),
-                        p: Principal = Depends(require_principal)) -> dict:
+                        p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Extract controls from a document AND persist the resulting events into
     telemetry (so they flow into the policy / posture layer).
 
@@ -1625,7 +1661,7 @@ def doc_ingest_endpoint(payload: dict, tenant_id: str = "default",
 @app.post("/v1/documents/upload", tags=["documents"])
 def doc_upload(payload: dict, tenant_id: str = "default",
                db: Session = Depends(get_db),
-               p: Principal = Depends(require_principal)) -> dict:
+               p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Ingest a base64-encoded file (PDF/text/markdown) → extract → telemetry.
 
     Body: {"filename": "policy.pdf", "content_base64": "<b64>"}  — base64 keeps
@@ -1666,14 +1702,14 @@ def doc_upload(payload: dict, tenant_id: str = "default",
 
 
 @app.get("/v1/threat/summary", tags=["threat-intel"])
-def threat_summary(p: Principal = Depends(require_principal)) -> dict:
+def threat_summary(p: Principal = Depends(require(Permission.READ))) -> dict:
     """Live threat posture from CISA KEV: actively-exploited count, ransomware, recent."""
     return _threat.kev_summary()
 
 
 @app.get("/v1/threat/kev", tags=["threat-intel"])
 def threat_kev(limit: int = 50, ransomware_only: bool = False, q: str = "",
-               p: Principal = Depends(require_principal)) -> dict:
+               p: Principal = Depends(require(Permission.READ))) -> dict:
     """The CISA Known Exploited Vulnerabilities catalog (filterable)."""
     kev = _threat.get_kev()
     vulns = kev["vulnerabilities"]
@@ -1697,7 +1733,7 @@ def threat_kev(limit: int = 50, ransomware_only: bool = False, q: str = "",
 
 
 @app.post("/v1/threat/enrich", tags=["threat-intel"])
-def threat_enrich(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+def threat_enrich(payload: dict, p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Enrich a set of controls with threat context. Body: {"controls": [...], "cve_map": {...}}"""
     controls = payload.get("controls", [])
     cve_map = payload.get("cve_map", {})
@@ -1710,13 +1746,13 @@ def threat_enrich(payload: dict, p: Principal = Depends(require_principal)) -> d
 
 
 @app.get("/v1/policy/list", tags=["policy-as-code"])
-def policy_list(p: Principal = Depends(require_principal)) -> dict:
+def policy_list(p: Principal = Depends(require(Permission.READ))) -> dict:
     eng = _policy_engine()
     return {"count": len(eng.policies), "policies": eng.list_policies()}
 
 
 @app.post("/v1/policy/evaluate", tags=["policy-as-code"])
-def policy_evaluate(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+def policy_evaluate(payload: dict, p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Evaluate evidence against a policy. Body: {"control":"SC-28","evidence":{...}}"""
     control = payload.get("control")
     if not control:
@@ -1726,7 +1762,7 @@ def policy_evaluate(payload: dict, p: Principal = Depends(require_principal)) ->
 
 
 @app.post("/v1/policy/evaluate-all", tags=["policy-as-code"])
-def policy_evaluate_all(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+def policy_evaluate_all(payload: dict, p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Evaluate all policies (two-pass, so composition `requires` resolve)."""
     decisions = _policy_engine().evaluate_all(payload.get("evidence", {}))
     return {"count": len(decisions),
@@ -1736,12 +1772,12 @@ def policy_evaluate_all(payload: dict, p: Principal = Depends(require_principal)
 
 
 @app.post("/v1/policy/test", tags=["policy-as-code"])
-def policy_test(p: Principal = Depends(require_principal)) -> dict:
+def policy_test(p: Principal = Depends(require(Permission.WRITE))) -> dict:
     return _policy_engine().run_tests()
 
 
 @app.post("/v1/policy/reload", tags=["policy-as-code"])
-def policy_reload(p: Principal = Depends(require_principal)) -> dict:
+def policy_reload(p: Principal = Depends(require(Permission.WRITE))) -> dict:
     eng = _reload_policies()
     return {"reloaded": True, "count": len(eng.policies)}
 
@@ -1754,7 +1790,7 @@ def policy_reload(p: Principal = Depends(require_principal)) -> dict:
 
 
 @app.get("/v1/ai-gov/pet-catalog", tags=["ai-governance"])
-def pet_catalog(p: Principal = Depends(require_principal)) -> dict:
+def pet_catalog(p: Principal = Depends(require(Permission.READ))) -> dict:
     """The catalog of privacy-enhancing technologies Comp-Lens can assess."""
     return {"count": len(_aigov.PET_CATALOG),
             "pets": [{"id": k, **{kk: vv for kk, vv in v.items() if kk != "frameworks"},
@@ -1762,7 +1798,7 @@ def pet_catalog(p: Principal = Depends(require_principal)) -> dict:
 
 
 @app.post("/v1/ai-gov/assess-pet", tags=["ai-governance"])
-def assess_pet_endpoint(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+def assess_pet_endpoint(payload: dict, p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Assess one PET's strength. Body: {"pet":"differential_privacy","params":{"epsilon":0.5}}"""
     pet = payload.get("pet")
     if not pet:
@@ -1772,7 +1808,7 @@ def assess_pet_endpoint(payload: dict, p: Principal = Depends(require_principal)
 
 @app.post("/v1/ai-gov/systems/{system_id}/pets", tags=["ai-governance"])
 def add_system_pet(system_id: str, payload: dict, tenant_id: str = "default",
-                   db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+                   db: Session = Depends(get_db), p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Attach a PET to an AI system. Body: {"pet":"...","params":{...},"data_sensitivity":"phi"}"""
     authorize_tenant(p, tenant_id)
     pet = payload.get("pet")
@@ -1791,7 +1827,7 @@ def add_system_pet(system_id: str, payload: dict, tenant_id: str = "default",
 @app.get("/v1/ai-gov/systems/{system_id}/risk", tags=["ai-governance"])
 def system_privacy_risk(system_id: str, tenant_id: str = "default",
                         db: Session = Depends(get_db),
-                        p: Principal = Depends(require_principal)) -> dict:
+                        p: Principal = Depends(require(Permission.READ))) -> dict:
     """Dynamic privacy-risk score for an AI system, derived from its PETs."""
     authorize_tenant(p, tenant_id)
     rows = db.execute(select(_PET).where(_PET.system_id == system_id,
@@ -1811,7 +1847,7 @@ def system_privacy_risk(system_id: str, tenant_id: str = "default",
 
 
 @app.post("/v1/ai-gov/score", tags=["ai-governance"])
-def score_adhoc(payload: dict, p: Principal = Depends(require_principal)) -> dict:
+def score_adhoc(payload: dict, p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Score privacy risk ad-hoc without persisting.
     Body: {"data_sensitivity":"phi","pets":[{"pet":"differential_privacy","params":{"epsilon":0.5}}]}"""
     return _aigov.compute_privacy_risk(payload.get("data_sensitivity", "pii"),
@@ -1827,7 +1863,7 @@ def score_adhoc(payload: dict, p: Principal = Depends(require_principal)) -> dic
 @app.post("/v1/integrate/policy-to-findings", tags=["integration"])
 def integrate_policy_findings(payload: dict, tenant_id: str = "default",
                               db: Session = Depends(get_db),
-                              p: Principal = Depends(require_principal)) -> dict:
+                              p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Evaluate policies against evidence and persist results as findings.
     Body: {"evidence": {"SC-28": {...}, "AC-2": {...}}, "framework": "ALL"}"""
     authorize_tenant(p, tenant_id)
@@ -1838,7 +1874,7 @@ def integrate_policy_findings(payload: dict, tenant_id: str = "default",
 @app.post("/v1/integrate/ai-systems/{system_id}/to-risk", tags=["integration"])
 def integrate_ai_to_risk(system_id: str, tenant_id: str = "default",
                          db: Session = Depends(get_db),
-                         p: Principal = Depends(require_principal)) -> dict:
+                         p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Create a risk-register entry from an AI system's computed privacy risk."""
     authorize_tenant(p, tenant_id)
     return _integ.ai_system_to_risk(db, tenant_id, system_id)
@@ -1847,7 +1883,7 @@ def integrate_ai_to_risk(system_id: str, tenant_id: str = "default",
 @app.post("/v1/integrate/ai-to-risk", tags=["integration"])
 def integrate_all_ai_risks(tenant_id: str = "default",
                            db: Session = Depends(get_db),
-                           p: Principal = Depends(require_principal)) -> dict:
+                           p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Push every AI system with PETs into the risk register."""
     authorize_tenant(p, tenant_id)
     return _integ.sync_all_ai_risks(db, tenant_id)
@@ -1856,7 +1892,7 @@ def integrate_all_ai_risks(tenant_id: str = "default",
 @app.post("/v1/integrate/threat-escalation", tags=["integration"])
 def integrate_threat_escalation(tenant_id: str = "default",
                                 db: Session = Depends(get_db),
-                                p: Principal = Depends(require_principal)) -> dict:
+                                p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Escalate risks on vuln controls under active KEV exploitation pressure."""
     authorize_tenant(p, tenant_id)
     return _integ.escalate_risks_from_threat(db, tenant_id)
@@ -1865,7 +1901,7 @@ def integrate_threat_escalation(tenant_id: str = "default",
 @app.post("/v1/integrate/run", tags=["integration"])
 def integrate_run_all(payload: dict | None = None, tenant_id: str = "default",
                       db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> dict:
+                      p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Run the whole integrated pipeline: policy→findings, AI→risk, threat→escalation."""
     authorize_tenant(p, tenant_id)
     payload = payload or {}
@@ -1880,7 +1916,7 @@ def integrate_run_all(payload: dict | None = None, tenant_id: str = "default",
 
 
 @app.get("/v1/grc-sync/platforms", tags=["grc-platforms"])
-def grc_platforms(p: Principal = Depends(require_principal)) -> dict:
+def grc_platforms(p: Principal = Depends(require(Permission.READ))) -> dict:
     """The available GRC-platform connectors — a set distinct from native connectors."""
     return {"platforms": _GRC_REG,
             "note": "separate set from native connectors; evidence tagged source_kind=grc_platform"}
@@ -1888,7 +1924,7 @@ def grc_platforms(p: Principal = Depends(require_principal)) -> dict:
 
 @app.post("/v1/grc-sync/{platform}", tags=["grc-platforms"])
 def grc_sync(platform: str, tenant_id: str = "default",
-             db: Session = Depends(get_db), p: Principal = Depends(require_principal)) -> dict:
+             db: Session = Depends(get_db), p: Principal = Depends(require(Permission.ASSESS))) -> dict:
     """Sync inherited attestations from a GRC platform (Vanta/Drata/OneTrust)."""
     authorize_tenant(p, tenant_id)
     from app.connectors.base import ConnectorError
@@ -1900,7 +1936,7 @@ def grc_sync(platform: str, tenant_id: str = "default",
 
 @app.get("/v1/grc-sync/status", tags=["grc-platforms"])
 def grc_status(tenant_id: str = "default", db: Session = Depends(get_db),
-               p: Principal = Depends(require_principal)) -> dict:
+               p: Principal = Depends(require(Permission.READ))) -> dict:
     """Connected GRC platforms and their ingested attestation counts."""
     authorize_tenant(p, tenant_id)
     return _grc_svc.sync_status(db, tenant_id)
@@ -1908,7 +1944,7 @@ def grc_status(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.get("/v1/grc-sync/multi-source", tags=["grc-platforms"])
 def grc_multi_source(tenant_id: str = "default", db: Session = Depends(get_db),
-                     p: Principal = Depends(require_principal)) -> dict:
+                     p: Principal = Depends(require(Permission.READ))) -> dict:
     """Controls attested by multiple independent sources — agreement vs conflict."""
     authorize_tenant(p, tenant_id)
     return _grc_svc.multi_source_attestation(db, tenant_id)
@@ -1916,7 +1952,7 @@ def grc_multi_source(tenant_id: str = "default", db: Session = Depends(get_db),
 
 
 @app.get("/v1/grc-sync/profiles", tags=["grc-platforms"])
-def grc_profiles(p: Principal = Depends(require_principal)) -> dict:
+def grc_profiles(p: Principal = Depends(require(Permission.READ))) -> dict:
     """The loaded platform profiles (built-in + YAML) and the shared crosswalk —
     the transparency layer for a unified, adaptive trust telemetry portal."""
     from app.grc_platforms import crosswalk as xw
@@ -1942,7 +1978,7 @@ def grc_profiles(p: Principal = Depends(require_principal)) -> dict:
 
 @app.get("/v1/grc-trust/score", tags=["grc-trust-telemetry"])
 def grc_trust_score(tenant_id: str = "default", db: Session = Depends(get_db),
-                    p: Principal = Depends(require_principal)) -> dict:
+                    p: Principal = Depends(require(Permission.READ))) -> dict:
     """Aggregate inherited-trust score. Uses the active trust policy
     (defaults, or GRC_TRUST_POLICY env override). Separate from native trust graph."""
     authorize_tenant(p, tenant_id)
@@ -1951,7 +1987,7 @@ def grc_trust_score(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.get("/v1/grc-trust/controls", tags=["grc-trust-telemetry"])
 def grc_trust_controls(tenant_id: str = "default", db: Session = Depends(get_db),
-                       p: Principal = Depends(require_principal)) -> dict:
+                       p: Principal = Depends(require(Permission.READ))) -> dict:
     """Per-control inherited-trust scores (conflicts and lowest-trust first)."""
     authorize_tenant(p, tenant_id)
     return {"controls": _GRCTrust(db, _resolve_trust_policy(tenant_id)).by_control(tenant_id)}
@@ -1959,14 +1995,14 @@ def grc_trust_controls(tenant_id: str = "default", db: Session = Depends(get_db)
 
 @app.get("/v1/grc-trust/platforms", tags=["grc-trust-telemetry"])
 def grc_trust_platforms(tenant_id: str = "default", db: Session = Depends(get_db),
-                        p: Principal = Depends(require_principal)) -> dict:
+                        p: Principal = Depends(require(Permission.READ))) -> dict:
     """Each GRC platform's standalone trust contribution."""
     authorize_tenant(p, tenant_id)
     return _GRCTrust(db, _resolve_trust_policy(tenant_id)).by_platform(tenant_id)
 
 
 @app.get("/v1/grc-trust/policy", tags=["grc-trust-telemetry"])
-def grc_trust_policy(p: Principal = Depends(require_principal)) -> dict:
+def grc_trust_policy(p: Principal = Depends(require(Permission.READ))) -> dict:
     """The active trust-scoring policy (the tunable weights) + their meaning."""
     return {"active_policy": _asdict(_resolve_trust_policy()),
             "tunable_as": "GRC_TRUST_POLICY env var (JSON), or inline on /score-preview",
@@ -1982,7 +2018,7 @@ def grc_trust_policy(p: Principal = Depends(require_principal)) -> dict:
 @app.post("/v1/grc-trust/score-preview", tags=["grc-trust-telemetry"])
 def grc_trust_preview(payload: dict, tenant_id: str = "default",
                       db: Session = Depends(get_db),
-                      p: Principal = Depends(require_principal)) -> dict:
+                      p: Principal = Depends(require(Permission.WRITE))) -> dict:
     """Preview the trust score under a DIFFERENT policy without persisting it.
     Body: {"policy": {"fresh_days": 1, "conflict_factor": 0.1}} — tune and see the impact."""
     authorize_tenant(p, tenant_id)

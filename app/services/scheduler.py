@@ -13,10 +13,14 @@ from __future__ import annotations
 
 import builtins
 import logging
+import os
+import socket
 import threading
+import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -26,6 +30,54 @@ from app.services.assessment import AssessmentService
 from app.services.trends import TrendService
 
 logger = logging.getLogger(__name__)
+
+#: How long a claimed schedule stays leased. Long enough that a slow run is not
+#: stolen mid-flight, short enough that a replica killed mid-run frees its
+#: schedules promptly rather than stranding them until a human intervenes.
+LEASE_SECONDS = 900
+
+#: Stable within a process, distinct across replicas.
+WORKER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+
+
+def _claim(db: Session, schedule_id: str, now: datetime) -> bool:
+    """Atomically take the lease on one schedule. True if this worker won it.
+
+    One conditional UPDATE: the row is claimable only if it is actually due and
+    not already leased by a live worker. Whoever's UPDATE matches first wins;
+    everyone else sees rowcount 0 and skips. Correct on both SQLite and
+    PostgreSQL because a single UPDATE is atomic on both.
+    """
+    res = db.execute(
+        sa_update(Schedule)
+        .where(Schedule.schedule_id == schedule_id,
+               Schedule.next_run_at <= now,
+               or_(Schedule.locked_until.is_(None), Schedule.locked_until <= now))
+        .values(locked_by=WORKER_ID,
+                locked_until=now + timedelta(seconds=LEASE_SECONDS))
+        # Without this, SQLAlchemy's default "evaluate" strategy re-runs the
+        # WHERE clause in PYTHON against objects already in the session, where
+        # next_run_at has come back from SQLite naive and `now` is UTC-aware —
+        # raising TypeError before the statement ever reaches the database.
+        # The claimed row is refreshed by the caller anyway.
+        .execution_options(synchronize_session=False))
+    db.commit()
+    return bool(res.rowcount == 1)
+
+
+def _release(db: Session, schedule_id: str) -> None:
+    """Drop the lease, but only if this worker still holds it."""
+    try:
+        db.execute(
+            sa_update(Schedule)
+            .where(Schedule.schedule_id == schedule_id,
+                   Schedule.locked_by == WORKER_ID)
+            .values(locked_by=None, locked_until=None)
+            .execution_options(synchronize_session=False))
+        db.commit()
+    except Exception:  # noqa: BLE001 — releasing must never mask the real error
+        db.rollback()
+        logger.exception("failed to release lease on schedule %s", schedule_id)
 
 
 class ScheduleService:
@@ -120,10 +172,20 @@ class ScheduleService:
 
         svc = ScheduleService(db)
         succeeded = 0
+        skipped = 0
         errors: list[dict] = []
+        now = datetime.now(UTC)
         try:
             for s in due:
+                # Every replica runs its own scheduler thread and finds the same
+                # due schedules. Only the replica that wins the lease executes;
+                # the rest skip, so a horizontally-scaled deployment no longer
+                # multiplies connector calls and trend snapshots by replica count.
+                if not _claim(db, s.schedule_id, now):
+                    skipped += 1
+                    continue
                 try:
+                    db.refresh(s)
                     svc._execute(s)
                     db.commit()
                     succeeded += 1
@@ -131,11 +193,24 @@ class ScheduleService:
                     db.rollback()
                     logger.exception("run_due: schedule %s failed", s.schedule_id)
                     errors.append({"schedule_id": s.schedule_id, "error": str(exc)})
+                finally:
+                    # Released whether the run succeeded or failed: a failed
+                    # schedule keeps its unchanged next_run_at, so dropping the
+                    # lease is what lets it be retried on the next tick.
+                    _release(db, s.schedule_id)
         finally:
             db.close()
 
+        try:
+            from app.observability import SCHEDULE_RUNS
+            SCHEDULE_RUNS.labels("succeeded").inc(succeeded)
+            SCHEDULE_RUNS.labels("failed").inc(len(errors))
+            SCHEDULE_RUNS.labels("skipped_locked").inc(skipped)
+        except Exception:  # noqa: BLE001
+            logger.debug("metrics recording failed", exc_info=True)
+
         result = {"attempted": len(due), "succeeded": succeeded,
-                  "failed": len(errors), "errors": errors}
+                  "failed": len(errors), "skipped_locked": skipped, "errors": errors}
         logger.info("run_due complete attempted=%d succeeded=%d failed=%d",
                    result["attempted"], succeeded, len(errors))
         return result

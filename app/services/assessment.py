@@ -208,6 +208,14 @@ class AssessmentService:
             raise
 
         try:
+            from app.observability import ASSESSMENTS, EVIDENCE_WRITES
+            ASSESSMENTS.labels(source_system.upper(), status.value).inc()
+            if telemetry is not None:
+                EVIDENCE_WRITES.labels("stored").inc()
+        except Exception:  # noqa: BLE001 — instrumentation must never fail a write
+            logger.debug("metrics recording failed", exc_info=True)
+
+        try:
             from app.notifications import notify_finding
             notify_finding(finding)
         except Exception:  # noqa: BLE001
