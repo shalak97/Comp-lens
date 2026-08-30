@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.connectors.base import Asset, BaseConnector
+from app.connectors.base import Asset, BaseConnector, ConnectorError
 from app.connectors.capabilities import Probe
 
 #: Signals a healthy demo estate reports, grouped by the asset type that owns
@@ -172,9 +172,23 @@ class MockConnector(BaseConnector):
             telemetry = dict(base)
             telemetry.update(mapping[control_id])
             return telemetry
+
         # Everything else is served from the declarative check pack, exactly as
         # a real cloud connector serves it.
-        return self.collect_via_capability(control_id, asset_id, params)
+        #
+        # DEMO is deliberately permissive where the real connectors are strict:
+        # an unrecognised control yields empty telemetry rather than an error,
+        # so the policy engine still gets to run and report `error` /
+        # `not_applicable` for it. That contract is what lets the demo exercise
+        # every control in the catalogue — including the AI-governance controls,
+        # which have evaluators but no probe — and what keeps connector sync
+        # from collapsing to demo mode the first time it probes a control this
+        # connector has no synthetic data for. A real connector raising here is
+        # correct; DEMO raising here is not.
+        try:
+            return self.collect_via_capability(control_id, asset_id, params)
+        except ConnectorError:
+            return dict(base)
 
     def run_probe(
         self, probe_id: str, asset_id: str | None, params: dict[str, Any]

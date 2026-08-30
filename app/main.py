@@ -322,6 +322,58 @@ def delete_connector_instance(instance_id: str, tenant_id: str = "default",
     return {"deleted": instance_id}
 
 
+# Declared before /connectors/{name}: FastAPI matches routes in definition
+# order, so the catch-all would otherwise treat "capabilities" as a
+# connector name and this endpoint would never be reachable.
+@app.get("/connectors/capabilities", tags=["connectors"])
+def connector_capabilities(source_system: str | None = None,
+                           _: Principal = Depends(require_principal)) -> dict:
+    """The probes each connector declares, and the controls they unlock.
+
+    Reads class-level declarations only, so it works without credentials for
+    any connector — including ones this deployment has not configured.
+    """
+    from app.services.control_checks import all_checks
+
+    surfaces = registry.surfaces()
+    if source_system:
+        key = source_system.upper()
+        surfaces = {k: v for k, v in surfaces.items() if k == key}
+        if not surfaces:
+            raise HTTPException(status_code=404,
+                                detail=f"No capability surface for '{source_system}'.")
+
+    checks = all_checks()
+    out = []
+    for _name, surface in sorted(surfaces.items()):
+        satisfied = sorted(
+            cid for cid, c in checks.items()
+            if surface.resolve(c.asset_type, c.requires) is not None)
+        out.append({**surface.as_dict(),
+                    "controls_satisfied": satisfied,
+                    "controls_satisfied_count": len(satisfied)})
+    return {"connectors": out, "total_checks": len(checks)}
+
+
+# ── evidence graph (LLM-grounded document → concept → control mindmap) ──
+
+
+class _DocumentRequest(_BaseModel):
+    tenant_id: str = "default"
+    name: str | None = None
+    content: str | None = None
+    url: str | None = None
+    content_base64: str | None = None
+    filename: str | None = None
+    source_type: str = "text"
+
+
+class _ConfirmRequest(_BaseModel):
+    confirmed: bool = True
+    auto_attest: bool = False
+    approver: str | None = None
+
+
 @app.get("/connectors/{name}", tags=["connectors"])
 def connector_detail(name: str, tenant_id: str = "default", db: Session = Depends(get_db),
                      p: Principal = Depends(require_principal)) -> dict:
@@ -1035,55 +1087,6 @@ def automation_coverage(_: Principal = Depends(require_principal)) -> dict:
     from app.services.control_checks import coverage_matrix
 
     return coverage_matrix()
-
-
-@app.get("/connectors/capabilities", tags=["connectors"])
-def connector_capabilities(source_system: str | None = None,
-                           _: Principal = Depends(require_principal)) -> dict:
-    """The probes each connector declares, and the controls they unlock.
-
-    Reads class-level declarations only, so it works without credentials for
-    any connector — including ones this deployment has not configured.
-    """
-    from app.services.control_checks import all_checks
-
-    surfaces = registry.surfaces()
-    if source_system:
-        key = source_system.upper()
-        surfaces = {k: v for k, v in surfaces.items() if k == key}
-        if not surfaces:
-            raise HTTPException(status_code=404,
-                                detail=f"No capability surface for '{source_system}'.")
-
-    checks = all_checks()
-    out = []
-    for _name, surface in sorted(surfaces.items()):
-        satisfied = sorted(
-            cid for cid, c in checks.items()
-            if surface.resolve(c.asset_type, c.requires) is not None)
-        out.append({**surface.as_dict(),
-                    "controls_satisfied": satisfied,
-                    "controls_satisfied_count": len(satisfied)})
-    return {"connectors": out, "total_checks": len(checks)}
-
-
-# ── evidence graph (LLM-grounded document → concept → control mindmap) ──
-
-
-class _DocumentRequest(_BaseModel):
-    tenant_id: str = "default"
-    name: str | None = None
-    content: str | None = None
-    url: str | None = None
-    content_base64: str | None = None
-    filename: str | None = None
-    source_type: str = "text"
-
-
-class _ConfirmRequest(_BaseModel):
-    confirmed: bool = True
-    auto_attest: bool = False
-    approver: str | None = None
 
 
 @app.get("/evidence/lexicon", tags=["evidence-graph"])
