@@ -88,7 +88,6 @@ from app.services.trends import TrendService
 from app.services.trust_graph import TrustGraphService as _TrustGraph
 from app.services.waivers import WaiverService
 
-
 # LOG_FORMAT=json switches to one JSON object per line for log aggregation;
 # the default stays human-readable so local development is unchanged.
 _configure_logging(settings.log_level)
