@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 
-def _due_schedule(tenant_id: str, control_id: str = "SC-7") -> Schedule:
+def _due_schedule(tenant_id: str, control_id: str = "SC-7"):
     from app.models import Schedule
 
     return Schedule(
