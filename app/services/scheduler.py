@@ -83,25 +83,54 @@ class ScheduleService:
                 "next_run_at": s.next_run_at.isoformat()}
 
     @staticmethod
-    def run_due() -> int:
-        """Run all schedules whose next_run_at has passed. Returns count run."""
+    def run_due() -> dict:
+        """Run all schedules whose next_run_at has passed.
+
+        Each schedule commits (or rolls back) independently. Previously every
+        due schedule in a tick shared one transaction committed once at the
+        end: an exception anywhere in the batch — even something unrelated to
+        an earlier schedule, like a later schedule's trend snapshot failing —
+        rolled back every schedule already processed that tick. Findings that
+        had genuinely been assessed, and whose evidence was already durably
+        stored (see _commit_finding), were silently discarded with nothing but
+        a debug log line, and next_run_at was never advanced so the only
+        symptom was the schedule quietly re-running forever. Isolating the
+        commit per schedule means one schedule's failure can't erase another's
+        completed work, and failures are reported instead of swallowed.
+        """
         db = SessionLocal()
         try:
             due = db.execute(
                 select(Schedule).where(Schedule.enabled.is_(True),
                                        Schedule.next_run_at <= datetime.now(UTC))
             ).scalars().all()
-            svc = ScheduleService(db)
-            for s in due:
-                svc._execute(s)
-            db.commit()
-            return len(due)
         except Exception:  # noqa: BLE001
             db.rollback()
-            logger.exception("run_due failed")
-            return 0
+            logger.exception("run_due: failed to load due schedules")
+            db.close()
+            return {"attempted": 0, "succeeded": 0, "failed": 0, "errors": []}
+
+        svc = ScheduleService(db)
+        succeeded = 0
+        errors: list[dict] = []
+        try:
+            for s in due:
+                try:
+                    svc._execute(s)
+                    db.commit()
+                    succeeded += 1
+                except Exception as exc:  # noqa: BLE001
+                    db.rollback()
+                    logger.exception("run_due: schedule %s failed", s.schedule_id)
+                    errors.append({"schedule_id": s.schedule_id, "error": str(exc)})
         finally:
             db.close()
+
+        result = {"attempted": len(due), "succeeded": succeeded,
+                  "failed": len(errors), "errors": errors}
+        logger.info("run_due complete attempted=%d succeeded=%d failed=%d",
+                   result["attempted"], succeeded, len(errors))
+        return result
 
 
 _runner_thread: threading.Thread | None = None
