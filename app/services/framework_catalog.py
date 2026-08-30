@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from functools import cache, lru_cache
+from functools import cache
 from typing import Any
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "frameworks")

@@ -145,8 +145,8 @@ def test_every_declarative_control_is_demoable():
 
 
 def test_demo_serves_both_a_compliant_and_a_failing_estate():
-    from app.models import ControlStatus
     from app.connectors.mock import MockConnector
+    from app.models import ControlStatus
     from app.services import control_checks
 
     conn = MockConnector()
