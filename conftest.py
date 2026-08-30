@@ -56,6 +56,23 @@ def fresh_db(tmp_path, monkeypatch):
 
     engine = create_engine(url, connect_args={"check_same_thread": False})
 
+    # Mirror app/database.py's SQLite setup exactly, not just the transaction-
+    # control half of it. Holding a real, correctly-scoped transaction open
+    # (see below) means SQLite's writer lock is now actually held for the
+    # transaction's full duration instead of pysqlite eagerly releasing it —
+    # so without WAL mode + a busy timeout, ordinary sequential use of the
+    # same engine (e.g. run_due() opening its own connection from the pool
+    # while another connection from an earlier statement hasn't been
+    # returned yet) starts failing with "database is locked" instead of
+    # waiting the way production configures it to.
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _rec):  # noqa: ANN001
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
+
     # Mirror app/database.py's pysqlite transaction-control fix: without it,
     # releasing a SAVEPOINT (db.begin_nested(), used throughout the write path
     # for idempotency-race handling) can behave like an early commit of the
