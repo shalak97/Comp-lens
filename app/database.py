@@ -46,6 +46,26 @@ if settings.database_url.startswith("sqlite"):
         cur.execute("PRAGMA synchronous=NORMAL")
         cur.close()
 
+    # pysqlite (stdlib sqlite3) manages its own implicit transactions on top of
+    # whatever SQLAlchemy does, and the interaction is documented to break
+    # SAVEPOINT semantics: releasing a savepoint (what every db.begin_nested()
+    # does, e.g. the idempotency-race handling in _commit_finding) can behave
+    # like an early COMMIT of the whole underlying transaction instead of
+    # merely folding into it. A later plain session.rollback() then has
+    # nothing left to undo for whatever the savepoint already wrote — a write
+    # that should have been transactional silently becomes permanent.
+    # This is SQLAlchemy's own documented fix: hand pysqlite's transaction
+    # control over to SQLAlchemy entirely (isolation_level=None disables
+    # pysqlite's autocommit-on-certain-statements behavior; the "begin" hook
+    # replaces it with an explicit BEGIN SQLAlchemy actually controls).
+    @event.listens_for(engine, "connect")
+    def _sqlite_disable_pysqlite_txn_control(dbapi_conn, _rec):  # noqa: ANN001
+        dbapi_conn.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def _sqlite_explicit_begin(conn):  # noqa: ANN001
+        conn.exec_driver_sql("BEGIN")
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
