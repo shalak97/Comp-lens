@@ -1,0 +1,8544 @@
+{
+ "version": "scf-2026.2",
+ "source": "https://github.com/securecontrolsframework/securecontrolsframework",
+ "license_note": "Per the source repository's README: \"The SCF is free via Creative Commons licensing.\" Confirm the exact CC variant at securecontrolsframework.com before any redistribution beyond this internal crosswalk use.",
+ "note": "NIST refs pivot through SCF's NIST SP 800-53 R5 column (zero-padding normalized to match our catalog). ISO refs pivot through SCF's ISO 27002:2022 column, NOT its ISO 27001:2022 column - the latter maps to the ISO management-system clauses (4-10), not Annex A, and is not comparable to our Annex-A-only iso_27001_2022.json catalog. Every ref here is pre-filtered to exist in the corresponding catalog file.",
+ "controls": [
+  {
+   "scf_id": "GOV-01",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Security, Compliance & Resilience Program (SCRP)",
+   "nist_800_53_r5": [
+    "PM-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.1",
+    "A.5.37",
+    "A.5.4"
+   ]
+  },
+  {
+   "scf_id": "GOV-02",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Publishing Security, Compliance & Resilience Documentation",
+   "nist_800_53_r5": [
+    "AC-1",
+    "AT-1",
+    "AU-1",
+    "CA-1",
+    "CM-1",
+    "CP-1",
+    "IA-1",
+    "IR-1",
+    "MA-1",
+    "MP-1",
+    "PE-1",
+    "PL-1",
+    "PM-1",
+    "PS-1",
+    "PT-1",
+    "RA-1",
+    "SA-1",
+    "SC-1",
+    "SI-1",
+    "SR-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.1",
+    "A.5.37"
+   ]
+  },
+  {
+   "scf_id": "GOV-03",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Periodic Review & Update of Security, Compliance & Resilience Program",
+   "nist_800_53_r5": [
+    "AC-1",
+    "AT-1",
+    "AU-1",
+    "CA-1",
+    "CM-1",
+    "CP-1",
+    "IA-1",
+    "IR-1",
+    "MA-1",
+    "MP-1",
+    "PE-1",
+    "PL-1",
+    "PM-1",
+    "PS-1",
+    "PT-1",
+    "RA-1",
+    "SA-1",
+    "SC-1",
+    "SI-1",
+    "SR-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.1",
+    "A.5.37"
+   ]
+  },
+  {
+   "scf_id": "GOV-04",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Assigned Security, Compliance & Resilience Responsibilities",
+   "nist_800_53_r5": [
+    "PL-9",
+    "PM-2",
+    "PM-29",
+    "PM-6"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.2"
+   ]
+  },
+  {
+   "scf_id": "GOV-05",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Measures of Performance",
+   "nist_800_53_r5": [
+    "PM-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "GOV-06",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Contacts With Authorities",
+   "nist_800_53_r5": [
+    "IR-6"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.5"
+   ]
+  },
+  {
+   "scf_id": "GOV-07",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Contacts With Groups & Associations",
+   "nist_800_53_r5": [
+    "PM-15"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.6"
+   ]
+  },
+  {
+   "scf_id": "GOV-10",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Data Governance",
+   "nist_800_53_r5": [
+    "PM-23",
+    "PM-24"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.12"
+   ]
+  },
+  {
+   "scf_id": "GOV-11",
+   "domain": "Security, Compliance & Resilience Governance",
+   "name": "Purpose Validation",
+   "nist_800_53_r5": [
+    "PM-32"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-01",
+   "domain": "Asset Management",
+   "name": "Asset Governance",
+   "nist_800_53_r5": [
+    "PM-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.30",
+    "A.5.31",
+    "A.7.9"
+   ]
+  },
+  {
+   "scf_id": "AST-01.1",
+   "domain": "Asset Management",
+   "name": "Asset-Service Dependencies",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.30",
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "AST-01.2",
+   "domain": "Asset Management",
+   "name": "Stakeholder Identification & Involvement",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "AST-02",
+   "domain": "Asset Management",
+   "name": "Asset Inventories",
+   "nist_800_53_r5": [
+    "CM-8",
+    "PM-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "AST-02.1",
+   "domain": "Asset Management",
+   "name": "Updates During Installations / Removals",
+   "nist_800_53_r5": [
+    "CM-8(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-02.2",
+   "domain": "Asset Management",
+   "name": "Automated Unauthorized Component Detection",
+   "nist_800_53_r5": [
+    "CM-8(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-02.3",
+   "domain": "Asset Management",
+   "name": "Component Duplication Avoidance",
+   "nist_800_53_r5": [
+    "CM-8"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-02.4",
+   "domain": "Asset Management",
+   "name": "Approved Baseline Deviations",
+   "nist_800_53_r5": [
+    "CM-8(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-02.5",
+   "domain": "Asset Management",
+   "name": "Network Access Control (NAC)",
+   "nist_800_53_r5": [
+    "IA-3(3)",
+    "SC-7(19)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-02.7",
+   "domain": "Asset Management",
+   "name": "Software Licensing Restrictions",
+   "nist_800_53_r5": [
+    "SC-18(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.32"
+   ]
+  },
+  {
+   "scf_id": "AST-02.8",
+   "domain": "Asset Management",
+   "name": "Data Action Mapping",
+   "nist_800_53_r5": [
+    "CM-13"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "AST-02.9",
+   "domain": "Asset Management",
+   "name": "Configuration Management Database (CMDB)",
+   "nist_800_53_r5": [
+    "CM-8(2)",
+    "CM-8(7)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.9"
+   ]
+  },
+  {
+   "scf_id": "AST-02.10",
+   "domain": "Asset Management",
+   "name": "Automated Location\nTracking",
+   "nist_800_53_r5": [
+    "CM-8(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-02.11",
+   "domain": "Asset Management",
+   "name": "Component Assignment",
+   "nist_800_53_r5": [
+    "CM-8(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-03",
+   "domain": "Asset Management",
+   "name": "Asset Ownership Assignment",
+   "nist_800_53_r5": [
+    "SA-4(12)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "AST-03.1",
+   "domain": "Asset Management",
+   "name": "Accountability Information",
+   "nist_800_53_r5": [
+    "CM-8(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "AST-03.2",
+   "domain": "Asset Management",
+   "name": "Provenance",
+   "nist_800_53_r5": [
+    "SR-4",
+    "SR-4(1)",
+    "SR-4(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21"
+   ]
+  },
+  {
+   "scf_id": "AST-04",
+   "domain": "Asset Management",
+   "name": "Network Diagrams & Data Flow Diagrams (DFDs)",
+   "nist_800_53_r5": [
+    "PL-2",
+    "SA-4(1)",
+    "SA-4(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.9",
+    "A.8.20"
+   ]
+  },
+  {
+   "scf_id": "AST-04.1",
+   "domain": "Asset Management",
+   "name": "Asset Scope Classification",
+   "nist_800_53_r5": [
+    "PE-22",
+    "SA-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.12"
+   ]
+  },
+  {
+   "scf_id": "AST-05",
+   "domain": "Asset Management",
+   "name": "Security of Assets & Media",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.9"
+   ]
+  },
+  {
+   "scf_id": "AST-06",
+   "domain": "Asset Management",
+   "name": "Unattended End-User Equipment",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.7",
+    "A.7.9",
+    "A.8.1"
+   ]
+  },
+  {
+   "scf_id": "AST-07",
+   "domain": "Asset Management",
+   "name": "Kiosks & Point of Interaction (PoI) Devices",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.1"
+   ]
+  },
+  {
+   "scf_id": "AST-08",
+   "domain": "Asset Management",
+   "name": "Physical Tampering Detection",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.9"
+   ]
+  },
+  {
+   "scf_id": "AST-09",
+   "domain": "Asset Management",
+   "name": "Secure Disposal, Destruction or Re-Use of Equipment",
+   "nist_800_53_r5": [
+    "SR-12"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.14",
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "AST-10",
+   "domain": "Asset Management",
+   "name": "Return of Assets",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.11"
+   ]
+  },
+  {
+   "scf_id": "AST-11",
+   "domain": "Asset Management",
+   "name": "Removal of Assets",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "AST-12",
+   "domain": "Asset Management",
+   "name": "Use of Personal Devices",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.10",
+    "A.8.1"
+   ]
+  },
+  {
+   "scf_id": "AST-14",
+   "domain": "Asset Management",
+   "name": "Usage Parameters",
+   "nist_800_53_r5": [
+    "SC-43"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "AST-15",
+   "domain": "Asset Management",
+   "name": "Logical Tampering Protection",
+   "nist_800_53_r5": [
+    "SR-9",
+    "SR-9(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.9"
+   ]
+  },
+  {
+   "scf_id": "AST-15.1",
+   "domain": "Asset Management",
+   "name": "Technology Asset Inspections",
+   "nist_800_53_r5": [
+    "SR-10"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-01",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Business Continuity Management System (BCMS)",
+   "nist_800_53_r5": [
+    "CP-1",
+    "CP-10",
+    "CP-2",
+    "IR-4(3)",
+    "PM-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.29",
+    "A.5.30"
+   ]
+  },
+  {
+   "scf_id": "BCD-01.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Coordinate with Related Plans",
+   "nist_800_53_r5": [
+    "CP-2(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.29",
+    "A.5.30"
+   ]
+  },
+  {
+   "scf_id": "BCD-01.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Coordinate With External Service Providers",
+   "nist_800_53_r5": [
+    "CP-2(7)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.29",
+    "A.5.30"
+   ]
+  },
+  {
+   "scf_id": "BCD-01.3",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Transfer to Alternate Processing / Storage Site",
+   "nist_800_53_r5": [
+    "CP-2(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-01.4",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Recovery Time / Point Objectives (RTO / RPO)",
+   "nist_800_53_r5": [
+    "CP-10",
+    "CP-6(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-02",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Identify Critical Assets",
+   "nist_800_53_r5": [
+    "CP-2(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-02.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Resume All Missions & Business Functions",
+   "nist_800_53_r5": [
+    "CP-2(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-02.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Continue Essential Mission & Business Functions",
+   "nist_800_53_r5": [
+    "CP-2(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-02.3",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Resume Essential Missions & Business Functions",
+   "nist_800_53_r5": [
+    "CP-2(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-03",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Contingency Training",
+   "nist_800_53_r5": [
+    "CP-3"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-03.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Simulated Events",
+   "nist_800_53_r5": [
+    "CP-3(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-03.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Automated Training Environments",
+   "nist_800_53_r5": [
+    "CP-3(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-04",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Contingency Plan Testing & Exercises",
+   "nist_800_53_r5": [
+    "CP-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.29",
+    "A.5.30"
+   ]
+  },
+  {
+   "scf_id": "BCD-04.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Coordinated Testing with Related Plans",
+   "nist_800_53_r5": [
+    "CP-4(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-04.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Alternate Storage & Processing Sites",
+   "nist_800_53_r5": [
+    "CP-4(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-05",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Contingency Plan Root Cause Analysis (RCA) & Lessons Learned",
+   "nist_800_53_r5": [
+    "CP-4"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-06",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Ongoing Contingency Planning",
+   "nist_800_53_r5": [
+    "CP-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-07",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Alternative Security Measures",
+   "nist_800_53_r5": [
+    "CP-13"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-08",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Alternate Storage Site",
+   "nist_800_53_r5": [
+    "CP-6",
+    "PE-23"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.14"
+   ]
+  },
+  {
+   "scf_id": "BCD-08.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Separation from Primary Storage Site",
+   "nist_800_53_r5": [
+    "CP-6(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-08.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Primary Storage Site Accessibility",
+   "nist_800_53_r5": [
+    "CP-6(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-09",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Alternate Processing Site",
+   "nist_800_53_r5": [
+    "CP-7",
+    "PE-23"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.14"
+   ]
+  },
+  {
+   "scf_id": "BCD-09.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Separation from Primary Processing Site",
+   "nist_800_53_r5": [
+    "CP-7(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-09.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Alternate Processing Site Accessibility",
+   "nist_800_53_r5": [
+    "CP-7(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-09.3",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Alternate Site Priority of Service",
+   "nist_800_53_r5": [
+    "CP-7(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-09.4",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Preparation for Use",
+   "nist_800_53_r5": [
+    "CP-7(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-09.5",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Inability to Return to Primary Site",
+   "nist_800_53_r5": [
+    "CP-7(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-10",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Telecommunications Services Availability",
+   "nist_800_53_r5": [
+    "CP-11",
+    "CP-8",
+    "CP-8(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-10.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Telecommunications Priority of Service Provisions",
+   "nist_800_53_r5": [
+    "CP-8(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-10.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Separation of Primary / Alternate Providers",
+   "nist_800_53_r5": [
+    "CP-8(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-10.3",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Provider Contingency Plan",
+   "nist_800_53_r5": [
+    "CP-8(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-10.4",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Alternate Communications Channels",
+   "nist_800_53_r5": [
+    "SC-47"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-11",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Data Backups",
+   "nist_800_53_r5": [
+    "CP-9",
+    "SC-28(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.13"
+   ]
+  },
+  {
+   "scf_id": "BCD-11.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Testing for Reliability & Integrity",
+   "nist_800_53_r5": [
+    "CP-9(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.13"
+   ]
+  },
+  {
+   "scf_id": "BCD-11.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Separate Storage for Critical Information",
+   "nist_800_53_r5": [
+    "CP-9(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.13"
+   ]
+  },
+  {
+   "scf_id": "BCD-11.4",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Cryptographic Protection",
+   "nist_800_53_r5": [
+    "CP-9(8)",
+    "SC-28(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.13"
+   ]
+  },
+  {
+   "scf_id": "BCD-11.5",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Test Restoration Using Sampling",
+   "nist_800_53_r5": [
+    "CP-9(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-11.6",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Transfer to Alternate Storage Site",
+   "nist_800_53_r5": [
+    "CP-9(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-11.7",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Redundant Secondary System",
+   "nist_800_53_r5": [
+    "CP-9(6)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.14"
+   ]
+  },
+  {
+   "scf_id": "BCD-11.8",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Dual Authorization For Backup Media Destruction",
+   "nist_800_53_r5": [
+    "CP-9(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-12",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Technology Assets, Applications and/or Services (TAAS) Recovery & Reconstitution",
+   "nist_800_53_r5": [
+    "CP-10"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-12.1",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Transaction Recovery",
+   "nist_800_53_r5": [
+    "CP-10(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-12.2",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Failover Capability",
+   "nist_800_53_r5": [
+    "SI-13"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-12.4",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Restore Within Time Period",
+   "nist_800_53_r5": [
+    "CP-10(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "BCD-13",
+   "domain": "Business Continuity & Disaster Recovery",
+   "name": "Backup & Restoration Hardware Protection",
+   "nist_800_53_r5": [
+    "CP-10(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CAP-01",
+   "domain": "Capacity & Performance Planning",
+   "name": "Capacity & Performance Management",
+   "nist_800_53_r5": [
+    "SC-5",
+    "SC-5(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.6"
+   ]
+  },
+  {
+   "scf_id": "CAP-02",
+   "domain": "Capacity & Performance Planning",
+   "name": "Resource Priority",
+   "nist_800_53_r5": [
+    "SC-5",
+    "SC-5(1)",
+    "SC-5(2)",
+    "SC-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CAP-03",
+   "domain": "Capacity & Performance Planning",
+   "name": "Capacity Planning",
+   "nist_800_53_r5": [
+    "CP-2(2)",
+    "SC-5",
+    "SC-5(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.6"
+   ]
+  },
+  {
+   "scf_id": "CHG-01",
+   "domain": "Change Management",
+   "name": "Change Management Program",
+   "nist_800_53_r5": [
+    "CM-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.19",
+    "A.8.32"
+   ]
+  },
+  {
+   "scf_id": "CHG-02",
+   "domain": "Change Management",
+   "name": "Configuration Change Control",
+   "nist_800_53_r5": [
+    "CM-3",
+    "SA-8(31)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.19",
+    "A.8.32"
+   ]
+  },
+  {
+   "scf_id": "CHG-02.1",
+   "domain": "Change Management",
+   "name": "Prohibition Of Changes",
+   "nist_800_53_r5": [
+    "CM-3(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-02.2",
+   "domain": "Change Management",
+   "name": "Test, Validate & Document Changes",
+   "nist_800_53_r5": [
+    "CM-3(2)",
+    "CM-3(7)",
+    "SA-8(31)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.19",
+    "A.8.32"
+   ]
+  },
+  {
+   "scf_id": "CHG-02.3",
+   "domain": "Change Management",
+   "name": "Security, Compliance & Resilience Representative for Asset Lifecycle Changes",
+   "nist_800_53_r5": [
+    "CM-3(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-02.4",
+   "domain": "Change Management",
+   "name": "Automated Security Response",
+   "nist_800_53_r5": [
+    "CM-3(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-02.5",
+   "domain": "Change Management",
+   "name": "Cryptographic Management",
+   "nist_800_53_r5": [
+    "CM-3(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-03",
+   "domain": "Change Management",
+   "name": "Security Impact Analysis for Changes",
+   "nist_800_53_r5": [
+    "CM-4"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-04",
+   "domain": "Change Management",
+   "name": "Access Restriction For Change",
+   "nist_800_53_r5": [
+    "CM-5"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-04.1",
+   "domain": "Change Management",
+   "name": "Automated Access Enforcement / Auditing",
+   "nist_800_53_r5": [
+    "CM-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-04.2",
+   "domain": "Change Management",
+   "name": "Signed Components",
+   "nist_800_53_r5": [
+    "CM-14",
+    "SI-7(15)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-04.3",
+   "domain": "Change Management",
+   "name": "Dual Authorization for Change",
+   "nist_800_53_r5": [
+    "AC-5",
+    "CM-5(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-04.4",
+   "domain": "Change Management",
+   "name": "Permissions To Implement Changes",
+   "nist_800_53_r5": [
+    "CM-5(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-04.5",
+   "domain": "Change Management",
+   "name": "Library Privileges",
+   "nist_800_53_r5": [
+    "CM-5(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-05",
+   "domain": "Change Management",
+   "name": "Stakeholder Notification of Changes",
+   "nist_800_53_r5": [
+    "CM-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-06",
+   "domain": "Change Management",
+   "name": "Control Functionality Verification",
+   "nist_800_53_r5": [
+    "CM-3(2)",
+    "SA-8(31)",
+    "SI-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CHG-06.1",
+   "domain": "Change Management",
+   "name": "Report Verification Results",
+   "nist_800_53_r5": [
+    "SI-6(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CLD-01",
+   "domain": "Cloud Security",
+   "name": "Cloud Services",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.23"
+   ]
+  },
+  {
+   "scf_id": "CLD-02",
+   "domain": "Cloud Security",
+   "name": "Cloud Security Architecture",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.23"
+   ]
+  },
+  {
+   "scf_id": "CLD-03",
+   "domain": "Cloud Security",
+   "name": "Cloud Infrastructure Security Subnet",
+   "nist_800_53_r5": [
+    "SC-7(29)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CLD-04",
+   "domain": "Cloud Security",
+   "name": "Application Programming Interface (API) Security",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.23",
+    "A.8.26"
+   ]
+  },
+  {
+   "scf_id": "CLD-06",
+   "domain": "Cloud Security",
+   "name": "Multi-Tenant Environments",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.23"
+   ]
+  },
+  {
+   "scf_id": "CLD-06.1",
+   "domain": "Cloud Security",
+   "name": "Customer Responsibility Matrix (CRM)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.23"
+   ]
+  },
+  {
+   "scf_id": "CLD-09",
+   "domain": "Cloud Security",
+   "name": "Geolocation Requirements for Processing, Storage and Service Locations",
+   "nist_800_53_r5": [
+    "SA-9(5)",
+    "SA-9(8)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.23"
+   ]
+  },
+  {
+   "scf_id": "CPL-01",
+   "domain": "Compliance",
+   "name": "Statutory, Regulatory & Contractual Compliance",
+   "nist_800_53_r5": [
+    "PL-1",
+    "PM-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.31",
+    "A.8.34"
+   ]
+  },
+  {
+   "scf_id": "CPL-02",
+   "domain": "Compliance",
+   "name": "Security, Compliance & Resilience Controls Oversight",
+   "nist_800_53_r5": [
+    "CA-7",
+    "CA-7(1)",
+    "PM-14"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.31",
+    "A.5.36",
+    "A.6.8",
+    "A.8.34",
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "CPL-02.1",
+   "domain": "Compliance",
+   "name": "Internal Audit Function",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.35",
+    "A.8.34"
+   ]
+  },
+  {
+   "scf_id": "CPL-03",
+   "domain": "Compliance",
+   "name": "Control Conformity Monitoring",
+   "nist_800_53_r5": [
+    "CA-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.35",
+    "A.5.36",
+    "A.8.34"
+   ]
+  },
+  {
+   "scf_id": "CPL-03.1",
+   "domain": "Compliance",
+   "name": "Independent Assessors",
+   "nist_800_53_r5": [
+    "CA-7(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.35"
+   ]
+  },
+  {
+   "scf_id": "CPL-03.2",
+   "domain": "Compliance",
+   "name": "Functional Review Of Security, Compliance & Resilience Controls",
+   "nist_800_53_r5": [
+    "CA-2",
+    "RA-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.35",
+    "A.5.36",
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "CPL-04",
+   "domain": "Compliance",
+   "name": "Audit Activities",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.35",
+    "A.8.34"
+   ]
+  },
+  {
+   "scf_id": "CFG-01",
+   "domain": "Configuration Management",
+   "name": "Configuration Management Program",
+   "nist_800_53_r5": [
+    "CM-1",
+    "CM-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12",
+    "A.8.3",
+    "A.8.9"
+   ]
+  },
+  {
+   "scf_id": "CFG-01.1",
+   "domain": "Configuration Management",
+   "name": "Assignment of Responsibility",
+   "nist_800_53_r5": [
+    "CM-9(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.9"
+   ]
+  },
+  {
+   "scf_id": "CFG-02",
+   "domain": "Configuration Management",
+   "name": "Secure Baseline Configurations",
+   "nist_800_53_r5": [
+    "CM-2",
+    "CM-6",
+    "PL-10",
+    "SA-15(5)",
+    "SA-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12",
+    "A.8.25",
+    "A.8.26",
+    "A.8.3",
+    "A.8.5",
+    "A.8.9"
+   ]
+  },
+  {
+   "scf_id": "CFG-02.1",
+   "domain": "Configuration Management",
+   "name": "Reviews & Updates",
+   "nist_800_53_r5": [
+    "CM-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.9"
+   ]
+  },
+  {
+   "scf_id": "CFG-02.2",
+   "domain": "Configuration Management",
+   "name": "Automated Central Management & Verification",
+   "nist_800_53_r5": [
+    "CM-2(2)",
+    "CM-6(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-02.3",
+   "domain": "Configuration Management",
+   "name": "Retention Of Previous Configurations",
+   "nist_800_53_r5": [
+    "CM-2(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-02.4",
+   "domain": "Configuration Management",
+   "name": "Development & Test Environment Configurations",
+   "nist_800_53_r5": [
+    "CM-2(6)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25"
+   ]
+  },
+  {
+   "scf_id": "CFG-02.5",
+   "domain": "Configuration Management",
+   "name": "Configure Technology Assets, Applications and/or Services (TAAS) for High-Risk Areas",
+   "nist_800_53_r5": [
+    "CM-2(7)",
+    "CM-7(6)",
+    "CM-7(7)",
+    "CM-7(9)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12"
+   ]
+  },
+  {
+   "scf_id": "CFG-02.7",
+   "domain": "Configuration Management",
+   "name": "Approved Configuration Deviations",
+   "nist_800_53_r5": [
+    "CM-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-02.8",
+   "domain": "Configuration Management",
+   "name": "Respond To Unauthorized Changes",
+   "nist_800_53_r5": [
+    "CM-6(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-02.9",
+   "domain": "Configuration Management",
+   "name": "Baseline Tailoring",
+   "nist_800_53_r5": [
+    "PL-11"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-03",
+   "domain": "Configuration Management",
+   "name": "Least Functionality",
+   "nist_800_53_r5": [
+    "CM-7"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12",
+    "A.8.3",
+    "A.8.9"
+   ]
+  },
+  {
+   "scf_id": "CFG-03.1",
+   "domain": "Configuration Management",
+   "name": "Periodic Review",
+   "nist_800_53_r5": [
+    "CM-7(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.27",
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "CFG-03.2",
+   "domain": "Configuration Management",
+   "name": "Prevent Unauthorized Software Execution",
+   "nist_800_53_r5": [
+    "CM-7(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-03.3",
+   "domain": "Configuration Management",
+   "name": "Explicitly Allow / Deny Applications",
+   "nist_800_53_r5": [
+    "CM-7(4)",
+    "CM-7(5)",
+    "SC-18(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-03.4",
+   "domain": "Configuration Management",
+   "name": "Split Tunneling",
+   "nist_800_53_r5": [
+    "SC-7(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-04",
+   "domain": "Configuration Management",
+   "name": "Software Usage Restrictions",
+   "nist_800_53_r5": [
+    "CM-10"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-04.1",
+   "domain": "Configuration Management",
+   "name": "Open Source Software",
+   "nist_800_53_r5": [
+    "CM-10(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-05",
+   "domain": "Configuration Management",
+   "name": "User-Installed Software",
+   "nist_800_53_r5": [
+    "CM-11",
+    "CM-11(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-05.1",
+   "domain": "Configuration Management",
+   "name": "Unauthorized Installation Alerts",
+   "nist_800_53_r5": [
+    "CM-11(3)",
+    "CM-8(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-05.2",
+   "domain": "Configuration Management",
+   "name": "Restrict Roles Permitted To Install Software",
+   "nist_800_53_r5": [
+    "CM-11(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-06",
+   "domain": "Configuration Management",
+   "name": "Configuration Enforcement",
+   "nist_800_53_r5": [
+    "CM-11(3)",
+    "CM-3(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-06.1",
+   "domain": "Configuration Management",
+   "name": "Integrity Assurance & Enforcement (IAE)",
+   "nist_800_53_r5": [
+    "CM-11(3)",
+    "CM-3(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CFG-08",
+   "domain": "Configuration Management",
+   "name": "Sensitive / Regulated Data Access Enforcement",
+   "nist_800_53_r5": [
+    "AC-3(11)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01",
+   "domain": "Continuous Monitoring",
+   "name": "Continuous Monitoring",
+   "nist_800_53_r5": [
+    "AU-1",
+    "PM-31",
+    "SI-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.15",
+    "A.8.16"
+   ]
+  },
+  {
+   "scf_id": "MON-01.1",
+   "domain": "Continuous Monitoring",
+   "name": "Intrusion Detection & Prevention Systems (IDS & IPS)",
+   "nist_800_53_r5": [
+    "SI-4(1)",
+    "SI-4(25)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.16"
+   ]
+  },
+  {
+   "scf_id": "MON-01.2",
+   "domain": "Continuous Monitoring",
+   "name": "Automated Tools for Real-Time Analysis",
+   "nist_800_53_r5": [
+    "SC-48",
+    "SI-4(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.16"
+   ]
+  },
+  {
+   "scf_id": "MON-01.3",
+   "domain": "Continuous Monitoring",
+   "name": "Inbound & Outbound Communications Traffic",
+   "nist_800_53_r5": [
+    "SI-4(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.16"
+   ]
+  },
+  {
+   "scf_id": "MON-01.4",
+   "domain": "Continuous Monitoring",
+   "name": "System Generated Alerts",
+   "nist_800_53_r5": [
+    "SI-4(5)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.15"
+   ]
+  },
+  {
+   "scf_id": "MON-01.5",
+   "domain": "Continuous Monitoring",
+   "name": "Wireless Network Monitoring",
+   "nist_800_53_r5": [
+    "SI-4(14)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.6",
+   "domain": "Continuous Monitoring",
+   "name": "Host-Based Devices",
+   "nist_800_53_r5": [
+    "SI-4(23)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.7",
+   "domain": "Continuous Monitoring",
+   "name": "File Integrity Monitoring (FIM)",
+   "nist_800_53_r5": [
+    "SI-4(24)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.8",
+   "domain": "Continuous Monitoring",
+   "name": "Security Event Monitoring",
+   "nist_800_53_r5": [
+    "AU-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.16"
+   ]
+  },
+  {
+   "scf_id": "MON-01.11",
+   "domain": "Continuous Monitoring",
+   "name": "Automated Response to Suspicious Events",
+   "nist_800_53_r5": [
+    "IR-4(5)",
+    "SI-4(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.12",
+   "domain": "Continuous Monitoring",
+   "name": "Automated Alerts",
+   "nist_800_53_r5": [
+    "SI-4(12)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.13",
+   "domain": "Continuous Monitoring",
+   "name": "Alert Threshold Tuning",
+   "nist_800_53_r5": [
+    "SI-4(13)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.14",
+   "domain": "Continuous Monitoring",
+   "name": "Individuals Posing Greater Risk",
+   "nist_800_53_r5": [
+    "SI-4(19)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.15",
+   "domain": "Continuous Monitoring",
+   "name": "Privileged User Oversight",
+   "nist_800_53_r5": [
+    "SI-4(20)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-01.17",
+   "domain": "Continuous Monitoring",
+   "name": "Real-Time Session Monitoring",
+   "nist_800_53_r5": [
+    "AU-14(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-02",
+   "domain": "Continuous Monitoring",
+   "name": "Centralized Collection of Security Event Logs",
+   "nist_800_53_r5": [
+    "AU-2",
+    "AU-6",
+    "IR-4(4)",
+    "SI-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.15"
+   ]
+  },
+  {
+   "scf_id": "MON-02.1",
+   "domain": "Continuous Monitoring",
+   "name": "Correlate Monitoring Information",
+   "nist_800_53_r5": [
+    "AU-6(3)",
+    "AU-6(9)",
+    "IR-4(4)",
+    "SI-4(16)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.15"
+   ]
+  },
+  {
+   "scf_id": "MON-02.2",
+   "domain": "Continuous Monitoring",
+   "name": "Central Review & Analysis",
+   "nist_800_53_r5": [
+    "AU-6(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.8",
+    "A.8.15",
+    "A.8.16"
+   ]
+  },
+  {
+   "scf_id": "MON-02.3",
+   "domain": "Continuous Monitoring",
+   "name": "Integration of Scanning & Other Monitoring Information",
+   "nist_800_53_r5": [
+    "AU-6(5)",
+    "SI-4(17)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-02.4",
+   "domain": "Continuous Monitoring",
+   "name": "Correlation with Physical Monitoring",
+   "nist_800_53_r5": [
+    "AU-6(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-02.5",
+   "domain": "Continuous Monitoring",
+   "name": "Permitted Actions",
+   "nist_800_53_r5": [
+    "AU-6(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-02.6",
+   "domain": "Continuous Monitoring",
+   "name": "Audit Level Adjustments",
+   "nist_800_53_r5": [
+    "AU-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-02.7",
+   "domain": "Continuous Monitoring",
+   "name": "System-Wide / Time-Correlated Audit Trail",
+   "nist_800_53_r5": [
+    "AU-12(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-02.8",
+   "domain": "Continuous Monitoring",
+   "name": "Changes by Authorized Individuals",
+   "nist_800_53_r5": [
+    "AU-12(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-03",
+   "domain": "Continuous Monitoring",
+   "name": "Content of Event Logs",
+   "nist_800_53_r5": [
+    "AU-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.15"
+   ]
+  },
+  {
+   "scf_id": "MON-03.1",
+   "domain": "Continuous Monitoring",
+   "name": "Sensitive Event Log Information",
+   "nist_800_53_r5": [
+    "AU-3(1)",
+    "AU-6(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-03.3",
+   "domain": "Continuous Monitoring",
+   "name": "Privileged Functions Logging",
+   "nist_800_53_r5": [
+    "AU-6(8)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.15"
+   ]
+  },
+  {
+   "scf_id": "MON-03.5",
+   "domain": "Continuous Monitoring",
+   "name": "Limit Personal Data (PD) In Audit Records",
+   "nist_800_53_r5": [
+    "AU-3(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-03.6",
+   "domain": "Continuous Monitoring",
+   "name": "Centralized Management of Event Log Content",
+   "nist_800_53_r5": [
+    "PL-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-04",
+   "domain": "Continuous Monitoring",
+   "name": "Event Log Storage Capacity",
+   "nist_800_53_r5": [
+    "AU-4"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-05",
+   "domain": "Continuous Monitoring",
+   "name": "Response To Event Log Processing Failures",
+   "nist_800_53_r5": [
+    "AU-5"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-05.1",
+   "domain": "Continuous Monitoring",
+   "name": "Real-Time Alerts of Event Logging Failure",
+   "nist_800_53_r5": [
+    "AU-5(2)",
+    "SI-4(12)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-05.2",
+   "domain": "Continuous Monitoring",
+   "name": "Event Log Storage Capacity Alerting",
+   "nist_800_53_r5": [
+    "AU-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-06",
+   "domain": "Continuous Monitoring",
+   "name": "Monitoring Reporting",
+   "nist_800_53_r5": [
+    "AU-12",
+    "AU-7",
+    "AU-7(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.8",
+    "A.8.15"
+   ]
+  },
+  {
+   "scf_id": "MON-06.1",
+   "domain": "Continuous Monitoring",
+   "name": "Query Parameter Audits of Personal Data (PD)",
+   "nist_800_53_r5": [
+    "AU-12(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-06.2",
+   "domain": "Continuous Monitoring",
+   "name": "Trend Analysis Reporting",
+   "nist_800_53_r5": [
+    "CA-7(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-07",
+   "domain": "Continuous Monitoring",
+   "name": "Time Stamps",
+   "nist_800_53_r5": [
+    "AU-8"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-07.1",
+   "domain": "Continuous Monitoring",
+   "name": "Synchronization With Authoritative Time Source",
+   "nist_800_53_r5": [
+    "SC-45",
+    "SC-45(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-08",
+   "domain": "Continuous Monitoring",
+   "name": "Protection of Event Logs",
+   "nist_800_53_r5": [
+    "AU-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.15"
+   ]
+  },
+  {
+   "scf_id": "MON-08.1",
+   "domain": "Continuous Monitoring",
+   "name": "Event Log Backup on Separate Physical Systems / Components",
+   "nist_800_53_r5": [
+    "AU-4(1)",
+    "AU-9(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-08.2",
+   "domain": "Continuous Monitoring",
+   "name": "Access by Subset of Privileged Users",
+   "nist_800_53_r5": [
+    "AU-9(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-08.3",
+   "domain": "Continuous Monitoring",
+   "name": "Cryptographic Protection of Event Log Information",
+   "nist_800_53_r5": [
+    "AU-9(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-08.4",
+   "domain": "Continuous Monitoring",
+   "name": "Dual Authorization for Event Log Movement",
+   "nist_800_53_r5": [
+    "AU-9(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-09",
+   "domain": "Continuous Monitoring",
+   "name": "Non-Repudiation",
+   "nist_800_53_r5": [
+    "AU-10"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-09.1",
+   "domain": "Continuous Monitoring",
+   "name": "Identity Binding",
+   "nist_800_53_r5": [
+    "AU-10(1)",
+    "AU-10(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-10",
+   "domain": "Continuous Monitoring",
+   "name": "Event Log Retention",
+   "nist_800_53_r5": [
+    "AU-11"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-11",
+   "domain": "Continuous Monitoring",
+   "name": "Monitoring For Information Disclosure",
+   "nist_800_53_r5": [
+    "AU-13"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.7"
+   ]
+  },
+  {
+   "scf_id": "MON-11.1",
+   "domain": "Continuous Monitoring",
+   "name": "Analyze Traffic for Covert Exfiltration",
+   "nist_800_53_r5": [
+    "SI-4(18)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-11.2",
+   "domain": "Continuous Monitoring",
+   "name": "Unauthorized Network Services",
+   "nist_800_53_r5": [
+    "SI-4(22)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-11.3",
+   "domain": "Continuous Monitoring",
+   "name": "Monitoring for Indicators of Compromise (IOC)",
+   "nist_800_53_r5": [
+    "SI-4(24)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.7"
+   ]
+  },
+  {
+   "scf_id": "MON-12",
+   "domain": "Continuous Monitoring",
+   "name": "Session Audit",
+   "nist_800_53_r5": [
+    "AU-14"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-13",
+   "domain": "Continuous Monitoring",
+   "name": "Alternate Event Logging Capability",
+   "nist_800_53_r5": [
+    "AU-5(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-14",
+   "domain": "Continuous Monitoring",
+   "name": "Cross-Organizational Monitoring",
+   "nist_800_53_r5": [
+    "AU-16",
+    "AU-16(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-14.1",
+   "domain": "Continuous Monitoring",
+   "name": "Sharing of Event Logs",
+   "nist_800_53_r5": [
+    "AU-16(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-15",
+   "domain": "Continuous Monitoring",
+   "name": "Covert Channel Analysis",
+   "nist_800_53_r5": [
+    "SC-31"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MON-16",
+   "domain": "Continuous Monitoring",
+   "name": "Anomalous Behavior",
+   "nist_800_53_r5": [
+    "AC-2(12)",
+    "IR-4(13)",
+    "SI-4(11)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-01",
+   "domain": "Cryptographic Protections",
+   "name": "Use of Cryptographic Controls",
+   "nist_800_53_r5": [
+    "SC-13",
+    "SC-8(1)",
+    "SC-8(2)",
+    "SI-7(6)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.24",
+    "A.8.26"
+   ]
+  },
+  {
+   "scf_id": "CRY-01.1",
+   "domain": "Cryptographic Protections",
+   "name": "Alternate Physical Protection",
+   "nist_800_53_r5": [
+    "SC-8(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-01.2",
+   "domain": "Cryptographic Protections",
+   "name": "Export-Controlled Cryptography",
+   "nist_800_53_r5": [
+    "SC-13"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.31"
+   ]
+  },
+  {
+   "scf_id": "CRY-01.3",
+   "domain": "Cryptographic Protections",
+   "name": "Pre/Post Transmission Handling",
+   "nist_800_53_r5": [
+    "SC-8(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-01.4",
+   "domain": "Cryptographic Protections",
+   "name": "Conceal / Randomize Communications",
+   "nist_800_53_r5": [
+    "SC-8(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-02",
+   "domain": "Cryptographic Protections",
+   "name": "Automated Authentication Through Cryptographic Modules",
+   "nist_800_53_r5": [
+    "IA-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-03",
+   "domain": "Cryptographic Protections",
+   "name": "Transmission Confidentiality",
+   "nist_800_53_r5": [
+    "SC-8",
+    "SC-8(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.8.24",
+    "A.8.26"
+   ]
+  },
+  {
+   "scf_id": "CRY-04",
+   "domain": "Cryptographic Protections",
+   "name": "Transmission Integrity",
+   "nist_800_53_r5": [
+    "SC-16(1)",
+    "SC-28(1)",
+    "SC-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.24",
+    "A.8.26"
+   ]
+  },
+  {
+   "scf_id": "CRY-05",
+   "domain": "Cryptographic Protections",
+   "name": "Encrypting Data At Rest",
+   "nist_800_53_r5": [
+    "SC-13",
+    "SC-28",
+    "SC-28(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.24"
+   ]
+  },
+  {
+   "scf_id": "CRY-05.2",
+   "domain": "Cryptographic Protections",
+   "name": "Offline Storage",
+   "nist_800_53_r5": [
+    "SC-28(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-07",
+   "domain": "Cryptographic Protections",
+   "name": "Wireless Access Authentication & Encryption",
+   "nist_800_53_r5": [
+    "AC-18",
+    "SC-40"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-08",
+   "domain": "Cryptographic Protections",
+   "name": "Public Key Infrastructure (PKI)",
+   "nist_800_53_r5": [
+    "SC-12",
+    "SC-17"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-09",
+   "domain": "Cryptographic Protections",
+   "name": "Cryptographic Key Management",
+   "nist_800_53_r5": [
+    "SC-28(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.24"
+   ]
+  },
+  {
+   "scf_id": "CRY-09.1",
+   "domain": "Cryptographic Protections",
+   "name": "Symmetric Keys",
+   "nist_800_53_r5": [
+    "SC-12(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-09.2",
+   "domain": "Cryptographic Protections",
+   "name": "Asymmetric Keys",
+   "nist_800_53_r5": [
+    "SC-12(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-09.3",
+   "domain": "Cryptographic Protections",
+   "name": "Cryptographic Key Loss or Change",
+   "nist_800_53_r5": [
+    "SC-12(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.24"
+   ]
+  },
+  {
+   "scf_id": "CRY-09.4",
+   "domain": "Cryptographic Protections",
+   "name": "Control & Distribution of Cryptographic Keys",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.24"
+   ]
+  },
+  {
+   "scf_id": "CRY-09.7",
+   "domain": "Cryptographic Protections",
+   "name": "External System Cryptographic Key Control",
+   "nist_800_53_r5": [
+    "SA-9(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-10",
+   "domain": "Cryptographic Protections",
+   "name": "Transmission of Cybersecurity & Data Protection Attributes",
+   "nist_800_53_r5": [
+    "SC-16",
+    "SC-16(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "CRY-11",
+   "domain": "Cryptographic Protections",
+   "name": "Certificate Authorities",
+   "nist_800_53_r5": [
+    "SC-23(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-01",
+   "domain": "Data Classification & Handling",
+   "name": "Data Protection",
+   "nist_800_53_r5": [
+    "MP-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.10",
+    "A.5.12",
+    "A.5.33",
+    "A.5.9",
+    "A.7.10",
+    "A.8.12"
+   ]
+  },
+  {
+   "scf_id": "DCH-01.1",
+   "domain": "Data Classification & Handling",
+   "name": "Data Stewardship",
+   "nist_800_53_r5": [
+    "SA-4(12)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-02",
+   "domain": "Data Classification & Handling",
+   "name": "Data & Asset Classification",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.12",
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "DCH-03",
+   "domain": "Data Classification & Handling",
+   "name": "Media Access",
+   "nist_800_53_r5": [
+    "MP-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-03.2",
+   "domain": "Data Classification & Handling",
+   "name": "Masking Displayed Data",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.11"
+   ]
+  },
+  {
+   "scf_id": "DCH-03.3",
+   "domain": "Data Classification & Handling",
+   "name": "Controlled Release",
+   "nist_800_53_r5": [
+    "AC-3(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-04",
+   "domain": "Data Classification & Handling",
+   "name": "Media Marking",
+   "nist_800_53_r5": [
+    "MP-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.10",
+    "A.5.13"
+   ]
+  },
+  {
+   "scf_id": "DCH-04.1",
+   "domain": "Data Classification & Handling",
+   "name": "Automated Marking",
+   "nist_800_53_r5": [
+    "MP-3"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05",
+   "domain": "Data Classification & Handling",
+   "name": "Cybersecurity & Data Protection Attributes",
+   "nist_800_53_r5": [
+    "AC-16"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.1",
+   "domain": "Data Classification & Handling",
+   "name": "Dynamic Attribute Association",
+   "nist_800_53_r5": [
+    "AC-16(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.2",
+   "domain": "Data Classification & Handling",
+   "name": "Attribute Value Changes By Authorized Individuals",
+   "nist_800_53_r5": [
+    "AC-16(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.3",
+   "domain": "Data Classification & Handling",
+   "name": "Maintenance of Attribute Associations By System",
+   "nist_800_53_r5": [
+    "AC-16(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.4",
+   "domain": "Data Classification & Handling",
+   "name": "Association of Attributes By Authorized Individuals",
+   "nist_800_53_r5": [
+    "AC-16(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.5",
+   "domain": "Data Classification & Handling",
+   "name": "Attribute Displays for Output Devices",
+   "nist_800_53_r5": [
+    "AC-16(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.6",
+   "domain": "Data Classification & Handling",
+   "name": "Data Subject Attribute Associations",
+   "nist_800_53_r5": [
+    "AC-16(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.7",
+   "domain": "Data Classification & Handling",
+   "name": "Consistent Attribute Interpretation",
+   "nist_800_53_r5": [
+    "AC-16(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.8",
+   "domain": "Data Classification & Handling",
+   "name": "Identity Association Techniques & Technologies",
+   "nist_800_53_r5": [
+    "AC-16(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.9",
+   "domain": "Data Classification & Handling",
+   "name": "Attribute Reassignment",
+   "nist_800_53_r5": [
+    "AC-16(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-05.10",
+   "domain": "Data Classification & Handling",
+   "name": "Attribute Configuration By Authorized Individuals",
+   "nist_800_53_r5": [
+    "AC-16(10)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-06",
+   "domain": "Data Classification & Handling",
+   "name": "Media Storage",
+   "nist_800_53_r5": [
+    "MP-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-07",
+   "domain": "Data Classification & Handling",
+   "name": "Media Transportation",
+   "nist_800_53_r5": [
+    "MP-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-07.1",
+   "domain": "Data Classification & Handling",
+   "name": "Custodians",
+   "nist_800_53_r5": [
+    "MP-5(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.10",
+    "A.5.14"
+   ]
+  },
+  {
+   "scf_id": "DCH-07.2",
+   "domain": "Data Classification & Handling",
+   "name": "Encrypting Data In Storage Media",
+   "nist_800_53_r5": [
+    "SC-28(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-08",
+   "domain": "Data Classification & Handling",
+   "name": "Physical Media Disposal",
+   "nist_800_53_r5": [
+    "MP-6"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.10",
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-09",
+   "domain": "Data Classification & Handling",
+   "name": "System Media Sanitization",
+   "nist_800_53_r5": [
+    "MP-6",
+    "MP-6(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-09.1",
+   "domain": "Data Classification & Handling",
+   "name": "System Media Sanitization Documentation",
+   "nist_800_53_r5": [
+    "MP-6(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-09.2",
+   "domain": "Data Classification & Handling",
+   "name": "Equipment Testing",
+   "nist_800_53_r5": [
+    "MP-6(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-09.3",
+   "domain": "Data Classification & Handling",
+   "name": "Sanitization of Personal Data (PD)",
+   "nist_800_53_r5": [
+    "MP-6",
+    "MP-6(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-09.4",
+   "domain": "Data Classification & Handling",
+   "name": "First Time Use Sanitization",
+   "nist_800_53_r5": [
+    "MP-6(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-09.5",
+   "domain": "Data Classification & Handling",
+   "name": "Dual Authorization for Sensitive Data Destruction",
+   "nist_800_53_r5": [
+    "MP-6(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-10",
+   "domain": "Data Classification & Handling",
+   "name": "Media Use",
+   "nist_800_53_r5": [
+    "MP-7",
+    "SC-8(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-10.1",
+   "domain": "Data Classification & Handling",
+   "name": "Limitations on Use",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-10.2",
+   "domain": "Data Classification & Handling",
+   "name": "Prohibit Use Without Owner",
+   "nist_800_53_r5": [
+    "MP-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-11",
+   "domain": "Data Classification & Handling",
+   "name": "Data Reclassification",
+   "nist_800_53_r5": [
+    "MP-8",
+    "MP-8(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-12",
+   "domain": "Data Classification & Handling",
+   "name": "Removable Media Security",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-13",
+   "domain": "Data Classification & Handling",
+   "name": "Use of External Technology Assets, Applications and/or Services (TAAS)",
+   "nist_800_53_r5": [
+    "AC-20"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-13.1",
+   "domain": "Data Classification & Handling",
+   "name": "Limits of Authorized Use",
+   "nist_800_53_r5": [
+    "AC-20(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-13.2",
+   "domain": "Data Classification & Handling",
+   "name": "Portable Storage Devices",
+   "nist_800_53_r5": [
+    "AC-20(2)",
+    "AC-20(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-13.3",
+   "domain": "Data Classification & Handling",
+   "name": "Protecting Sensitive / Regulated Data on External Technology Assets, Applications and/or Services (TAAS)",
+   "nist_800_53_r5": [
+    "PM-17"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-13.4",
+   "domain": "Data Classification & Handling",
+   "name": "Non-Organizationally Owned Technology Assets, Applications and/or Services (TAAS)",
+   "nist_800_53_r5": [
+    "AC-20(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-14",
+   "domain": "Data Classification & Handling",
+   "name": "Information Sharing",
+   "nist_800_53_r5": [
+    "AC-21"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14"
+   ]
+  },
+  {
+   "scf_id": "DCH-14.1",
+   "domain": "Data Classification & Handling",
+   "name": "Information Search & Retrieval",
+   "nist_800_53_r5": [
+    "AC-21(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-14.2",
+   "domain": "Data Classification & Handling",
+   "name": "Transfer Authorizations",
+   "nist_800_53_r5": [
+    "CA-3(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-15",
+   "domain": "Data Classification & Handling",
+   "name": "Publicly Accessible Content",
+   "nist_800_53_r5": [
+    "AC-22"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-16",
+   "domain": "Data Classification & Handling",
+   "name": "Data Mining Protection",
+   "nist_800_53_r5": [
+    "AC-23"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-17",
+   "domain": "Data Classification & Handling",
+   "name": "Ad-Hoc Transfers",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.14"
+   ]
+  },
+  {
+   "scf_id": "DCH-18",
+   "domain": "Data Classification & Handling",
+   "name": "Media & Data Retention",
+   "nist_800_53_r5": [
+    "MP-7",
+    "SI-12"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33",
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-18.1",
+   "domain": "Data Classification & Handling",
+   "name": "Minimize Sensitive / Regulated Data",
+   "nist_800_53_r5": [
+    "SI-12(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-18.2",
+   "domain": "Data Classification & Handling",
+   "name": "Limit Sensitive / Regulated Data In Testing, Training & Research",
+   "nist_800_53_r5": [
+    "PM-25",
+    "SA-15(12)",
+    "SA-8(33)",
+    "SI-12(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-19",
+   "domain": "Data Classification & Handling",
+   "name": "Geographic Location of Data",
+   "nist_800_53_r5": [
+    "SA-9(5)",
+    "SA-9(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-21",
+   "domain": "Data Classification & Handling",
+   "name": "Information Disposal",
+   "nist_800_53_r5": [
+    "SI-12(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "DCH-22",
+   "domain": "Data Classification & Handling",
+   "name": "Data Quality Operations",
+   "nist_800_53_r5": [
+    "PM-22",
+    "SI-18",
+    "SI-18(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-22.1",
+   "domain": "Data Classification & Handling",
+   "name": "Updating & Correcting Personal Data (PD)",
+   "nist_800_53_r5": [
+    "SI-18(4)",
+    "SI-18(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-22.2",
+   "domain": "Data Classification & Handling",
+   "name": "Data Tags",
+   "nist_800_53_r5": [
+    "PT-2(1)",
+    "PT-3(1)",
+    "SI-18(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-22.3",
+   "domain": "Data Classification & Handling",
+   "name": "Primary Source Personal Data (PD) Collection",
+   "nist_800_53_r5": [
+    "SI-18(3)",
+    "SI-19(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-23",
+   "domain": "Data Classification & Handling",
+   "name": "De-Identification (Anonymization)",
+   "nist_800_53_r5": [
+    "SI-19"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.33"
+   ]
+  },
+  {
+   "scf_id": "DCH-23.1",
+   "domain": "Data Classification & Handling",
+   "name": "De-Identify Dataset Upon Collection",
+   "nist_800_53_r5": [
+    "SI-19(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-23.2",
+   "domain": "Data Classification & Handling",
+   "name": "Archiving",
+   "nist_800_53_r5": [
+    "SI-19(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-23.3",
+   "domain": "Data Classification & Handling",
+   "name": "Release",
+   "nist_800_53_r5": [
+    "SI-19(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-23.4",
+   "domain": "Data Classification & Handling",
+   "name": "Removal, Masking, Encryption, Hashing or Replacement of Direct Identifiers",
+   "nist_800_53_r5": [
+    "SI-19(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.11"
+   ]
+  },
+  {
+   "scf_id": "DCH-23.5",
+   "domain": "Data Classification & Handling",
+   "name": "Statistical Disclosure Control",
+   "nist_800_53_r5": [
+    "SI-19(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-23.6",
+   "domain": "Data Classification & Handling",
+   "name": "Differential Data Privacy",
+   "nist_800_53_r5": [
+    "SI-19(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-23.7",
+   "domain": "Data Classification & Handling",
+   "name": "Automated De-Identification of Sensitive Data",
+   "nist_800_53_r5": [
+    "SI-19(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-23.8",
+   "domain": "Data Classification & Handling",
+   "name": "Motivated Intruder",
+   "nist_800_53_r5": [
+    "SI-19(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-24",
+   "domain": "Data Classification & Handling",
+   "name": "Information Location",
+   "nist_800_53_r5": [
+    "CM-12"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "DCH-24.1",
+   "domain": "Data Classification & Handling",
+   "name": "Automated Tools to Support Information Location",
+   "nist_800_53_r5": [
+    "CM-12(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-01",
+   "domain": "Endpoint Security",
+   "name": "Endpoint Device Management (EDM)",
+   "nist_800_53_r5": [
+    "MP-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.7",
+    "A.8.1",
+    "A.8.5"
+   ]
+  },
+  {
+   "scf_id": "END-02",
+   "domain": "Endpoint Security",
+   "name": "Endpoint Protection Measures",
+   "nist_800_53_r5": [
+    "SC-28"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.1",
+    "A.8.5"
+   ]
+  },
+  {
+   "scf_id": "END-03",
+   "domain": "Endpoint Security",
+   "name": "Prohibit Installation Without Privileged Status",
+   "nist_800_53_r5": [
+    "CM-11",
+    "CM-11(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.19"
+   ]
+  },
+  {
+   "scf_id": "END-03.1",
+   "domain": "Endpoint Security",
+   "name": "Software Installation Alerts",
+   "nist_800_53_r5": [
+    "CM-11(3)",
+    "CM-8(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-03.2",
+   "domain": "Endpoint Security",
+   "name": "Governing Access Restriction for Change",
+   "nist_800_53_r5": [
+    "CM-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.19"
+   ]
+  },
+  {
+   "scf_id": "END-04",
+   "domain": "Endpoint Security",
+   "name": "Malicious Code Protection (Anti-Malware)",
+   "nist_800_53_r5": [
+    "SI-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.7"
+   ]
+  },
+  {
+   "scf_id": "END-04.1",
+   "domain": "Endpoint Security",
+   "name": "Automatic Antimalware Signature Updates",
+   "nist_800_53_r5": [
+    "SI-2",
+    "SI-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.7"
+   ]
+  },
+  {
+   "scf_id": "END-04.3",
+   "domain": "Endpoint Security",
+   "name": "Centralized Management of Antimalware Technologies",
+   "nist_800_53_r5": [
+    "PL-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-04.4",
+   "domain": "Endpoint Security",
+   "name": "Heuristic / Nonsignature-Based Detection",
+   "nist_800_53_r5": [
+    "SI-3"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-04.5",
+   "domain": "Endpoint Security",
+   "name": "Malware Protection Mechanism Testing",
+   "nist_800_53_r5": [
+    "SI-3(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06",
+   "domain": "Endpoint Security",
+   "name": "Endpoint File Integrity Monitoring (FIM)",
+   "nist_800_53_r5": [
+    "SI-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06.1",
+   "domain": "Endpoint Security",
+   "name": "Integrity Checks",
+   "nist_800_53_r5": [
+    "SI-7(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06.2",
+   "domain": "Endpoint Security",
+   "name": "Endpoint Detection & Response (EDR)",
+   "nist_800_53_r5": [
+    "SI-7(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06.3",
+   "domain": "Endpoint Security",
+   "name": "Automated Notifications of Integrity Violations",
+   "nist_800_53_r5": [
+    "SI-7(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06.4",
+   "domain": "Endpoint Security",
+   "name": "Automated Response to Integrity Violations",
+   "nist_800_53_r5": [
+    "SI-7(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06.5",
+   "domain": "Endpoint Security",
+   "name": "Boot Process Integrity",
+   "nist_800_53_r5": [
+    "SI-7(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06.6",
+   "domain": "Endpoint Security",
+   "name": "Protection of Boot Firmware",
+   "nist_800_53_r5": [
+    "SI-7(10)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-06.7",
+   "domain": "Endpoint Security",
+   "name": "Binary or Machine-Executable Code",
+   "nist_800_53_r5": [
+    "CM-7(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-08",
+   "domain": "Endpoint Security",
+   "name": "Phishing & Spam Protection",
+   "nist_800_53_r5": [
+    "SI-8"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-08.1",
+   "domain": "Endpoint Security",
+   "name": "Phishing & Spam Protection Centralized Management",
+   "nist_800_53_r5": [
+    "PL-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-08.2",
+   "domain": "Endpoint Security",
+   "name": "Automatic Spam and Phishing Protection Updates",
+   "nist_800_53_r5": [
+    "SI-8(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-09",
+   "domain": "Endpoint Security",
+   "name": "Trusted Path",
+   "nist_800_53_r5": [
+    "SC-11"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.5"
+   ]
+  },
+  {
+   "scf_id": "END-10",
+   "domain": "Endpoint Security",
+   "name": "Mobile Code",
+   "nist_800_53_r5": [
+    "SC-18",
+    "SC-18(1)",
+    "SC-18(2)",
+    "SC-18(3)",
+    "SC-18(4)",
+    "SC-27"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-11",
+   "domain": "Endpoint Security",
+   "name": "Thin Nodes",
+   "nist_800_53_r5": [
+    "SC-25"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-12",
+   "domain": "Endpoint Security",
+   "name": "Port & Input / Output (I/O) Device Access",
+   "nist_800_53_r5": [
+    "SC-41"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-13",
+   "domain": "Endpoint Security",
+   "name": "Sensor Capability",
+   "nist_800_53_r5": [
+    "SC-42"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-13.1",
+   "domain": "Endpoint Security",
+   "name": "Authorized Use",
+   "nist_800_53_r5": [
+    "SC-42(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-13.2",
+   "domain": "Endpoint Security",
+   "name": "Notice of Collection",
+   "nist_800_53_r5": [
+    "SC-42(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-13.3",
+   "domain": "Endpoint Security",
+   "name": "Collection Minimization",
+   "nist_800_53_r5": [
+    "PM-25",
+    "SA-8(33)",
+    "SC-42(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-13.4",
+   "domain": "Endpoint Security",
+   "name": "Sensor Delivery Verification",
+   "nist_800_53_r5": [
+    "SC-42(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-14",
+   "domain": "Endpoint Security",
+   "name": "Collaborative Computing Devices",
+   "nist_800_53_r5": [
+    "SC-15",
+    "SC-15(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-14.1",
+   "domain": "Endpoint Security",
+   "name": "Disabling / Removal In Secure Work Areas",
+   "nist_800_53_r5": [
+    "SC-15(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-14.2",
+   "domain": "Endpoint Security",
+   "name": "Explicitly Indicate Current Participants",
+   "nist_800_53_r5": [
+    "SC-15(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-16",
+   "domain": "Endpoint Security",
+   "name": "Restrict Access To Security Functions",
+   "nist_800_53_r5": [
+    "SC-3"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "END-16.1",
+   "domain": "Endpoint Security",
+   "name": "Host-Based Security Function Isolation",
+   "nist_800_53_r5": [
+    "SC-7(12)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-01",
+   "domain": "Human Resources Security",
+   "name": "Human Resources Security Management",
+   "nist_800_53_r5": [
+    "PS-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.4"
+   ]
+  },
+  {
+   "scf_id": "HRS-02",
+   "domain": "Human Resources Security",
+   "name": "Position Categorization",
+   "nist_800_53_r5": [
+    "PS-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-02.2",
+   "domain": "Human Resources Security",
+   "name": "Probationary Periods",
+   "nist_800_53_r5": [
+    "SI-4(21)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-03",
+   "domain": "Human Resources Security",
+   "name": "Defined Roles & Responsibilities",
+   "nist_800_53_r5": [
+    "PM-13",
+    "PS-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.2"
+   ]
+  },
+  {
+   "scf_id": "HRS-03.2",
+   "domain": "Human Resources Security",
+   "name": "Competency Requirements for Security-Related Positions",
+   "nist_800_53_r5": [
+    "PS-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-04",
+   "domain": "Human Resources Security",
+   "name": "Personnel Screening",
+   "nist_800_53_r5": [
+    "PS-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.1"
+   ]
+  },
+  {
+   "scf_id": "HRS-04.1",
+   "domain": "Human Resources Security",
+   "name": "Roles With Special Protection Measures",
+   "nist_800_53_r5": [
+    "PS-3(1)",
+    "PS-3(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.2",
+    "A.6.1"
+   ]
+  },
+  {
+   "scf_id": "HRS-04.2",
+   "domain": "Human Resources Security",
+   "name": "Formal Indoctrination",
+   "nist_800_53_r5": [
+    "PS-3(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.4"
+   ]
+  },
+  {
+   "scf_id": "HRS-04.3",
+   "domain": "Human Resources Security",
+   "name": "Citizenship Requirements",
+   "nist_800_53_r5": [
+    "PS-3(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-05",
+   "domain": "Human Resources Security",
+   "name": "Terms of Employment",
+   "nist_800_53_r5": [
+    "PL-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.5.4",
+    "A.6.2"
+   ]
+  },
+  {
+   "scf_id": "HRS-05.1",
+   "domain": "Human Resources Security",
+   "name": "Rules of Behavior",
+   "nist_800_53_r5": [
+    "PL-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.10",
+    "A.5.14",
+    "A.5.4",
+    "A.6.2"
+   ]
+  },
+  {
+   "scf_id": "HRS-05.2",
+   "domain": "Human Resources Security",
+   "name": "Social Media & Social Networking Restrictions",
+   "nist_800_53_r5": [
+    "PL-4(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.10",
+    "A.5.4",
+    "A.6.2"
+   ]
+  },
+  {
+   "scf_id": "HRS-05.3",
+   "domain": "Human Resources Security",
+   "name": "Technology Use Restrictions",
+   "nist_800_53_r5": [
+    "PL-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.10",
+    "A.5.4",
+    "A.6.2"
+   ]
+  },
+  {
+   "scf_id": "HRS-05.5",
+   "domain": "Human Resources Security",
+   "name": "Use of Mobile Devices",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.6.2"
+   ]
+  },
+  {
+   "scf_id": "HRS-06",
+   "domain": "Human Resources Security",
+   "name": "Access Agreements",
+   "nist_800_53_r5": [
+    "PS-6",
+    "PS-6(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.10",
+    "A.5.14"
+   ]
+  },
+  {
+   "scf_id": "HRS-06.1",
+   "domain": "Human Resources Security",
+   "name": "Confidentiality Agreements",
+   "nist_800_53_r5": [
+    "PS-6",
+    "PS-6(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.6.6"
+   ]
+  },
+  {
+   "scf_id": "HRS-06.2",
+   "domain": "Human Resources Security",
+   "name": "Post-Employment Requirements Awareness",
+   "nist_800_53_r5": [
+    "PS-6(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-07",
+   "domain": "Human Resources Security",
+   "name": "Personnel Sanctions",
+   "nist_800_53_r5": [
+    "PS-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.4"
+   ]
+  },
+  {
+   "scf_id": "HRS-07.1",
+   "domain": "Human Resources Security",
+   "name": "Workplace Investigations",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.6.4"
+   ]
+  },
+  {
+   "scf_id": "HRS-08",
+   "domain": "Human Resources Security",
+   "name": "Personnel Transfer",
+   "nist_800_53_r5": [
+    "PS-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.5"
+   ]
+  },
+  {
+   "scf_id": "HRS-09",
+   "domain": "Human Resources Security",
+   "name": "Personnel Termination",
+   "nist_800_53_r5": [
+    "PS-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.5"
+   ]
+  },
+  {
+   "scf_id": "HRS-09.2",
+   "domain": "Human Resources Security",
+   "name": "High-Risk Terminations",
+   "nist_800_53_r5": [
+    "AC-2(13)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-09.3",
+   "domain": "Human Resources Security",
+   "name": "Post-Employment Requirements Notification",
+   "nist_800_53_r5": [
+    "PS-4(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.5"
+   ]
+  },
+  {
+   "scf_id": "HRS-09.4",
+   "domain": "Human Resources Security",
+   "name": "Automated Employment Status Notifications",
+   "nist_800_53_r5": [
+    "PS-4(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-10",
+   "domain": "Human Resources Security",
+   "name": "Third-Party Personnel",
+   "nist_800_53_r5": [
+    "PS-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "HRS-11",
+   "domain": "Human Resources Security",
+   "name": "Separation of Duties (SoD)",
+   "nist_800_53_r5": [
+    "AC-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.18",
+    "A.5.3"
+   ]
+  },
+  {
+   "scf_id": "HRS-12",
+   "domain": "Human Resources Security",
+   "name": "Incompatible Roles",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.3"
+   ]
+  },
+  {
+   "scf_id": "HRS-12.1",
+   "domain": "Human Resources Security",
+   "name": "Two-Person Rule",
+   "nist_800_53_r5": [
+    "AC-3(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-01",
+   "domain": "Identification & Authentication",
+   "name": "Identity & Access Management (IAM)",
+   "nist_800_53_r5": [
+    "AC-1",
+    "IA-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-01.2",
+   "domain": "Identification & Authentication",
+   "name": "Authenticate, Authorize and Audit (AAA)",
+   "nist_800_53_r5": [
+    "IA-4",
+    "IA-4(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-02",
+   "domain": "Identification & Authentication",
+   "name": "Identification & Authentication for Organizational Users",
+   "nist_800_53_r5": [
+    "IA-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15"
+   ]
+  },
+  {
+   "scf_id": "IAC-02.1",
+   "domain": "Identification & Authentication",
+   "name": "Group Authentication",
+   "nist_800_53_r5": [
+    "IA-2(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-02.2",
+   "domain": "Identification & Authentication",
+   "name": "Replay-Resistant Authentication",
+   "nist_800_53_r5": [
+    "IA-2(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-02.3",
+   "domain": "Identification & Authentication",
+   "name": "Acceptance of PIV Credentials",
+   "nist_800_53_r5": [
+    "IA-2(12)",
+    "IA-8(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-02.4",
+   "domain": "Identification & Authentication",
+   "name": "Out-of-Band Authentication (OOBA)",
+   "nist_800_53_r5": [
+    "IA-2(13)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-03",
+   "domain": "Identification & Authentication",
+   "name": "Identification & Authentication for Non-Organizational Users",
+   "nist_800_53_r5": [
+    "IA-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-03.1",
+   "domain": "Identification & Authentication",
+   "name": "Acceptance of PIV Credentials from Other Organizations",
+   "nist_800_53_r5": [
+    "IA-8(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-03.2",
+   "domain": "Identification & Authentication",
+   "name": "Acceptance of Third-Party Credentials",
+   "nist_800_53_r5": [
+    "IA-8(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-03.3",
+   "domain": "Identification & Authentication",
+   "name": "Use of FICAM-Issued Profiles",
+   "nist_800_53_r5": [
+    "IA-8(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-03.4",
+   "domain": "Identification & Authentication",
+   "name": "Disassociability",
+   "nist_800_53_r5": [
+    "IA-8(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-04",
+   "domain": "Identification & Authentication",
+   "name": "Identification & Authentication for Devices",
+   "nist_800_53_r5": [
+    "IA-3",
+    "IA-3(1)",
+    "IA-3(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-04.1",
+   "domain": "Identification & Authentication",
+   "name": "Device Attestation",
+   "nist_800_53_r5": [
+    "IA-3(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-05",
+   "domain": "Identification & Authentication",
+   "name": "Identification & Authentication for Third-Party Technology Assets, Applications and/or Services (TAAS)",
+   "nist_800_53_r5": [
+    "IA-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-05.2",
+   "domain": "Identification & Authentication",
+   "name": "Privileged Access by Non-Organizational Users",
+   "nist_800_53_r5": [
+    "AC-6(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-06",
+   "domain": "Identification & Authentication",
+   "name": "Multi-Factor Authentication (MFA)",
+   "nist_800_53_r5": [
+    "IA-2(1)",
+    "IA-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-06.1",
+   "domain": "Identification & Authentication",
+   "name": "Network Access to Privileged Accounts",
+   "nist_800_53_r5": [
+    "IA-2(1)",
+    "IA-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-06.2",
+   "domain": "Identification & Authentication",
+   "name": "Network Access to Non-Privileged Accounts",
+   "nist_800_53_r5": [
+    "IA-2(1)",
+    "IA-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-06.3",
+   "domain": "Identification & Authentication",
+   "name": "Local Access to Privileged Accounts",
+   "nist_800_53_r5": [
+    "IA-2(1)",
+    "IA-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-06.4",
+   "domain": "Identification & Authentication",
+   "name": "Out-of-Band Multi-Factor Authentication",
+   "nist_800_53_r5": [
+    "IA-2(1)",
+    "IA-2(2)",
+    "IA-2(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-07",
+   "domain": "Identification & Authentication",
+   "name": "User Provisioning & De-Provisioning",
+   "nist_800_53_r5": [
+    "IA-12(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16",
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-07.1",
+   "domain": "Identification & Authentication",
+   "name": "Change of Roles & Duties",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-07.2",
+   "domain": "Identification & Authentication",
+   "name": "Termination of Employment",
+   "nist_800_53_r5": [
+    "AC-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-08",
+   "domain": "Identification & Authentication",
+   "name": "Role-Based Access Control (RBAC)",
+   "nist_800_53_r5": [
+    "AC-2(7)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.8.3"
+   ]
+  },
+  {
+   "scf_id": "IAC-09",
+   "domain": "Identification & Authentication",
+   "name": "Identifier Management (User Names)",
+   "nist_800_53_r5": [
+    "IA-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-09.1",
+   "domain": "Identification & Authentication",
+   "name": "User Identity (ID) Management",
+   "nist_800_53_r5": [
+    "IA-4(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-09.2",
+   "domain": "Identification & Authentication",
+   "name": "Identity User Status",
+   "nist_800_53_r5": [
+    "IA-4(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-09.3",
+   "domain": "Identification & Authentication",
+   "name": "Dynamic Management",
+   "nist_800_53_r5": [
+    "IA-4(5)",
+    "IA-5(10)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-09.4",
+   "domain": "Identification & Authentication",
+   "name": "Cross-Organization Management",
+   "nist_800_53_r5": [
+    "IA-4(6)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-09.5",
+   "domain": "Identification & Authentication",
+   "name": "Privileged Account Identifiers",
+   "nist_800_53_r5": [
+    "IA-5(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-09.6",
+   "domain": "Identification & Authentication",
+   "name": "Pairwise Pseudonymous Identifiers (PPID)",
+   "nist_800_53_r5": [
+    "IA-4(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10",
+   "domain": "Identification & Authentication",
+   "name": "Authenticator Management",
+   "nist_800_53_r5": [
+    "IA-5",
+    "IA-5(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.17",
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-10.1",
+   "domain": "Identification & Authentication",
+   "name": "Password-Based Authentication",
+   "nist_800_53_r5": [
+    "IA-5(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.17"
+   ]
+  },
+  {
+   "scf_id": "IAC-10.2",
+   "domain": "Identification & Authentication",
+   "name": "PKI-Based Authentication",
+   "nist_800_53_r5": [
+    "IA-5(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10.3",
+   "domain": "Identification & Authentication",
+   "name": "In-Person or Trusted Third-Party Registration",
+   "nist_800_53_r5": [
+    "IA-12(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10.4",
+   "domain": "Identification & Authentication",
+   "name": "Automated Support For Password Strength",
+   "nist_800_53_r5": [
+    "IA-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10.5",
+   "domain": "Identification & Authentication",
+   "name": "Protection of Authenticators",
+   "nist_800_53_r5": [
+    "IA-5(6)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.17"
+   ]
+  },
+  {
+   "scf_id": "IAC-10.6",
+   "domain": "Identification & Authentication",
+   "name": "No Embedded Unencrypted Static Authenticators",
+   "nist_800_53_r5": [
+    "IA-5(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10.7",
+   "domain": "Identification & Authentication",
+   "name": "Hardware Token-Based Authentication",
+   "nist_800_53_r5": [
+    "IA-2(1)",
+    "IA-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10.8",
+   "domain": "Identification & Authentication",
+   "name": "Default Authenticators",
+   "nist_800_53_r5": [
+    "IA-5",
+    "IA-5(5)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.17"
+   ]
+  },
+  {
+   "scf_id": "IAC-10.9",
+   "domain": "Identification & Authentication",
+   "name": "Multiple System Accounts",
+   "nist_800_53_r5": [
+    "IA-5(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10.10",
+   "domain": "Identification & Authentication",
+   "name": "Expiration of Cached Authenticators",
+   "nist_800_53_r5": [
+    "IA-5(13)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-10.11",
+   "domain": "Identification & Authentication",
+   "name": "Password Managers",
+   "nist_800_53_r5": [
+    "IA-5(18)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.17",
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-10.12",
+   "domain": "Identification & Authentication",
+   "name": "Biometric Authentication",
+   "nist_800_53_r5": [
+    "IA-5(12)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-11",
+   "domain": "Identification & Authentication",
+   "name": "Authenticator Feedback",
+   "nist_800_53_r5": [
+    "IA-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-12",
+   "domain": "Identification & Authentication",
+   "name": "Cryptographic Module Authentication",
+   "nist_800_53_r5": [
+    "IA-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-13",
+   "domain": "Identification & Authentication",
+   "name": "Adaptive Identification & Authentication",
+   "nist_800_53_r5": [
+    "IA-10"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-13.1",
+   "domain": "Identification & Authentication",
+   "name": "Single Sign-On (SSO) Transparent Authentication",
+   "nist_800_53_r5": [
+    "IA-2(10)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-13.2",
+   "domain": "Identification & Authentication",
+   "name": "Federated Credential Management",
+   "nist_800_53_r5": [
+    "IA-5(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-14",
+   "domain": "Identification & Authentication",
+   "name": "Re-Authentication",
+   "nist_800_53_r5": [
+    "IA-11"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-15",
+   "domain": "Identification & Authentication",
+   "name": "Account Management",
+   "nist_800_53_r5": [
+    "AC-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.16",
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-15.1",
+   "domain": "Identification & Authentication",
+   "name": "Automated System Account Management (Directory Services)",
+   "nist_800_53_r5": [
+    "AC-2(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-15.2",
+   "domain": "Identification & Authentication",
+   "name": "Removal of Temporary / Emergency Accounts",
+   "nist_800_53_r5": [
+    "AC-2(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-15.3",
+   "domain": "Identification & Authentication",
+   "name": "Disable Inactive Accounts",
+   "nist_800_53_r5": [
+    "AC-2(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-15.4",
+   "domain": "Identification & Authentication",
+   "name": "Automated Audit Actions",
+   "nist_800_53_r5": [
+    "AC-2(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-15.5",
+   "domain": "Identification & Authentication",
+   "name": "Restrictions on Shared Groups / Accounts",
+   "nist_800_53_r5": [
+    "AC-2(9)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.16"
+   ]
+  },
+  {
+   "scf_id": "IAC-15.6",
+   "domain": "Identification & Authentication",
+   "name": "Account Disabling for High Risk Individuals",
+   "nist_800_53_r5": [
+    "AC-2(13)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-15.8",
+   "domain": "Identification & Authentication",
+   "name": "Usage Conditions",
+   "nist_800_53_r5": [
+    "AC-2(11)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-16",
+   "domain": "Identification & Authentication",
+   "name": "Privileged Account Management (PAM)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.18",
+    "A.8.2"
+   ]
+  },
+  {
+   "scf_id": "IAC-16.1",
+   "domain": "Identification & Authentication",
+   "name": "Privileged Account Inventories",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.18",
+    "A.8.2"
+   ]
+  },
+  {
+   "scf_id": "IAC-17",
+   "domain": "Identification & Authentication",
+   "name": "Periodic Review of Account Privileges",
+   "nist_800_53_r5": [
+    "AC-6(7)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.18",
+    "A.8.2"
+   ]
+  },
+  {
+   "scf_id": "IAC-18",
+   "domain": "Identification & Authentication",
+   "name": "User Responsibilities for Account Management",
+   "nist_800_53_r5": [
+    "IA-5(6)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.17"
+   ]
+  },
+  {
+   "scf_id": "IAC-19",
+   "domain": "Identification & Authentication",
+   "name": "Credential Sharing",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-20",
+   "domain": "Identification & Authentication",
+   "name": "Access Enforcement",
+   "nist_800_53_r5": [
+    "AC-3",
+    "AC-6"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-20.1",
+   "domain": "Identification & Authentication",
+   "name": "Access To Sensitive / Regulated Data",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-20.2",
+   "domain": "Identification & Authentication",
+   "name": "Database Access",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-20.3",
+   "domain": "Identification & Authentication",
+   "name": "Use of Privileged Utility Programs",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.18",
+    "A.8.18"
+   ]
+  },
+  {
+   "scf_id": "IAC-20.5",
+   "domain": "Identification & Authentication",
+   "name": "Dual Authorization for Privileged Commands",
+   "nist_800_53_r5": [
+    "AC-3(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-20.6",
+   "domain": "Identification & Authentication",
+   "name": "Revocation of Access Authorizations",
+   "nist_800_53_r5": [
+    "AC-3(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-21",
+   "domain": "Identification & Authentication",
+   "name": "Least Privilege",
+   "nist_800_53_r5": [
+    "AC-6",
+    "SA-8(14)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.18",
+    "A.8.12",
+    "A.8.3"
+   ]
+  },
+  {
+   "scf_id": "IAC-21.1",
+   "domain": "Identification & Authentication",
+   "name": "Authorize Access to Security Functions",
+   "nist_800_53_r5": [
+    "AC-6(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-21.2",
+   "domain": "Identification & Authentication",
+   "name": "Non-Privileged Access for Non-Security Functions",
+   "nist_800_53_r5": [
+    "AC-6(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-21.3",
+   "domain": "Identification & Authentication",
+   "name": "Management Approval For Privileged Accounts",
+   "nist_800_53_r5": [
+    "AC-6(5)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.18",
+    "A.8.2"
+   ]
+  },
+  {
+   "scf_id": "IAC-21.4",
+   "domain": "Identification & Authentication",
+   "name": "Auditing Use of Privileged Functions",
+   "nist_800_53_r5": [
+    "AC-6(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-21.5",
+   "domain": "Identification & Authentication",
+   "name": "Prohibit Non-Privileged Users from Executing Privileged Functions",
+   "nist_800_53_r5": [
+    "AC-6(10)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-21.6",
+   "domain": "Identification & Authentication",
+   "name": "Network Access to Privileged Commands",
+   "nist_800_53_r5": [
+    "AC-6(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-21.7",
+   "domain": "Identification & Authentication",
+   "name": "Privilege Levels for Code Execution",
+   "nist_800_53_r5": [
+    "AC-6(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-22",
+   "domain": "Identification & Authentication",
+   "name": "Account Lockout",
+   "nist_800_53_r5": [
+    "AC-7"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.1"
+   ]
+  },
+  {
+   "scf_id": "IAC-23",
+   "domain": "Identification & Authentication",
+   "name": "Concurrent Session Control",
+   "nist_800_53_r5": [
+    "AC-10"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-24",
+   "domain": "Identification & Authentication",
+   "name": "Session Lock",
+   "nist_800_53_r5": [
+    "AC-11",
+    "AC-2(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-24.1",
+   "domain": "Identification & Authentication",
+   "name": "Pattern-Hiding Displays",
+   "nist_800_53_r5": [
+    "AC-11(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-25",
+   "domain": "Identification & Authentication",
+   "name": "Session Termination",
+   "nist_800_53_r5": [
+    "AC-12"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-25.1",
+   "domain": "Identification & Authentication",
+   "name": "User-Initiated Logouts / Message Displays",
+   "nist_800_53_r5": [
+    "AC-12(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-26",
+   "domain": "Identification & Authentication",
+   "name": "Permitted Actions Without Identification or Authorization",
+   "nist_800_53_r5": [
+    "AC-14"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-27",
+   "domain": "Identification & Authentication",
+   "name": "Reference Monitor",
+   "nist_800_53_r5": [
+    "AC-25"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-28",
+   "domain": "Identification & Authentication",
+   "name": "Identity Proofing (Identity Verification)",
+   "nist_800_53_r5": [
+    "IA-12"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-28.1",
+   "domain": "Identification & Authentication",
+   "name": "Management Approval For New or Changed Accounts",
+   "nist_800_53_r5": [
+    "AC-24",
+    "IA-12(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-28.2",
+   "domain": "Identification & Authentication",
+   "name": "Identity Evidence",
+   "nist_800_53_r5": [
+    "IA-12(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-28.3",
+   "domain": "Identification & Authentication",
+   "name": "Identity Evidence Validation & Verification",
+   "nist_800_53_r5": [
+    "IA-12(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-28.4",
+   "domain": "Identification & Authentication",
+   "name": "In-Person Validation & Verification",
+   "nist_800_53_r5": [
+    "IA-12(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAC-28.5",
+   "domain": "Identification & Authentication",
+   "name": "Address Confirmation",
+   "nist_800_53_r5": [
+    "IA-12(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-01",
+   "domain": "Incident Response",
+   "name": "Incident Response Operations",
+   "nist_800_53_r5": [
+    "IR-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.24"
+   ]
+  },
+  {
+   "scf_id": "IRO-02",
+   "domain": "Incident Response",
+   "name": "Incident Handling",
+   "nist_800_53_r5": [
+    "IR-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.24",
+    "A.5.25",
+    "A.5.26",
+    "A.6.8"
+   ]
+  },
+  {
+   "scf_id": "IRO-02.1",
+   "domain": "Incident Response",
+   "name": "Automated Incident Handling Processes",
+   "nist_800_53_r5": [
+    "IR-4(1)",
+    "SI-4(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-02.2",
+   "domain": "Incident Response",
+   "name": "Insider Threat Response Capability",
+   "nist_800_53_r5": [
+    "IR-4(6)",
+    "IR-4(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-02.3",
+   "domain": "Incident Response",
+   "name": "Dynamic Reconfiguration",
+   "nist_800_53_r5": [
+    "IR-4(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-02.4",
+   "domain": "Incident Response",
+   "name": "Incident Classification & Prioritization",
+   "nist_800_53_r5": [
+    "IR-4(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-02.5",
+   "domain": "Incident Response",
+   "name": "Correlation with External Organizations",
+   "nist_800_53_r5": [
+    "IR-4(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-02.6",
+   "domain": "Incident Response",
+   "name": "Automatic Disabling of Technology Assets, Applications and/or Services (TAAS)",
+   "nist_800_53_r5": [
+    "IR-4(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-04",
+   "domain": "Incident Response",
+   "name": "Incident Response Plan (IRP)",
+   "nist_800_53_r5": [
+    "IR-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.24",
+    "A.5.26"
+   ]
+  },
+  {
+   "scf_id": "IRO-04.1",
+   "domain": "Incident Response",
+   "name": "Data Breach",
+   "nist_800_53_r5": [
+    "IR-8(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.25"
+   ]
+  },
+  {
+   "scf_id": "IRO-04.2",
+   "domain": "Incident Response",
+   "name": "IRP Update",
+   "nist_800_53_r5": [
+    "IR-1"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-04.3",
+   "domain": "Incident Response",
+   "name": "Continuous Incident Response Improvements",
+   "nist_800_53_r5": [
+    "IR-3(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-05",
+   "domain": "Incident Response",
+   "name": "Incident Response Training",
+   "nist_800_53_r5": [
+    "IR-2",
+    "IR-2(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.29"
+   ]
+  },
+  {
+   "scf_id": "IRO-05.1",
+   "domain": "Incident Response",
+   "name": "Simulated Incidents",
+   "nist_800_53_r5": [
+    "IR-2(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-05.2",
+   "domain": "Incident Response",
+   "name": "Automated Incident Response Training Environments",
+   "nist_800_53_r5": [
+    "IR-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-06",
+   "domain": "Incident Response",
+   "name": "Incident Response Testing",
+   "nist_800_53_r5": [
+    "IR-3",
+    "SI-4(9)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.30"
+   ]
+  },
+  {
+   "scf_id": "IRO-06.1",
+   "domain": "Incident Response",
+   "name": "Coordination with Related Plans",
+   "nist_800_53_r5": [
+    "IR-3(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.29"
+   ]
+  },
+  {
+   "scf_id": "IRO-07",
+   "domain": "Incident Response",
+   "name": "Integrated Security Incident Response Team (ISIRT)",
+   "nist_800_53_r5": [
+    "IR-4(11)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.25",
+    "A.5.26"
+   ]
+  },
+  {
+   "scf_id": "IRO-08",
+   "domain": "Incident Response",
+   "name": "Chain of Custody & Forensics",
+   "nist_800_53_r5": [
+    "AU-10(3)",
+    "IR-4(12)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.26",
+    "A.5.28"
+   ]
+  },
+  {
+   "scf_id": "IRO-09",
+   "domain": "Incident Response",
+   "name": "Situational Awareness For Incidents",
+   "nist_800_53_r5": [
+    "IR-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.25"
+   ]
+  },
+  {
+   "scf_id": "IRO-09.1",
+   "domain": "Incident Response",
+   "name": "Automated Tracking, Data Collection & Analysis",
+   "nist_800_53_r5": [
+    "IR-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-10",
+   "domain": "Incident Response",
+   "name": "Incident Stakeholder Reporting",
+   "nist_800_53_r5": [
+    "IR-6"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.8"
+   ]
+  },
+  {
+   "scf_id": "IRO-10.1",
+   "domain": "Incident Response",
+   "name": "Automated Reporting",
+   "nist_800_53_r5": [
+    "IR-6(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-10.3",
+   "domain": "Incident Response",
+   "name": "Vulnerabilities Related To Incidents",
+   "nist_800_53_r5": [
+    "IR-6(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "IRO-10.4",
+   "domain": "Incident Response",
+   "name": "Supply Chain Coordination",
+   "nist_800_53_r5": [
+    "IR-4(10)",
+    "IR-6(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.20"
+   ]
+  },
+  {
+   "scf_id": "IRO-11",
+   "domain": "Incident Response",
+   "name": "Incident Reporting Assistance",
+   "nist_800_53_r5": [
+    "IR-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-11.1",
+   "domain": "Incident Response",
+   "name": "Automation Support of Availability of Information / Support",
+   "nist_800_53_r5": [
+    "IR-7(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-11.2",
+   "domain": "Incident Response",
+   "name": "Coordination With External Providers",
+   "nist_800_53_r5": [
+    "IR-7(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.29"
+   ]
+  },
+  {
+   "scf_id": "IRO-12",
+   "domain": "Incident Response",
+   "name": "Sensitive / Regulated Data Spill Response",
+   "nist_800_53_r5": [
+    "IR-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-12.1",
+   "domain": "Incident Response",
+   "name": "Sensitive / Regulated Data Spill Responsible Personnel",
+   "nist_800_53_r5": [
+    "IR-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-12.2",
+   "domain": "Incident Response",
+   "name": "Sensitive / Regulated Data Spill Training",
+   "nist_800_53_r5": [
+    "IR-9(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-12.3",
+   "domain": "Incident Response",
+   "name": "Post-Sensitive / Regulated Data Spill Operations",
+   "nist_800_53_r5": [
+    "IR-9(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-12.4",
+   "domain": "Incident Response",
+   "name": "Sensitive / Regulated Data Exposure to Unauthorized Personnel",
+   "nist_800_53_r5": [
+    "IR-9(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-13",
+   "domain": "Incident Response",
+   "name": "Root Cause Analysis (RCA) & Lessons Learned",
+   "nist_800_53_r5": [
+    "IR-1",
+    "IR-4(12)",
+    "IR-6(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.24",
+    "A.5.27"
+   ]
+  },
+  {
+   "scf_id": "IRO-14",
+   "domain": "Incident Response",
+   "name": "Regulatory & Law Enforcement Contacts",
+   "nist_800_53_r5": [
+    "IR-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-15",
+   "domain": "Incident Response",
+   "name": "Detonation Chambers (Sandboxes)",
+   "nist_800_53_r5": [
+    "SC-44"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IRO-16",
+   "domain": "Incident Response",
+   "name": "Public Relations & Reputation Repair",
+   "nist_800_53_r5": [
+    "IR-4(15)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-01",
+   "domain": "Information Assurance",
+   "name": "Information Assurance (IA) Operations",
+   "nist_800_53_r5": [
+    "CA-1",
+    "PM-10"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21"
+   ]
+  },
+  {
+   "scf_id": "IAO-02",
+   "domain": "Information Assurance",
+   "name": "Assessments",
+   "nist_800_53_r5": [
+    "CA-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21",
+    "A.5.23",
+    "A.8.29"
+   ]
+  },
+  {
+   "scf_id": "IAO-02.1",
+   "domain": "Information Assurance",
+   "name": "Assessor Independence",
+   "nist_800_53_r5": [
+    "CA-2(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-02.2",
+   "domain": "Information Assurance",
+   "name": "Specialized Assessments",
+   "nist_800_53_r5": [
+    "CA-2(2)",
+    "SA-11(5)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21",
+    "A.5.23",
+    "A.8.29"
+   ]
+  },
+  {
+   "scf_id": "IAO-02.3",
+   "domain": "Information Assurance",
+   "name": "Third-Party Assessment Reciprocity",
+   "nist_800_53_r5": [
+    "CA-2(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-03",
+   "domain": "Information Assurance",
+   "name": "Applied Security, Compliance and Resilience Controls Documentation",
+   "nist_800_53_r5": [
+    "PL-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-03.1",
+   "domain": "Information Assurance",
+   "name": "Plan / Coordinate with Other Organizational Entities",
+   "nist_800_53_r5": [
+    "PL-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-04",
+   "domain": "Information Assurance",
+   "name": "Threat Analysis & Flaw Remediation During Development",
+   "nist_800_53_r5": [
+    "SA-11(5)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25"
+   ]
+  },
+  {
+   "scf_id": "IAO-05",
+   "domain": "Information Assurance",
+   "name": "Capabilities Deficiency Tracking",
+   "nist_800_53_r5": [
+    "CA-5",
+    "PM-4",
+    "SA-15(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-05.1",
+   "domain": "Information Assurance",
+   "name": "Deficiency Tracking Automation",
+   "nist_800_53_r5": [
+    "CA-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-06",
+   "domain": "Information Assurance",
+   "name": "Technical Verification",
+   "nist_800_53_r5": [
+    "CA-2",
+    "CM-4(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "IAO-07",
+   "domain": "Information Assurance",
+   "name": "Security Authorization",
+   "nist_800_53_r5": [
+    "CA-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-01",
+   "domain": "Maintenance",
+   "name": "Maintenance Operations",
+   "nist_800_53_r5": [
+    "MA-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.13"
+   ]
+  },
+  {
+   "scf_id": "MNT-02",
+   "domain": "Maintenance",
+   "name": "Controlled Maintenance",
+   "nist_800_53_r5": [
+    "MA-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.13"
+   ]
+  },
+  {
+   "scf_id": "MNT-02.1",
+   "domain": "Maintenance",
+   "name": "Automated Maintenance Activities",
+   "nist_800_53_r5": [
+    "MA-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-03",
+   "domain": "Maintenance",
+   "name": "Timely Maintenance",
+   "nist_800_53_r5": [
+    "MA-6"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.13"
+   ]
+  },
+  {
+   "scf_id": "MNT-03.1",
+   "domain": "Maintenance",
+   "name": "Preventative Maintenance",
+   "nist_800_53_r5": [
+    "MA-6(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-03.2",
+   "domain": "Maintenance",
+   "name": "Predictive Maintenance",
+   "nist_800_53_r5": [
+    "MA-6(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-03.3",
+   "domain": "Maintenance",
+   "name": "Automated Support For Predictive Maintenance",
+   "nist_800_53_r5": [
+    "MA-6(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-04",
+   "domain": "Maintenance",
+   "name": "Maintenance Tools",
+   "nist_800_53_r5": [
+    "MA-3",
+    "MA-3(5)",
+    "MA-3(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-04.1",
+   "domain": "Maintenance",
+   "name": "Inspect Tools",
+   "nist_800_53_r5": [
+    "MA-3(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-04.2",
+   "domain": "Maintenance",
+   "name": "Inspect Media",
+   "nist_800_53_r5": [
+    "MA-3(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-04.3",
+   "domain": "Maintenance",
+   "name": "Prevent Unauthorized Removal",
+   "nist_800_53_r5": [
+    "MA-3(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-04.4",
+   "domain": "Maintenance",
+   "name": "Restrict Tool Usage",
+   "nist_800_53_r5": [
+    "MA-3(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05",
+   "domain": "Maintenance",
+   "name": "Remote Maintenance",
+   "nist_800_53_r5": [
+    "MA-4"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05.1",
+   "domain": "Maintenance",
+   "name": "Auditing Remote Maintenance",
+   "nist_800_53_r5": [
+    "MA-1",
+    "MA-4",
+    "MA-4(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05.2",
+   "domain": "Maintenance",
+   "name": "Remote Maintenance Notifications",
+   "nist_800_53_r5": [
+    "MA-1",
+    "MA-4"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05.3",
+   "domain": "Maintenance",
+   "name": "Remote Maintenance Cryptographic Protection",
+   "nist_800_53_r5": [
+    "MA-4(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05.4",
+   "domain": "Maintenance",
+   "name": "Remote Maintenance Disconnect Verification",
+   "nist_800_53_r5": [
+    "MA-4(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05.5",
+   "domain": "Maintenance",
+   "name": "Remote Maintenance Pre-Approval",
+   "nist_800_53_r5": [
+    "MA-4(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05.6",
+   "domain": "Maintenance",
+   "name": "Remote Maintenance Comparable Security & Sanitization",
+   "nist_800_53_r5": [
+    "MA-4(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-05.7",
+   "domain": "Maintenance",
+   "name": "Separation of Maintenance Sessions",
+   "nist_800_53_r5": [
+    "MA-4(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-06",
+   "domain": "Maintenance",
+   "name": "Authorized Maintenance Personnel",
+   "nist_800_53_r5": [
+    "MA-5"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-06.1",
+   "domain": "Maintenance",
+   "name": "Maintenance Personnel Without Appropriate Access",
+   "nist_800_53_r5": [
+    "MA-5(1)",
+    "MA-5(2)",
+    "MA-5(3)",
+    "MA-5(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-06.2",
+   "domain": "Maintenance",
+   "name": "Non-System Related Maintenance",
+   "nist_800_53_r5": [
+    "MA-5(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-07",
+   "domain": "Maintenance",
+   "name": "Maintain Configuration Control During Maintenance",
+   "nist_800_53_r5": [
+    "SR-11(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MNT-08",
+   "domain": "Maintenance",
+   "name": "Field Maintenance",
+   "nist_800_53_r5": [
+    "MA-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MDM-01",
+   "domain": "Mobile Device Management",
+   "name": "Centralized Management Of Mobile Devices",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.1"
+   ]
+  },
+  {
+   "scf_id": "MDM-02",
+   "domain": "Mobile Device Management",
+   "name": "Access Control For Mobile Devices",
+   "nist_800_53_r5": [
+    "AC-19"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.1"
+   ]
+  },
+  {
+   "scf_id": "MDM-03",
+   "domain": "Mobile Device Management",
+   "name": "Full Device & Container-Based Encryption",
+   "nist_800_53_r5": [
+    "AC-19(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MDM-04",
+   "domain": "Mobile Device Management",
+   "name": "Mobile Device Tampering",
+   "nist_800_53_r5": [
+    "PE-3(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "MDM-05",
+   "domain": "Mobile Device Management",
+   "name": "Remote Purging",
+   "nist_800_53_r5": [
+    "AC-7(2)",
+    "MP-6(8)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.1"
+   ]
+  },
+  {
+   "scf_id": "NET-01",
+   "domain": "Network Security",
+   "name": "Network Security Controls (NSC)",
+   "nist_800_53_r5": [
+    "SC-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.8.12",
+    "A.8.20",
+    "A.8.21"
+   ]
+  },
+  {
+   "scf_id": "NET-02",
+   "domain": "Network Security",
+   "name": "Layered Network Defenses",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.20"
+   ]
+  },
+  {
+   "scf_id": "NET-02.1",
+   "domain": "Network Security",
+   "name": "Denial of Service (DoS) Protection",
+   "nist_800_53_r5": [
+    "SC-5"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-02.3",
+   "domain": "Network Security",
+   "name": "Cross Domain Solution (CDS)",
+   "nist_800_53_r5": [
+    "SC-46"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-03",
+   "domain": "Network Security",
+   "name": "Boundary Protection",
+   "nist_800_53_r5": [
+    "SC-7",
+    "SC-7(11)",
+    "SC-7(9)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.20",
+    "A.8.21"
+   ]
+  },
+  {
+   "scf_id": "NET-03.1",
+   "domain": "Network Security",
+   "name": "Limit Network Connections",
+   "nist_800_53_r5": [
+    "SC-7(3)",
+    "SI-4(25)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-03.2",
+   "domain": "Network Security",
+   "name": "External Telecommunications Services",
+   "nist_800_53_r5": [
+    "SC-7(4)",
+    "SC-7(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-03.3",
+   "domain": "Network Security",
+   "name": "Prevent Discovery of Internal Information",
+   "nist_800_53_r5": [
+    "SC-7(16)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12"
+   ]
+  },
+  {
+   "scf_id": "NET-03.4",
+   "domain": "Network Security",
+   "name": "Personal Data (PD)",
+   "nist_800_53_r5": [
+    "SC-7(24)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-03.5",
+   "domain": "Network Security",
+   "name": "Prevent Unauthorized Exfiltration",
+   "nist_800_53_r5": [
+    "SC-7(10)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12"
+   ]
+  },
+  {
+   "scf_id": "NET-03.6",
+   "domain": "Network Security",
+   "name": "Dynamic Isolation & Segregation (Sandboxing)",
+   "nist_800_53_r5": [
+    "SC-7(20)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-03.7",
+   "domain": "Network Security",
+   "name": "Isolation of System Components",
+   "nist_800_53_r5": [
+    "SC-7(21)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-03.8",
+   "domain": "Network Security",
+   "name": "Separate Subnet for Connecting to Different Security Domains",
+   "nist_800_53_r5": [
+    "SC-7(22)",
+    "SC-7(29)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04",
+   "domain": "Network Security",
+   "name": "Data Flow Enforcement \u2013 Access Control Lists (ACLs)",
+   "nist_800_53_r5": [
+    "AC-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.8.20",
+    "A.8.3"
+   ]
+  },
+  {
+   "scf_id": "NET-04.1",
+   "domain": "Network Security",
+   "name": "Deny Traffic by Default & Allow Traffic by Exception",
+   "nist_800_53_r5": [
+    "SC-7(11)",
+    "SC-7(5)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.8.20"
+   ]
+  },
+  {
+   "scf_id": "NET-04.2",
+   "domain": "Network Security",
+   "name": "Object Security Attributes",
+   "nist_800_53_r5": [
+    "AC-4(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.3",
+   "domain": "Network Security",
+   "name": "Content Check for Encrypted Data",
+   "nist_800_53_r5": [
+    "AC-4(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.4",
+   "domain": "Network Security",
+   "name": "Embedded Data Types",
+   "nist_800_53_r5": [
+    "AC-4(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.5",
+   "domain": "Network Security",
+   "name": "Metadata",
+   "nist_800_53_r5": [
+    "AC-4(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.6",
+   "domain": "Network Security",
+   "name": "Human Reviews",
+   "nist_800_53_r5": [
+    "AC-4(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.7",
+   "domain": "Network Security",
+   "name": "Policy Decision Point (PDP)",
+   "nist_800_53_r5": [
+    "AC-4(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.8",
+   "domain": "Network Security",
+   "name": "Data Type Identifiers",
+   "nist_800_53_r5": [
+    "AC-4(12)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.9",
+   "domain": "Network Security",
+   "name": "Decomposition Into Policy-Related Subcomponents",
+   "nist_800_53_r5": [
+    "AC-4(13)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.10",
+   "domain": "Network Security",
+   "name": "Detection of Unsanctioned Information",
+   "nist_800_53_r5": [
+    "AC-4(15)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.11",
+   "domain": "Network Security",
+   "name": "Approved Solutions",
+   "nist_800_53_r5": [
+    "AC-4(20)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.12",
+   "domain": "Network Security",
+   "name": "Cross Domain Authentication",
+   "nist_800_53_r5": [
+    "AC-4(17)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-04.13",
+   "domain": "Network Security",
+   "name": "Metadata Validation",
+   "nist_800_53_r5": [
+    "AC-4(19)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-05",
+   "domain": "Network Security",
+   "name": "Interconnection Security Agreements (ISAs)",
+   "nist_800_53_r5": [
+    "CA-3",
+    "SC-7(25)",
+    "SC-7(26)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-05.1",
+   "domain": "Network Security",
+   "name": "External System Connections",
+   "nist_800_53_r5": [
+    "SC-7(27)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-05.2",
+   "domain": "Network Security",
+   "name": "Internal System Connections",
+   "nist_800_53_r5": [
+    "CA-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-06",
+   "domain": "Network Security",
+   "name": "Network Segmentation (macrosegmentation)",
+   "nist_800_53_r5": [
+    "AC-4(21)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.20",
+    "A.8.22"
+   ]
+  },
+  {
+   "scf_id": "NET-06.1",
+   "domain": "Network Security",
+   "name": "Security Management Subnets",
+   "nist_800_53_r5": [
+    "SC-7(13)",
+    "SC-7(29)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.22"
+   ]
+  },
+  {
+   "scf_id": "NET-06.5",
+   "domain": "Network Security",
+   "name": "Direct Internet Access Restrictions",
+   "nist_800_53_r5": [
+    "SC-7(28)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-07",
+   "domain": "Network Security",
+   "name": "Network Connection Termination",
+   "nist_800_53_r5": [
+    "SC-10"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-08",
+   "domain": "Network Security",
+   "name": "Network Intrusion Detection / Prevention Systems (NIDS / NIPS)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.21"
+   ]
+  },
+  {
+   "scf_id": "NET-08.1",
+   "domain": "Network Security",
+   "name": "DMZ Networks",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.20"
+   ]
+  },
+  {
+   "scf_id": "NET-08.2",
+   "domain": "Network Security",
+   "name": "Wireless Intrusion Detection / Prevention Systems (WIDS / WIPS) Deployment",
+   "nist_800_53_r5": [
+    "SI-4(15)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-09",
+   "domain": "Network Security",
+   "name": "Session Integrity",
+   "nist_800_53_r5": [
+    "SC-23"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-09.1",
+   "domain": "Network Security",
+   "name": "Invalidate Session Identifiers at Logout",
+   "nist_800_53_r5": [
+    "SC-23(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-09.2",
+   "domain": "Network Security",
+   "name": "Unique System-Generated Session Identifiers",
+   "nist_800_53_r5": [
+    "SC-23(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-10",
+   "domain": "Network Security",
+   "name": "Domain Name Service (DNS) Resolution",
+   "nist_800_53_r5": [
+    "SC-20",
+    "SC-20(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-10.1",
+   "domain": "Network Security",
+   "name": "Architecture & Provisioning for Name / Address Resolution Service",
+   "nist_800_53_r5": [
+    "SC-22"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-10.2",
+   "domain": "Network Security",
+   "name": "Secure Name / Address Resolution Service (Recursive or Caching Resolver)",
+   "nist_800_53_r5": [
+    "SC-21"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-11",
+   "domain": "Network Security",
+   "name": "Out-of-Band Channels",
+   "nist_800_53_r5": [
+    "SC-37",
+    "SC-37(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-12",
+   "domain": "Network Security",
+   "name": "Safeguarding Data Over Open Networks",
+   "nist_800_53_r5": [
+    "AC-2",
+    "AC-3",
+    "AC-5",
+    "SI-10",
+    "SI-3",
+    "SI-4",
+    "SI-5",
+    "SI-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-12.1",
+   "domain": "Network Security",
+   "name": "Wireless Link Protection",
+   "nist_800_53_r5": [
+    "SC-40"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-13",
+   "domain": "Network Security",
+   "name": "Electronic Messaging",
+   "nist_800_53_r5": [
+    "SC-8(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14"
+   ]
+  },
+  {
+   "scf_id": "NET-14",
+   "domain": "Network Security",
+   "name": "Remote Access",
+   "nist_800_53_r5": [
+    "AC-17",
+    "AC-17(6)"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.7"
+   ]
+  },
+  {
+   "scf_id": "NET-14.1",
+   "domain": "Network Security",
+   "name": "Automated Monitoring & Control",
+   "nist_800_53_r5": [
+    "AC-17(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-14.2",
+   "domain": "Network Security",
+   "name": "Protection of Confidentiality / Integrity Using Encryption",
+   "nist_800_53_r5": [
+    "AC-17(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-14.3",
+   "domain": "Network Security",
+   "name": "Managed Access Control Points",
+   "nist_800_53_r5": [
+    "AC-17(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-14.4",
+   "domain": "Network Security",
+   "name": "Remote Privileged Commands & Sensitive Data Access",
+   "nist_800_53_r5": [
+    "AC-17(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-14.5",
+   "domain": "Network Security",
+   "name": "Work From Anywhere (WFA) - Telecommuting Security",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.6.7",
+    "A.7.9"
+   ]
+  },
+  {
+   "scf_id": "NET-14.7",
+   "domain": "Network Security",
+   "name": "Endpoint Security Validation",
+   "nist_800_53_r5": [
+    "CA-9(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-14.8",
+   "domain": "Network Security",
+   "name": "Expeditious Disconnect / Disable Capability",
+   "nist_800_53_r5": [
+    "AC-17(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-15",
+   "domain": "Network Security",
+   "name": "Wireless Networking",
+   "nist_800_53_r5": [
+    "AC-18"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.21"
+   ]
+  },
+  {
+   "scf_id": "NET-15.1",
+   "domain": "Network Security",
+   "name": "Authentication & Encryption",
+   "nist_800_53_r5": [
+    "AC-18(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-15.2",
+   "domain": "Network Security",
+   "name": "Disable Wireless Networking",
+   "nist_800_53_r5": [
+    "AC-18(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-15.3",
+   "domain": "Network Security",
+   "name": "Restrict Configuration By Users",
+   "nist_800_53_r5": [
+    "AC-18(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-15.4",
+   "domain": "Network Security",
+   "name": "Wireless Boundaries",
+   "nist_800_53_r5": [
+    "AC-18(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-17",
+   "domain": "Network Security",
+   "name": "Data Loss Prevention (DLP)",
+   "nist_800_53_r5": [
+    "SC-7(10)",
+    "SI-4(18)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-18",
+   "domain": "Network Security",
+   "name": "DNS & Content Filtering",
+   "nist_800_53_r5": [
+    "SC-18(3)",
+    "SC-7(8)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.8.23"
+   ]
+  },
+  {
+   "scf_id": "NET-18.1",
+   "domain": "Network Security",
+   "name": "Route Internal Traffic to Proxy Servers",
+   "nist_800_53_r5": [
+    "SC-7(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-18.2",
+   "domain": "Network Security",
+   "name": "Visibility of Encrypted Communications",
+   "nist_800_53_r5": [
+    "SI-4(10)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "NET-18.3",
+   "domain": "Network Security",
+   "name": "Route Privileged Network Access",
+   "nist_800_53_r5": [
+    "SC-7(15)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-01",
+   "domain": "Physical & Environmental Security",
+   "name": "Physical & Environmental Protections",
+   "nist_800_53_r5": [
+    "PE-1",
+    "PE-23"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.14",
+    "A.5.15",
+    "A.5.18",
+    "A.7.1",
+    "A.7.5"
+   ]
+  },
+  {
+   "scf_id": "PES-02",
+   "domain": "Physical & Environmental Security",
+   "name": "Physical Access Authorizations",
+   "nist_800_53_r5": [
+    "PE-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.18",
+    "A.7.1"
+   ]
+  },
+  {
+   "scf_id": "PES-02.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Role-Based Physical Access",
+   "nist_800_53_r5": [
+    "PE-2(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.18"
+   ]
+  },
+  {
+   "scf_id": "PES-03",
+   "domain": "Physical & Environmental Security",
+   "name": "Physical Access Control",
+   "nist_800_53_r5": [
+    "PE-3",
+    "PE-3(2)",
+    "PE-3(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.5.18",
+    "A.7.1",
+    "A.7.4"
+   ]
+  },
+  {
+   "scf_id": "PES-03.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Controlled Ingress & Egress Points",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.1",
+    "A.7.2"
+   ]
+  },
+  {
+   "scf_id": "PES-03.2",
+   "domain": "Physical & Environmental Security",
+   "name": "Lockable Physical Casings",
+   "nist_800_53_r5": [
+    "PE-3(4)",
+    "SC-7(14)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-03.3",
+   "domain": "Physical & Environmental Security",
+   "name": "Physical Access Logs",
+   "nist_800_53_r5": [
+    "PE-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.2"
+   ]
+  },
+  {
+   "scf_id": "PES-03.4",
+   "domain": "Physical & Environmental Security",
+   "name": "Access To Critical Systems",
+   "nist_800_53_r5": [
+    "PE-3(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-04",
+   "domain": "Physical & Environmental Security",
+   "name": "Physical Security of Offices, Rooms & Facilities",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.7.1",
+    "A.7.3",
+    "A.7.5",
+    "A.7.7"
+   ]
+  },
+  {
+   "scf_id": "PES-04.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Working in Secure Areas",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.15",
+    "A.7.2",
+    "A.7.3",
+    "A.7.6"
+   ]
+  },
+  {
+   "scf_id": "PES-05",
+   "domain": "Physical & Environmental Security",
+   "name": "Monitoring Physical Access",
+   "nist_800_53_r5": [
+    "PE-6"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.4"
+   ]
+  },
+  {
+   "scf_id": "PES-05.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Intrusion Alarms / Surveillance Equipment",
+   "nist_800_53_r5": [
+    "PE-6(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.4"
+   ]
+  },
+  {
+   "scf_id": "PES-05.2",
+   "domain": "Physical & Environmental Security",
+   "name": "Monitoring Physical Access To Critical Systems",
+   "nist_800_53_r5": [
+    "PE-6(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.4"
+   ]
+  },
+  {
+   "scf_id": "PES-06",
+   "domain": "Physical & Environmental Security",
+   "name": "Visitor Control",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.7.2"
+   ]
+  },
+  {
+   "scf_id": "PES-06.2",
+   "domain": "Physical & Environmental Security",
+   "name": "Identification Requirement",
+   "nist_800_53_r5": [
+    "PE-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-06.3",
+   "domain": "Physical & Environmental Security",
+   "name": "Restrict Unescorted Access",
+   "nist_800_53_r5": [
+    "PE-2(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-06.4",
+   "domain": "Physical & Environmental Security",
+   "name": "Automated Records Management & Review",
+   "nist_800_53_r5": [
+    "PE-8(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-06.5",
+   "domain": "Physical & Environmental Security",
+   "name": "Minimize Visitor Personal Data (PD)",
+   "nist_800_53_r5": [
+    "PE-8(3)",
+    "PM-25",
+    "SA-8(33)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-07",
+   "domain": "Physical & Environmental Security",
+   "name": "Supporting Utilities",
+   "nist_800_53_r5": [
+    "PE-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.11",
+    "A.7.12"
+   ]
+  },
+  {
+   "scf_id": "PES-07.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Automatic Voltage Controls",
+   "nist_800_53_r5": [
+    "PE-9(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.11"
+   ]
+  },
+  {
+   "scf_id": "PES-07.2",
+   "domain": "Physical & Environmental Security",
+   "name": "Emergency Shutoff",
+   "nist_800_53_r5": [
+    "PE-10"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.11"
+   ]
+  },
+  {
+   "scf_id": "PES-07.3",
+   "domain": "Physical & Environmental Security",
+   "name": "Emergency Power",
+   "nist_800_53_r5": [
+    "PE-11",
+    "PE-11(1)",
+    "PE-11(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.11"
+   ]
+  },
+  {
+   "scf_id": "PES-07.4",
+   "domain": "Physical & Environmental Security",
+   "name": "Emergency Lighting",
+   "nist_800_53_r5": [
+    "PE-12"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.11"
+   ]
+  },
+  {
+   "scf_id": "PES-07.5",
+   "domain": "Physical & Environmental Security",
+   "name": "Water Damage Protection",
+   "nist_800_53_r5": [
+    "PE-15"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-07.6",
+   "domain": "Physical & Environmental Security",
+   "name": "Automation Support for Water Damage Protection",
+   "nist_800_53_r5": [
+    "PE-15(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-07.7",
+   "domain": "Physical & Environmental Security",
+   "name": "Redundant Cabling",
+   "nist_800_53_r5": [
+    "PE-9(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-08",
+   "domain": "Physical & Environmental Security",
+   "name": "Fire Protection",
+   "nist_800_53_r5": [
+    "PE-13"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-08.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Fire Detection Devices",
+   "nist_800_53_r5": [
+    "PE-13(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-08.2",
+   "domain": "Physical & Environmental Security",
+   "name": "Fire Suppression Devices",
+   "nist_800_53_r5": [
+    "PE-13(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-08.3",
+   "domain": "Physical & Environmental Security",
+   "name": "Automatic Fire Suppression",
+   "nist_800_53_r5": [
+    "PE-13(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-09",
+   "domain": "Physical & Environmental Security",
+   "name": "Temperature & Humidity Controls",
+   "nist_800_53_r5": [
+    "PE-14"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-09.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Monitoring with Alarms / Notifications",
+   "nist_800_53_r5": [
+    "PE-14(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-10",
+   "domain": "Physical & Environmental Security",
+   "name": "Delivery & Removal",
+   "nist_800_53_r5": [
+    "PE-16"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.2"
+   ]
+  },
+  {
+   "scf_id": "PES-11",
+   "domain": "Physical & Environmental Security",
+   "name": "Alternate Work Site",
+   "nist_800_53_r5": [
+    "PE-17"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-12",
+   "domain": "Physical & Environmental Security",
+   "name": "Equipment Siting & Protection",
+   "nist_800_53_r5": [
+    "PE-18",
+    "PE-23",
+    "SC-7(14)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.12",
+    "A.7.3",
+    "A.7.5",
+    "A.7.8"
+   ]
+  },
+  {
+   "scf_id": "PES-12.1",
+   "domain": "Physical & Environmental Security",
+   "name": "Transmission Medium Security",
+   "nist_800_53_r5": [
+    "PE-4",
+    "SC-7(14)"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.12"
+   ]
+  },
+  {
+   "scf_id": "PES-12.2",
+   "domain": "Physical & Environmental Security",
+   "name": "Access Control for Output Devices",
+   "nist_800_53_r5": [
+    "PE-5"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-13",
+   "domain": "Physical & Environmental Security",
+   "name": "Information Leakage Due To Electromagnetic Signals Emanations",
+   "nist_800_53_r5": [
+    "PE-19"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12"
+   ]
+  },
+  {
+   "scf_id": "PES-14",
+   "domain": "Physical & Environmental Security",
+   "name": "Asset Monitoring and Tracking",
+   "nist_800_53_r5": [
+    "PE-20"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-15",
+   "domain": "Physical & Environmental Security",
+   "name": "Electromagnetic Pulse (EMP) Protection",
+   "nist_800_53_r5": [
+    "PE-21"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PES-16",
+   "domain": "Physical & Environmental Security",
+   "name": "Component Marking",
+   "nist_800_53_r5": [
+    "PE-22"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-01",
+   "domain": "Data Privacy",
+   "name": "Data Privacy Program",
+   "nist_800_53_r5": [
+    "PM-18",
+    "PT-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.1",
+    "A.5.34"
+   ]
+  },
+  {
+   "scf_id": "PRI-01.1",
+   "domain": "Data Privacy",
+   "name": "Chief Privacy Officer (CPO)",
+   "nist_800_53_r5": [
+    "PM-19"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-01.2",
+   "domain": "Data Privacy",
+   "name": "Privacy Act Statements",
+   "nist_800_53_r5": [
+    "PT-5(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-01.3",
+   "domain": "Data Privacy",
+   "name": "Dissemination of Data Privacy Program Information",
+   "nist_800_53_r5": [
+    "PM-20"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.1"
+   ]
+  },
+  {
+   "scf_id": "PRI-01.6",
+   "domain": "Data Privacy",
+   "name": "Security of Personal Data (PD)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.34"
+   ]
+  },
+  {
+   "scf_id": "PRI-02",
+   "domain": "Data Privacy",
+   "name": "Data Privacy Notice",
+   "nist_800_53_r5": [
+    "PM-20(1)",
+    "PT-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.34"
+   ]
+  },
+  {
+   "scf_id": "PRI-02.1",
+   "domain": "Data Privacy",
+   "name": "Purpose Specification",
+   "nist_800_53_r5": [
+    "PT-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.34"
+   ]
+  },
+  {
+   "scf_id": "PRI-02.2",
+   "domain": "Data Privacy",
+   "name": "Automated Data Management Processes",
+   "nist_800_53_r5": [
+    "PM-24",
+    "PT-2(2)",
+    "PT-3(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-02.3",
+   "domain": "Data Privacy",
+   "name": "Computer Matching Agreements (CMA)",
+   "nist_800_53_r5": [
+    "PM-24",
+    "PT-8"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-02.4",
+   "domain": "Data Privacy",
+   "name": "System of Records Notice (SORN)",
+   "nist_800_53_r5": [
+    "PT-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-02.5",
+   "domain": "Data Privacy",
+   "name": "System of Records Notice (SORN) Review Process",
+   "nist_800_53_r5": [
+    "PT-6(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-02.6",
+   "domain": "Data Privacy",
+   "name": "Privacy Act Exemptions",
+   "nist_800_53_r5": [
+    "PT-6(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-03",
+   "domain": "Data Privacy",
+   "name": "Data Subject Consent",
+   "nist_800_53_r5": [
+    "PT-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33"
+   ]
+  },
+  {
+   "scf_id": "PRI-03.1",
+   "domain": "Data Privacy",
+   "name": "Tailored Consent",
+   "nist_800_53_r5": [
+    "PT-4(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-03.2",
+   "domain": "Data Privacy",
+   "name": "Just-In-Time Notice & Updated Consent",
+   "nist_800_53_r5": [
+    "PT-4(2)",
+    "PT-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-03.4",
+   "domain": "Data Privacy",
+   "name": "Revoke Consent",
+   "nist_800_53_r5": [
+    "PT-4(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-04",
+   "domain": "Data Privacy",
+   "name": "Restrict Collection, Processing & Sharing To Identified Purpose",
+   "nist_800_53_r5": [
+    "PT-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33"
+   ]
+  },
+  {
+   "scf_id": "PRI-04.1",
+   "domain": "Data Privacy",
+   "name": "Authority To Collect, Process, Store & Share Personal Data (PD)",
+   "nist_800_53_r5": [
+    "PT-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-05",
+   "domain": "Data Privacy",
+   "name": "Personal Data (PD) Retention & Disposal",
+   "nist_800_53_r5": [
+    "AC-4(25)",
+    "SI-12",
+    "SI-12(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33",
+    "A.8.10"
+   ]
+  },
+  {
+   "scf_id": "PRI-05.1",
+   "domain": "Data Privacy",
+   "name": "Internal Use of Personal Data (PD) For Testing, Training and Research",
+   "nist_800_53_r5": [
+    "PM-25",
+    "PT-2",
+    "PT-3",
+    "SI-12(1)",
+    "SI-12(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33"
+   ]
+  },
+  {
+   "scf_id": "PRI-05.2",
+   "domain": "Data Privacy",
+   "name": "Personal Data (PD) Accuracy & Integrity",
+   "nist_800_53_r5": [
+    "PM-24"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-05.3",
+   "domain": "Data Privacy",
+   "name": "Data Anonymization",
+   "nist_800_53_r5": [
+    "SI-19(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.11"
+   ]
+  },
+  {
+   "scf_id": "PRI-05.4",
+   "domain": "Data Privacy",
+   "name": "Usage Restrictions of Personal Data (PD)",
+   "nist_800_53_r5": [
+    "AC-23",
+    "PM-25",
+    "PT-2",
+    "PT-7"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33"
+   ]
+  },
+  {
+   "scf_id": "PRI-05.5",
+   "domain": "Data Privacy",
+   "name": "Inventory of Personal Data (PD)",
+   "nist_800_53_r5": [
+    "PM-5(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.9"
+   ]
+  },
+  {
+   "scf_id": "PRI-05.6",
+   "domain": "Data Privacy",
+   "name": "Personal Data (PD) Inventory Automation Support",
+   "nist_800_53_r5": [
+    "PM-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-05.7",
+   "domain": "Data Privacy",
+   "name": "Personal Data (PD) Categories",
+   "nist_800_53_r5": [
+    "PT-7",
+    "PT-7(1)",
+    "PT-7(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-06",
+   "domain": "Data Privacy",
+   "name": "Data Subject Empowerment",
+   "nist_800_53_r5": [
+    "AC-3(14)",
+    "SI-18(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-06.1",
+   "domain": "Data Privacy",
+   "name": "Correcting Inaccurate Personal Data (PD)",
+   "nist_800_53_r5": [
+    "SI-18(4)",
+    "SI-18(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-06.2",
+   "domain": "Data Privacy",
+   "name": "Notice of Correction or Processing Change",
+   "nist_800_53_r5": [
+    "SI-18(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-06.3",
+   "domain": "Data Privacy",
+   "name": "Appeal Adverse Decision",
+   "nist_800_53_r5": [
+    "PM-26"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-06.4",
+   "domain": "Data Privacy",
+   "name": "Data Subject Feedback Management",
+   "nist_800_53_r5": [
+    "PM-26"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-07",
+   "domain": "Data Privacy",
+   "name": "Information Sharing With Third Parties",
+   "nist_800_53_r5": [
+    "AC-21"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33"
+   ]
+  },
+  {
+   "scf_id": "PRI-07.1",
+   "domain": "Data Privacy",
+   "name": "Data Privacy Requirements for Contractors & Service Providers",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.31",
+    "A.5.33"
+   ]
+  },
+  {
+   "scf_id": "PRI-08",
+   "domain": "Data Privacy",
+   "name": "Personal Data (PD) Control Testing, Training & Monitoring",
+   "nist_800_53_r5": [
+    "PM-14"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.36",
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "PRI-09",
+   "domain": "Data Privacy",
+   "name": "Personal Data (PD) Lineage",
+   "nist_800_53_r5": [
+    "SA-4(12)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-10",
+   "domain": "Data Privacy",
+   "name": "Data Quality Management",
+   "nist_800_53_r5": [
+    "PM-22",
+    "PM-23",
+    "PM-24"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-10.1",
+   "domain": "Data Privacy",
+   "name": "Data Quality Automation",
+   "nist_800_53_r5": [
+    "PT-3(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-11",
+   "domain": "Data Privacy",
+   "name": "Data Tagging",
+   "nist_800_53_r5": [
+    "PT-3(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-13",
+   "domain": "Data Privacy",
+   "name": "Data Management Board",
+   "nist_800_53_r5": [
+    "PM-23",
+    "PM-24"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-14",
+   "domain": "Data Privacy",
+   "name": "Documenting Data Processing Activities",
+   "nist_800_53_r5": [
+    "PM-27"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRI-14.1",
+   "domain": "Data Privacy",
+   "name": "Accounting of Disclosures",
+   "nist_800_53_r5": [
+    "PM-21"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRM-01",
+   "domain": "Project & Resource Management",
+   "name": "Security, Compliance & Resilience Protection Portfolio Management",
+   "nist_800_53_r5": [
+    "PL-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.4",
+    "A.5.8"
+   ]
+  },
+  {
+   "scf_id": "PRM-02",
+   "domain": "Project & Resource Management",
+   "name": "Security, Compliance & Resilience Resource Management",
+   "nist_800_53_r5": [
+    "PM-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.4"
+   ]
+  },
+  {
+   "scf_id": "PRM-03",
+   "domain": "Project & Resource Management",
+   "name": "Allocation of Resources",
+   "nist_800_53_r5": [
+    "SA-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRM-04",
+   "domain": "Project & Resource Management",
+   "name": "Security, Compliance & Resilience In Project Management",
+   "nist_800_53_r5": [
+    "CA-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.8"
+   ]
+  },
+  {
+   "scf_id": "PRM-05",
+   "domain": "Project & Resource Management",
+   "name": "Security, Compliance & Resilience Requirements Definition",
+   "nist_800_53_r5": [
+    "RA-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.8",
+    "A.5.9",
+    "A.8.26"
+   ]
+  },
+  {
+   "scf_id": "PRM-06",
+   "domain": "Project & Resource Management",
+   "name": "Business Process Definition",
+   "nist_800_53_r5": [
+    "PM-11"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "PRM-07",
+   "domain": "Project & Resource Management",
+   "name": "Secure Development Life Cycle (SDLC) Management",
+   "nist_800_53_r5": [
+    "SA-3",
+    "SA-3(1)",
+    "SA-8(30)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.8",
+    "A.8.25",
+    "A.8.32"
+   ]
+  },
+  {
+   "scf_id": "RSK-01",
+   "domain": "Risk Management",
+   "name": "Risk Management Program",
+   "nist_800_53_r5": [
+    "PM-29",
+    "PM-9",
+    "RA-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.7.5"
+   ]
+  },
+  {
+   "scf_id": "RSK-01.1",
+   "domain": "Risk Management",
+   "name": "Risk Framing",
+   "nist_800_53_r5": [
+    "PM-28"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.8"
+   ]
+  },
+  {
+   "scf_id": "RSK-02",
+   "domain": "Risk Management",
+   "name": "Risk-Based Security Categorization",
+   "nist_800_53_r5": [
+    "RA-2"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "RSK-02.1",
+   "domain": "Risk Management",
+   "name": "Impact-Level Prioritization",
+   "nist_800_53_r5": [
+    "RA-2(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "RSK-03",
+   "domain": "Risk Management",
+   "name": "Risk Identification",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.8"
+   ]
+  },
+  {
+   "scf_id": "RSK-04",
+   "domain": "Risk Management",
+   "name": "Risk Assessment",
+   "nist_800_53_r5": [
+    "RA-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.8",
+    "A.7.5"
+   ]
+  },
+  {
+   "scf_id": "RSK-06",
+   "domain": "Risk Management",
+   "name": "Risk Remediation",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.8"
+   ]
+  },
+  {
+   "scf_id": "RSK-06.1",
+   "domain": "Risk Management",
+   "name": "Risk Response",
+   "nist_800_53_r5": [
+    "RA-7"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.8"
+   ]
+  },
+  {
+   "scf_id": "RSK-08",
+   "domain": "Risk Management",
+   "name": "Business Impact Analysis (BIA)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.30"
+   ]
+  },
+  {
+   "scf_id": "RSK-09",
+   "domain": "Risk Management",
+   "name": "Supply Chain Risk Management (SCRM) Plan",
+   "nist_800_53_r5": [
+    "PM-29",
+    "PM-30",
+    "SA-9(3)",
+    "SR-2",
+    "SR-7"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "RSK-09.1",
+   "domain": "Risk Management",
+   "name": "Supply Chain Risk Assessment",
+   "nist_800_53_r5": [
+    "RA-3(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "RSK-10",
+   "domain": "Risk Management",
+   "name": "Data Protection Impact Assessment (DPIA)",
+   "nist_800_53_r5": [
+    "RA-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.33"
+   ]
+  },
+  {
+   "scf_id": "RSK-11",
+   "domain": "Risk Management",
+   "name": "Risk Monitoring",
+   "nist_800_53_r5": [
+    "CA-7(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-01",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Secure Engineering Principles",
+   "nist_800_53_r5": [
+    "PT-1",
+    "SA-15(5)",
+    "SA-8",
+    "SC-1",
+    "SC-7(18)",
+    "SI-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12",
+    "A.8.26",
+    "A.8.27"
+   ]
+  },
+  {
+   "scf_id": "SEA-01.1",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Centralized Management of Security, Compliance & Resilience Controls",
+   "nist_800_53_r5": [
+    "PL-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.12"
+   ]
+  },
+  {
+   "scf_id": "SEA-02",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Alignment With Enterprise Architecture",
+   "nist_800_53_r5": [
+    "PL-8",
+    "PM-7"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.8",
+    "A.8.26"
+   ]
+  },
+  {
+   "scf_id": "SEA-02.2",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Outsourcing Non-Essential Functions or Services",
+   "nist_800_53_r5": [
+    "PM-7(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-03",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Defense-In-Depth (DiD) Architecture",
+   "nist_800_53_r5": [
+    "PL-8(1)",
+    "SC-3(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-03.1",
+   "domain": "Secure Engineering & Architecture",
+   "name": "System Partitioning",
+   "nist_800_53_r5": [
+    "SC-32"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-03.2",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Application Partitioning",
+   "nist_800_53_r5": [
+    "SC-2",
+    "SC-2(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-04",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Process Isolation",
+   "nist_800_53_r5": [
+    "SC-39"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-04.1",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Security Function Isolation",
+   "nist_800_53_r5": [
+    "SC-3"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-04.2",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Hardware Separation",
+   "nist_800_53_r5": [
+    "SC-39(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-04.3",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Thread Separation",
+   "nist_800_53_r5": [
+    "SC-39(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-05",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Information In Shared Resources",
+   "nist_800_53_r5": [
+    "SC-4"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-06",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Prevent Program Execution",
+   "nist_800_53_r5": [
+    "CM-7(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-07",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Predictable Failure Analysis",
+   "nist_800_53_r5": [
+    "SI-13"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-07.1",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Technology Lifecycle Management",
+   "nist_800_53_r5": [
+    "SA-3",
+    "SA-3(1)",
+    "SA-3(3)",
+    "SA-8(30)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-07.2",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Fail Secure",
+   "nist_800_53_r5": [
+    "CP-12",
+    "SA-8(24)",
+    "SC-24"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-07.3",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Fail Safe",
+   "nist_800_53_r5": [
+    "SI-17"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-08",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Non-Persistence",
+   "nist_800_53_r5": [
+    "SI-14"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-08.1",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Refresh from Trusted Sources",
+   "nist_800_53_r5": [
+    "SA-3(3)",
+    "SI-14(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-09",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Information Output Filtering",
+   "nist_800_53_r5": [
+    "SI-15"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-10",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Memory Protection",
+   "nist_800_53_r5": [
+    "SI-16"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-11",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Honeypots",
+   "nist_800_53_r5": [
+    "IR-4(13)",
+    "SC-26"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-12",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Honeyclients",
+   "nist_800_53_r5": [
+    "IR-4(13)",
+    "SC-35"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-13",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Heterogeneity",
+   "nist_800_53_r5": [
+    "SC-29"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-13.1",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Virtualization Techniques",
+   "nist_800_53_r5": [
+    "SC-29(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-14",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Concealment & Misdirection",
+   "nist_800_53_r5": [
+    "SC-30",
+    "SC-30(4)",
+    "SC-30(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-14.1",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Randomness",
+   "nist_800_53_r5": [
+    "SC-30(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-14.2",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Change Processing & Storage Locations",
+   "nist_800_53_r5": [
+    "SC-30(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-15",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Distributed Processing & Storage",
+   "nist_800_53_r5": [
+    "PE-23",
+    "SC-36"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-16",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Non-Modifiable Executable Programs",
+   "nist_800_53_r5": [
+    "SC-34"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-17",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Secure Log-On Procedures",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.5"
+   ]
+  },
+  {
+   "scf_id": "SEA-18",
+   "domain": "Secure Engineering & Architecture",
+   "name": "System Use Notification (Logon Banner)",
+   "nist_800_53_r5": [
+    "AC-8"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-19",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Previous Logon Notification",
+   "nist_800_53_r5": [
+    "AC-9"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SEA-20",
+   "domain": "Secure Engineering & Architecture",
+   "name": "Clock Synchronization",
+   "nist_800_53_r5": [
+    "AU-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.17"
+   ]
+  },
+  {
+   "scf_id": "OPS-01",
+   "domain": "Security Operations",
+   "name": "Operations Security",
+   "nist_800_53_r5": [
+    "SC-38",
+    "SR-7"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.37"
+   ]
+  },
+  {
+   "scf_id": "OPS-01.1",
+   "domain": "Security Operations",
+   "name": "Standardized Operating Procedures (SOP)",
+   "nist_800_53_r5": [
+    "SA-8(32)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.37"
+   ]
+  },
+  {
+   "scf_id": "OPS-02",
+   "domain": "Security Operations",
+   "name": "Security Concept Of Operations (CONOPS)",
+   "nist_800_53_r5": [
+    "PL-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "OPS-03",
+   "domain": "Security Operations",
+   "name": "Service Delivery\n(Business Process Support)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.37"
+   ]
+  },
+  {
+   "scf_id": "OPS-04",
+   "domain": "Security Operations",
+   "name": "Security Operations Center (SOC)",
+   "nist_800_53_r5": [
+    "IR-4(14)",
+    "SC-38"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SAT-01",
+   "domain": "Security Awareness & Training",
+   "name": "Security, Compliance & Resilience-Minded Workforce",
+   "nist_800_53_r5": [
+    "AT-1",
+    "PM-13"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.3"
+   ]
+  },
+  {
+   "scf_id": "SAT-02",
+   "domain": "Security Awareness & Training",
+   "name": "Security, Compliance & Resilience Awareness Training",
+   "nist_800_53_r5": [
+    "AT-2"
+   ],
+   "iso_27001_annex_a": [
+    "A.6.3"
+   ]
+  },
+  {
+   "scf_id": "SAT-02.1",
+   "domain": "Security Awareness & Training",
+   "name": "Simulated Cyber Attack Scenario Training",
+   "nist_800_53_r5": [
+    "AT-2(1)",
+    "AT-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SAT-02.2",
+   "domain": "Security Awareness & Training",
+   "name": "Social Engineering & Mining",
+   "nist_800_53_r5": [
+    "AT-2(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SAT-03",
+   "domain": "Security Awareness & Training",
+   "name": "Role-Based Security, Compliance & Resilience Training",
+   "nist_800_53_r5": [
+    "AT-3",
+    "AT-3(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.4",
+    "A.6.3"
+   ]
+  },
+  {
+   "scf_id": "SAT-03.1",
+   "domain": "Security Awareness & Training",
+   "name": "Practical Security Training Exercises",
+   "nist_800_53_r5": [
+    "AT-3(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SAT-03.2",
+   "domain": "Security Awareness & Training",
+   "name": "Suspicious Communications & Anomalous System Behavior",
+   "nist_800_53_r5": [
+    "AT-2(4)",
+    "AT-2(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SAT-03.3",
+   "domain": "Security Awareness & Training",
+   "name": "Sensitive / Regulated Data Storage, Handling & Processing",
+   "nist_800_53_r5": [
+    "AT-3(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SAT-03.6",
+   "domain": "Security Awareness & Training",
+   "name": "Cyber Threat Environment",
+   "nist_800_53_r5": [
+    "AT-2(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "SAT-04",
+   "domain": "Security Awareness & Training",
+   "name": "Security, Compliance & Resilience Training Records",
+   "nist_800_53_r5": [
+    "AT-4"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-01",
+   "domain": "Technology Development & Acquisition",
+   "name": "Technology Development & Acquisition",
+   "nist_800_53_r5": [
+    "PL-1",
+    "SA-1",
+    "SA-23",
+    "SA-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TDA-01.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Product Management",
+   "nist_800_53_r5": [
+    "SA-23"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-02",
+   "domain": "Technology Development & Acquisition",
+   "name": "Minimum Viable Product (MVP) Security Requirements",
+   "nist_800_53_r5": [
+    "SA-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25",
+    "A.8.29",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TDA-02.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Ports, Protocols & Services In Use",
+   "nist_800_53_r5": [
+    "SA-4(9)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-02.2",
+   "domain": "Technology Development & Acquisition",
+   "name": "Information Assurance Enabled Products",
+   "nist_800_53_r5": [
+    "IA-2(1)",
+    "IA-2(2)",
+    "SA-4(10)",
+    "SA-4(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-02.3",
+   "domain": "Technology Development & Acquisition",
+   "name": "Development Methods, Techniques & Processes",
+   "nist_800_53_r5": [
+    "SA-4(3)",
+    "SR-3(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25",
+    "A.8.29"
+   ]
+  },
+  {
+   "scf_id": "TDA-02.4",
+   "domain": "Technology Development & Acquisition",
+   "name": "Pre-Established Secure Configurations",
+   "nist_800_53_r5": [
+    "SA-4(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-02.7",
+   "domain": "Technology Development & Acquisition",
+   "name": "Security, Compliance & Resilience Representatives For Product Changes",
+   "nist_800_53_r5": [
+    "SA-10(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-02.14",
+   "domain": "Technology Development & Acquisition",
+   "name": "Logging Syntax",
+   "nist_800_53_r5": [
+    "SA-15(13)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-03",
+   "domain": "Technology Development & Acquisition",
+   "name": "Commercial Off-The-Shelf (COTS) Security Solutions",
+   "nist_800_53_r5": [
+    "SA-4(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-03.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Supplier Diversity",
+   "nist_800_53_r5": [
+    "PL-8(2)",
+    "SR-3(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-04",
+   "domain": "Technology Development & Acquisition",
+   "name": "Documentation Requirements",
+   "nist_800_53_r5": [
+    "SA-5"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-04.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Functional Properties",
+   "nist_800_53_r5": [
+    "SA-4(1)",
+    "SA-4(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-05",
+   "domain": "Technology Development & Acquisition",
+   "name": "Developer Architecture & Design",
+   "nist_800_53_r5": [
+    "SA-17"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.27",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TDA-06",
+   "domain": "Technology Development & Acquisition",
+   "name": "Secure Software Development Practices (SSDP)",
+   "nist_800_53_r5": [
+    "SA-1",
+    "SA-15",
+    "SA-4(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25",
+    "A.8.26",
+    "A.8.27",
+    "A.8.28",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TDA-06.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Criticality Analysis During Development",
+   "nist_800_53_r5": [
+    "PM-30(1)",
+    "RA-9",
+    "SA-15(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.29"
+   ]
+  },
+  {
+   "scf_id": "TDA-06.2",
+   "domain": "Technology Development & Acquisition",
+   "name": "Threat Modeling",
+   "nist_800_53_r5": [
+    "SA-11(2)",
+    "SA-15(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-06.6",
+   "domain": "Technology Development & Acquisition",
+   "name": "Software Design Root Cause Analysis",
+   "nist_800_53_r5": [
+    "SI-2(7)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-07",
+   "domain": "Technology Development & Acquisition",
+   "name": "Secure Development Environments",
+   "nist_800_53_r5": [
+    "SA-3(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25",
+    "A.8.31"
+   ]
+  },
+  {
+   "scf_id": "TDA-08",
+   "domain": "Technology Development & Acquisition",
+   "name": "Separation of Development, Testing and Operational Environments",
+   "nist_800_53_r5": [
+    "CM-4(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25",
+    "A.8.31"
+   ]
+  },
+  {
+   "scf_id": "TDA-09",
+   "domain": "Technology Development & Acquisition",
+   "name": "Security, Compliance & Resilience Testing Throughout Development",
+   "nist_800_53_r5": [
+    "SA-11",
+    "SA-11(5)",
+    "SA-11(6)",
+    "SA-11(7)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.25",
+    "A.8.29",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TDA-09.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Continuous Monitoring Plan",
+   "nist_800_53_r5": [
+    "SA-4(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-09.2",
+   "domain": "Technology Development & Acquisition",
+   "name": "Static Code Analysis",
+   "nist_800_53_r5": [
+    "SA-11(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-09.3",
+   "domain": "Technology Development & Acquisition",
+   "name": "Dynamic Code Analysis",
+   "nist_800_53_r5": [
+    "SA-11(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-09.5",
+   "domain": "Technology Development & Acquisition",
+   "name": "Application Penetration Testing",
+   "nist_800_53_r5": [
+    "SA-11(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-09.7",
+   "domain": "Technology Development & Acquisition",
+   "name": "Manual Code Review",
+   "nist_800_53_r5": [
+    "SA-11(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-10",
+   "domain": "Technology Development & Acquisition",
+   "name": "Use of Live Data",
+   "nist_800_53_r5": [
+    "SA-3(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.33"
+   ]
+  },
+  {
+   "scf_id": "TDA-11",
+   "domain": "Technology Development & Acquisition",
+   "name": "Product Tampering and Counterfeiting (PTC)",
+   "nist_800_53_r5": [
+    "SR-10",
+    "SR-11",
+    "SR-11(3)",
+    "SR-4(3)",
+    "SR-4(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-11.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Anti-Counterfeit Training",
+   "nist_800_53_r5": [
+    "SR-11(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-12",
+   "domain": "Technology Development & Acquisition",
+   "name": "Customized Development of Critical Components",
+   "nist_800_53_r5": [
+    "PM-30(1)",
+    "SA-20",
+    "SA-23"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-13",
+   "domain": "Technology Development & Acquisition",
+   "name": "Developer Screening",
+   "nist_800_53_r5": [
+    "SA-21"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-14",
+   "domain": "Technology Development & Acquisition",
+   "name": "Developer Configuration Management",
+   "nist_800_53_r5": [
+    "SA-10"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.30",
+    "A.8.32"
+   ]
+  },
+  {
+   "scf_id": "TDA-14.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Software / Firmware Integrity Verification",
+   "nist_800_53_r5": [
+    "SA-10(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-14.2",
+   "domain": "Technology Development & Acquisition",
+   "name": "Hardware Integrity Verification",
+   "nist_800_53_r5": [
+    "SA-10(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-15",
+   "domain": "Technology Development & Acquisition",
+   "name": "Developer Threat Analysis & Flaw Remediation",
+   "nist_800_53_r5": [
+    "SA-11(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-16",
+   "domain": "Technology Development & Acquisition",
+   "name": "Developer-Provided Training",
+   "nist_800_53_r5": [
+    "SA-16"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-17",
+   "domain": "Technology Development & Acquisition",
+   "name": "Unsupported Technology Assets, Applications and/or Services (TAAS)",
+   "nist_800_53_r5": [
+    "SA-22"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-17.1",
+   "domain": "Technology Development & Acquisition",
+   "name": "Alternate Sources for Continued Support",
+   "nist_800_53_r5": [
+    "SA-22"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-18",
+   "domain": "Technology Development & Acquisition",
+   "name": "Input Data Validation",
+   "nist_800_53_r5": [
+    "AC-2",
+    "AC-3",
+    "AC-5",
+    "SI-10",
+    "SI-3",
+    "SI-4",
+    "SI-5",
+    "SI-7"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-19",
+   "domain": "Technology Development & Acquisition",
+   "name": "Error Handling",
+   "nist_800_53_r5": [
+    "SI-11"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TDA-20",
+   "domain": "Technology Development & Acquisition",
+   "name": "Access to Program Source Code",
+   "nist_800_53_r5": [
+    "SA-4(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.30",
+    "A.8.4"
+   ]
+  },
+  {
+   "scf_id": "TPM-01",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Management",
+   "nist_800_53_r5": [
+    "SA-4",
+    "SR-1"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.5.20",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TPM-01.1",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Inventories",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.19"
+   ]
+  },
+  {
+   "scf_id": "TPM-02",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Criticality Assessments",
+   "nist_800_53_r5": [
+    "PM-30(1)",
+    "RA-9",
+    "SA-9(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19"
+   ]
+  },
+  {
+   "scf_id": "TPM-03",
+   "domain": "Third-Party Management",
+   "name": "Supply Chain Risk Management (SCRM)",
+   "nist_800_53_r5": [
+    "SA-9(3)",
+    "SR-2",
+    "SR-2(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.5.21",
+    "A.5.22",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TPM-03.1",
+   "domain": "Third-Party Management",
+   "name": "Acquisition Strategies, Tools & Methods",
+   "nist_800_53_r5": [
+    "SR-3(1)",
+    "SR-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21",
+    "A.5.22"
+   ]
+  },
+  {
+   "scf_id": "TPM-03.2",
+   "domain": "Third-Party Management",
+   "name": "Limit Potential Harm",
+   "nist_800_53_r5": [
+    "SR-3(2)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.5.20"
+   ]
+  },
+  {
+   "scf_id": "TPM-03.3",
+   "domain": "Third-Party Management",
+   "name": "Processes To Address Weaknesses or Deficiencies",
+   "nist_800_53_r5": [
+    "SR-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.5.22"
+   ]
+  },
+  {
+   "scf_id": "TPM-03.4",
+   "domain": "Third-Party Management",
+   "name": "Adequate Supply",
+   "nist_800_53_r5": [
+    "SR-5(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TPM-04",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Services",
+   "nist_800_53_r5": [
+    "SA-9"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TPM-04.1",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Risk Assessments & Approvals",
+   "nist_800_53_r5": [
+    "SA-9(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19"
+   ]
+  },
+  {
+   "scf_id": "TPM-04.2",
+   "domain": "Third-Party Management",
+   "name": "External Connectivity Requirements - Identification of Ports, Protocols & Services",
+   "nist_800_53_r5": [
+    "SA-9(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TPM-04.3",
+   "domain": "Third-Party Management",
+   "name": "Conflict of Interests",
+   "nist_800_53_r5": [
+    "SA-9(3)",
+    "SA-9(4)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19"
+   ]
+  },
+  {
+   "scf_id": "TPM-04.4",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Processing, Storage and Service Locations",
+   "nist_800_53_r5": [
+    "PE-23",
+    "SA-9(5)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21"
+   ]
+  },
+  {
+   "scf_id": "TPM-05",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Contract Requirements",
+   "nist_800_53_r5": [
+    "SR-3(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.5.20",
+    "A.5.21",
+    "A.5.31",
+    "A.6.6",
+    "A.8.21",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TPM-05.1",
+   "domain": "Third-Party Management",
+   "name": "Security Compromise Notification Agreements",
+   "nist_800_53_r5": [
+    "SR-8"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.21"
+   ]
+  },
+  {
+   "scf_id": "TPM-05.2",
+   "domain": "Third-Party Management",
+   "name": "Contract Flow-Down Requirements",
+   "nist_800_53_r5": [
+    "SR-3(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TPM-05.4",
+   "domain": "Third-Party Management",
+   "name": "Responsible, Accountable, Supportive, Consulted & Informed (RASCI) Matrix",
+   "nist_800_53_r5": [
+    "SA-9(3)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.2",
+    "A.5.23"
+   ]
+  },
+  {
+   "scf_id": "TPM-05.7",
+   "domain": "Third-Party Management",
+   "name": "Break Clauses",
+   "nist_800_53_r5": [
+    "SA-9(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "TPM-06",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Personnel Security",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.5.2",
+    "A.8.30"
+   ]
+  },
+  {
+   "scf_id": "TPM-08",
+   "domain": "Third-Party Management",
+   "name": "Review of Third-Party Services",
+   "nist_800_53_r5": [
+    "SR-6",
+    "SR-6(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19",
+    "A.5.20",
+    "A.5.22",
+    "A.8.21"
+   ]
+  },
+  {
+   "scf_id": "TPM-09",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Deficiency Remediation",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.19"
+   ]
+  },
+  {
+   "scf_id": "TPM-10",
+   "domain": "Third-Party Management",
+   "name": "Managing Changes To Third-Party Services",
+   "nist_800_53_r5": [
+    "SA-4"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.20",
+    "A.5.22"
+   ]
+  },
+  {
+   "scf_id": "TPM-11",
+   "domain": "Third-Party Management",
+   "name": "Third-Party Incident Response & Recovery Capabilities",
+   "nist_800_53_r5": [
+    "IR-4(10)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.19"
+   ]
+  },
+  {
+   "scf_id": "THR-01",
+   "domain": "Threat Management",
+   "name": "Threat Intelligence Program",
+   "nist_800_53_r5": [
+    "PM-15",
+    "PM-16"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.7"
+   ]
+  },
+  {
+   "scf_id": "THR-02",
+   "domain": "Threat Management",
+   "name": "Indicators of Exposure (IOE)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.7"
+   ]
+  },
+  {
+   "scf_id": "THR-03",
+   "domain": "Threat Management",
+   "name": "Threat Intelligence Feeds",
+   "nist_800_53_r5": [
+    "PM-16(1)",
+    "SI-5",
+    "SI-5(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.5.7"
+   ]
+  },
+  {
+   "scf_id": "THR-03.1",
+   "domain": "Threat Management",
+   "name": "Threat Intelligence Reporting",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.5.7"
+   ]
+  },
+  {
+   "scf_id": "THR-04",
+   "domain": "Threat Management",
+   "name": "Insider Threat Program",
+   "nist_800_53_r5": [
+    "PM-12"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "THR-05",
+   "domain": "Threat Management",
+   "name": "Insider Threat Awareness",
+   "nist_800_53_r5": [
+    "AT-2(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "THR-06",
+   "domain": "Threat Management",
+   "name": "Vulnerability Disclosure Program (VDP)",
+   "nist_800_53_r5": [
+    "RA-5(11)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "THR-07",
+   "domain": "Threat Management",
+   "name": "Threat Hunting",
+   "nist_800_53_r5": [
+    "RA-10",
+    "SC-48"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "THR-08",
+   "domain": "Threat Management",
+   "name": "Tainting",
+   "nist_800_53_r5": [
+    "SI-20"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-01",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Vulnerability & Patch Management Program (VPMP)",
+   "nist_800_53_r5": [
+    "SI-2",
+    "SI-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "VPM-01.1",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Attack Surface Scope",
+   "nist_800_53_r5": [
+    "SA-11(6)",
+    "SA-11(7)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "VPM-02",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Vulnerability Remediation Process",
+   "nist_800_53_r5": [
+    "PM-4",
+    "SC-18(1)"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "VPM-03",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Vulnerability Ranking",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "VPM-04",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Continuous Vulnerability Remediation Activities",
+   "nist_800_53_r5": [
+    "SC-18(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-05",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Software & Firmware Patching",
+   "nist_800_53_r5": [
+    "SI-2",
+    "SI-2(4)",
+    "SI-3"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "VPM-05.1",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Centralized Management of Flaw Remediation Processes",
+   "nist_800_53_r5": [
+    "PL-9",
+    "SI-2(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-05.2",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Automated Remediation Status",
+   "nist_800_53_r5": [
+    "SI-2(2)",
+    "SI-2(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-05.3",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Time To Remediate / Benchmarks For Corrective Action",
+   "nist_800_53_r5": [
+    "SI-2(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-05.4",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Automated Software & Firmware Updates",
+   "nist_800_53_r5": [
+    "SI-2(4)",
+    "SI-2(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-05.5",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Removal of Previous Versions",
+   "nist_800_53_r5": [
+    "SI-2(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-06",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Vulnerability Scanning",
+   "nist_800_53_r5": [
+    "RA-5"
+   ],
+   "iso_27001_annex_a": [
+    "A.8.8"
+   ]
+  },
+  {
+   "scf_id": "VPM-06.1",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Update Tool Capability",
+   "nist_800_53_r5": [
+    "RA-5",
+    "RA-5(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-06.2",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Breadth / Depth of Coverage",
+   "nist_800_53_r5": [
+    "RA-5(3)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-06.3",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Privileged Access",
+   "nist_800_53_r5": [
+    "RA-5(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-06.4",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Trend Analysis",
+   "nist_800_53_r5": [
+    "RA-5(6)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-06.5",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Review Historical Event logs",
+   "nist_800_53_r5": [
+    "RA-5(8)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-06.8",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Acceptable Discoverable Information",
+   "nist_800_53_r5": [
+    "RA-5(4)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-06.9",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Correlate Scanning Information",
+   "nist_800_53_r5": [
+    "RA-5(10)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-07",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Penetration Testing",
+   "nist_800_53_r5": [
+    "CA-8",
+    "SA-11(5)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-07.1",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Independent Penetration Agent or Team",
+   "nist_800_53_r5": [
+    "CA-8(1)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-08",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Technical Surveillance Countermeasures Security",
+   "nist_800_53_r5": [
+    "RA-6"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "VPM-10",
+   "domain": "Vulnerability & Patch Management",
+   "name": "Red Team Exercises",
+   "nist_800_53_r5": [
+    "CA-8(2)"
+   ],
+   "iso_27001_annex_a": []
+  },
+  {
+   "scf_id": "WEB-02",
+   "domain": "Web Security",
+   "name": "Use of Demilitarized Zones (DMZ)",
+   "nist_800_53_r5": [],
+   "iso_27001_annex_a": [
+    "A.8.22"
+   ]
+  },
+  {
+   "scf_id": "WEB-03",
+   "domain": "Web Security",
+   "name": "Web Application Firewall (WAF)",
+   "nist_800_53_r5": [
+    "SC-7(17)"
+   ],
+   "iso_27001_annex_a": []
+  }
+ ]
+}
