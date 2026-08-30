@@ -2283,6 +2283,65 @@ RENDER.agentlog = async function(){
   </table></div></div></div>`;
 };
 
+/* ---------- AUTOMATION COVERAGE ---------- */
+RENDER.automation = async function(){
+  const m=main();
+  m.innerHTML=viewHead("Automation coverage","Which controls this platform can actually machine-verify, and which connector proves each one. A control nobody can observe is a promise that breaks during an audit.","","posture / 08");
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
+  let matrix,caps;
+  if(STATE.demo){
+    matrix={total_checks:38,covered:38,uncovered:0,coverage_pct:100,checks:[
+      {control_id:"IA-2-ROOT-MFA",title:"Root account MFA enforced",domain:"Identification & Authentication",severity:"critical",asset_type:"cloud_account",plane:"identity_access",producers:["AWS","DEMO"],covered:true},
+      {control_id:"SC-28-OBJSTORE-KMS",title:"Object storage encrypted with managed keys",domain:"System & Communications",severity:"medium",asset_type:"object_storage",plane:"data_protection",producers:["AWS","AZURE","DEMO","GCP"],covered:true},
+      {control_id:"SC-7-ADMIN-SSH",title:"Administrative SSH not open to the internet",domain:"System & Communications",severity:"critical",asset_type:"network_ruleset",plane:"network_boundary",producers:["AWS","DEMO"],covered:true},
+    ]};
+    caps={total_checks:38,connectors:[
+      {source_system:"AWS",controls_satisfied_count:38,probes:new Array(12)},
+      {source_system:"DEMO",controls_satisfied_count:38,probes:new Array(9)},
+      {source_system:"AZURE",controls_satisfied_count:6,probes:new Array(3)},
+      {source_system:"GCP",controls_satisfied_count:4,probes:new Array(1)},
+    ]};
+  }else{
+    try{
+      const[mx,cp]=await Promise.all([apiGET("/coverage/automation"),apiGET("/connectors/capabilities")]);
+      matrix=mx;caps=cp;
+    }catch(e){host.innerHTML=`<div class="note" style="border-left-color:var(--fail)">Couldn't load automation coverage: ${esc(e.message||e)}</div>`;return;}
+  }
+  const rows=matrix.checks||[];
+  const byPlane={};rows.forEach(r=>{byPlane[r.plane]=(byPlane[r.plane]||0)+1;});
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k">Machine-verifiable controls</div><div class="v num">${matrix.total_checks}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Covered by a connector</div><div class="v num">${matrix.covered}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:${matrix.uncovered?'var(--fail)':'var(--steel)'}"></span>Unsatisfiable</div><div class="v num">${matrix.uncovered}</div></div>
+    <div class="ro"><div class="k">Coverage</div><div class="v num">${matrix.coverage_pct}%</div></div>
+  </div>
+  ${matrix.uncovered?`<div class="note" style="border-left-color:var(--fail)"><b>${matrix.uncovered} control(s)</b> are declared but no connector can observe them. Each is a control the platform would report as unassessable.</div>`
+    :`<div class="note">Every declared control resolves to at least one connector probe. Adding a connector makes its probes satisfy these same checks with no change to the control definitions.</div>`}
+  <div class="panel"><div class="panel-h"><h3>Connectors</h3><div class="sub">Probes each declares, and how many controls that unlocks</div></div>
+    <div class="panel-b flush"><div class="tbl-scroll"><table>
+      <thead><tr><th>Connector</th><th class="right">Probes</th><th class="right">Controls satisfied</th><th>Share of catalog</th></tr></thead>
+      <tbody>${(caps.connectors||[]).sort((a,b)=>b.controls_satisfied_count-a.controls_satisfied_count).map(c=>{
+        const pct=caps.total_checks?Math.round(c.controls_satisfied_count/caps.total_checks*100):0;
+        return `<tr>
+          <td><b>${esc(c.source_system)}</b></td>
+          <td class="right mono" style="font-size:12px">${(c.probes||[]).length}</td>
+          <td class="right mono" style="font-size:12px">${c.controls_satisfied_count}</td>
+          <td><div class="bar" style="background:var(--line);height:6px;border-radius:3px;overflow:hidden;min-width:90px"><div style="width:${pct}%;height:100%;background:var(--focus)"></div></div></td></tr>`;
+      }).join("")}</tbody>
+    </table></div></div></div>
+  <div class="panel"><div class="panel-h"><h3>Controls</h3><div class="sub">${Object.keys(byPlane).length} telemetry plane(s)</div></div>
+    <div class="panel-b flush"><div class="tbl-scroll"><table>
+      <thead><tr><th>Control</th><th>Title</th><th>Asset type</th><th>Severity</th><th>Proven by</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td class="id">${esc(r.control_id)}</td>
+        <td style="font-size:12.5px">${esc(r.title)}</td>
+        <td class="mono" style="font-size:11px;color:var(--steel)">${esc(r.asset_type)}</td>
+        <td>${sevChip(r.severity)}</td>
+        <td class="mono" style="font-size:11px">${r.producers&&r.producers.length?esc(r.producers.join(", ")):'<span class="chip c-fail"><span class="d"></span>none</span>'}</td></tr>`).join("")}</tbody>
+    </table></div></div></div>`;
+};
+
 /* ---------- EVIDENCE HUB ---------- */
 RENDER.evidencehub = async function(){
   const m=main();
@@ -2956,11 +3015,12 @@ const ICON={
   trustgraph:'<circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>',
   trusttelemetry:'<path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>',
   postureasof:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  automation:'<path d="M4 20V10M10 20V4M16 20v-7M22 20h-20"/><circle cx="10" cy="4" r="1.6"/>',
   agentlog:'<rect x="2" y="8" width="8" height="8" rx="4"/><rect x="14" y="8" width="8" height="8" rx="4"/><path d="M9 12h6"/>',
   evidenceingest:'<path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7"/><path d="M3 12h5l2 3h4l2-3h5"/>',
 };
 const GROUPS=[
-  ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"],["postureasof","As-of / Timeline"]]],
+  ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"],["postureasof","As-of / Timeline"],["automation","Automation Coverage"]]],
   ["Compliance as Code",[["policy","Policies"],["enforcement","Enforcement"],["agentlog","Agent Log"]]],
   ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"],["evidenceingest","Standards Ingest"]]],
   ["Intelligence",[["response","Response"],["inventory","AI Inventory"],["threat","Threat Intel"]]],

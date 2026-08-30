@@ -647,18 +647,111 @@ class AWSConnector(BaseConnector):
 
     # ── discovery ──
     def discover_assets(self, params: dict[str, Any]) -> list[Asset]:
+        """Enumerate every asset type this connector's probes can inspect.
+
+        Discovery previously returned IAM users only, so eleven of the twelve
+        probes had nothing to run against: a customer could not enumerate their
+        buckets, instances, volumes, databases, security groups, keys or
+        networks, and "continuous monitoring" only ever monitored IAM users.
+
+        Each enumeration is independently guarded — a narrower IAM role simply
+        yields fewer asset types rather than failing the whole discovery.
+        """
         assets: list[Asset] = []
-        try:
+
+        def _collect(label: str, fn) -> None:
+            try:
+                assets.extend(fn())
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("AWS discovery (%s) failed: %s", label, exc)
+
+        def _account() -> list[Asset]:
+            ident = self._session.client("sts").get_caller_identity()
+            return [Asset(asset_id=ident["Account"], asset_type="cloud_account",
+                          source_system="AWS", owner="cloud-platform-team",
+                          criticality="high")]
+
+        def _iam_users() -> list[Asset]:
             iam = self._session.client("iam")
-            for u in iam.list_users().get("Users", []):
-                assets.append(
-                    Asset(
-                        asset_id=u["UserName"],
-                        asset_type="iam_user",
-                        source_system="AWS",
-                        owner="identity-team",
-                    )
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("AWS discovery failed: %s", exc)
+            out = []
+            for page in iam.get_paginator("list_users").paginate():
+                out += [Asset(asset_id=u["UserName"], asset_type="iam_user",
+                              source_system="AWS", owner="identity-team")
+                        for u in page.get("Users", [])]
+            return out
+
+        def _buckets() -> list[Asset]:
+            s3 = self._session.client("s3")
+            return [Asset(asset_id=b["Name"], asset_type="object_storage",
+                          source_system="AWS", owner="cloud-platform-team")
+                    for b in s3.list_buckets().get("Buckets", [])]
+
+        def _instances() -> list[Asset]:
+            ec2 = self._session.client("ec2")
+            out = []
+            for page in ec2.get_paginator("describe_instances").paginate():
+                for r in page.get("Reservations", []):
+                    out += [Asset(asset_id=i["InstanceId"], asset_type="compute_instance",
+                                  source_system="AWS", owner="cloud-platform-team")
+                            for i in r.get("Instances", [])
+                            if i.get("State", {}).get("Name") != "terminated"]
+            return out
+
+        def _volumes() -> list[Asset]:
+            ec2 = self._session.client("ec2")
+            out = []
+            for page in ec2.get_paginator("describe_volumes").paginate():
+                out += [Asset(asset_id=v["VolumeId"], asset_type="block_storage",
+                              source_system="AWS", owner="cloud-platform-team")
+                        for v in page.get("Volumes", [])]
+            return out
+
+        def _databases() -> list[Asset]:
+            rds = self._session.client("rds")
+            out = []
+            for page in rds.get_paginator("describe_db_instances").paginate():
+                out += [Asset(asset_id=d["DBInstanceIdentifier"],
+                              asset_type="managed_database", source_system="AWS",
+                              owner="data-platform-team", criticality="high")
+                        for d in page.get("DBInstances", [])]
+            return out
+
+        def _security_groups() -> list[Asset]:
+            ec2 = self._session.client("ec2")
+            out = []
+            for page in ec2.get_paginator("describe_security_groups").paginate():
+                out += [Asset(asset_id=g["GroupId"], asset_type="network_ruleset",
+                              source_system="AWS", owner="network-team")
+                        for g in page.get("SecurityGroups", [])]
+            return out
+
+        def _keys() -> list[Asset]:
+            kms = self._session.client("kms")
+            out = []
+            for page in kms.get_paginator("list_keys").paginate():
+                for k in page.get("Keys", []):
+                    # Only customer-managed keys are rotatable; AWS-managed keys
+                    # would report as permanent violations of the rotation control.
+                    try:
+                        meta = kms.describe_key(KeyId=k["KeyId"])["KeyMetadata"]
+                        if meta.get("KeyManager") != "CUSTOMER":
+                            continue
+                    except Exception:  # noqa: BLE001
+                        continue
+                    out.append(Asset(asset_id=k["KeyId"], asset_type="encryption_key",
+                                     source_system="AWS", owner="secops-team"))
+            return out
+
+        def _vpcs() -> list[Asset]:
+            ec2 = self._session.client("ec2")
+            return [Asset(asset_id=v["VpcId"], asset_type="virtual_network",
+                          source_system="AWS", owner="network-team")
+                    for v in ec2.describe_vpcs().get("Vpcs", [])]
+
+        for label, fn in (
+            ("account", _account), ("iam_users", _iam_users), ("s3", _buckets),
+            ("ec2", _instances), ("ebs", _volumes), ("rds", _databases),
+            ("security_groups", _security_groups), ("kms", _keys), ("vpc", _vpcs),
+        ):
+            _collect(label, fn)
         return assets
