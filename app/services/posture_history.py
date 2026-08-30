@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models import PostureHistory
@@ -37,10 +37,24 @@ def _severity(r: PostureHistory) -> str:
 
 
 def as_of(db: Session, tenant_id: str, valid_time: datetime) -> list[dict[str, Any]]:
-    """The status of every control cell that held at `valid_time`."""
+    """The status of every control cell that held at `valid_time`.
+
+    The interval predicate runs in SQL, not in Python. PostureHistory is
+    append-only — one row per status transition per control per asset — so a
+    long-lived tenant accumulates millions of rows, and loading them all to
+    discard all but the covering interval made this endpoint scale with total
+    history rather than with the size of the answer. `_covers` is kept as the
+    authoritative definition of the half-open interval and re-applied below, so
+    a row whose timezone was dropped by the database round-trip is still judged
+    by the same rule.
+    """
     t = _aware(valid_time)
     rows = db.execute(
-        select(PostureHistory).where(PostureHistory.tenant_id == tenant_id)
+        select(PostureHistory).where(
+            PostureHistory.tenant_id == tenant_id,
+            PostureHistory.valid_from <= t,
+            or_(PostureHistory.valid_to.is_(None), PostureHistory.valid_to > t),
+        ).order_by(PostureHistory.valid_from.asc())
     ).scalars().all()
     snapshot: dict[tuple, dict[str, Any]] = {}
     for r in rows:
@@ -58,14 +72,26 @@ def as_of(db: Session, tenant_id: str, valid_time: datetime) -> list[dict[str, A
     return sorted(snapshot.values(), key=lambda d: (d["control_id"], d["source_system"]))
 
 
-def timeline(db: Session, tenant_id: str, control_id: str) -> list[dict[str, Any]]:
-    """The ordered interval history for one control (all cells)."""
+MAX_TIMELINE = 1000
+
+
+def timeline(db: Session, tenant_id: str, control_id: str,
+             limit: int = MAX_TIMELINE) -> list[dict[str, Any]]:
+    """The ordered interval history for one control (all cells).
+
+    Bounded: a control that flaps produces one row per transition per asset, so
+    an unbounded read here is the same unbounded-memory problem as `as_of`.
+    Newest intervals are the ones an auditor asks about, so the cap keeps the
+    most recent `limit` and returns them oldest-first.
+    """
     rows = db.execute(
         select(PostureHistory)
         .where(PostureHistory.tenant_id == tenant_id,
                PostureHistory.control_id == control_id)
-        .order_by(PostureHistory.valid_from.asc())
+        .order_by(PostureHistory.valid_from.desc())
+        .limit(max(1, limit))
     ).scalars().all()
+    rows = list(reversed(rows))
     return [{
         "control_id": r.control_id, "source_system": r.source_system,
         "asset_id": r.asset_id, "status": _status(r), "severity": _severity(r),
