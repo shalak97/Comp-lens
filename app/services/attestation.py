@@ -50,17 +50,31 @@ class AttestationService:
         return list(self.db.execute(stmt).scalars().all())
 
     def coverage(self, tenant_id: str, framework: str) -> dict[str, Any]:
-        ctrls = catalog.controls(framework)
+        from app.services.control_identity import canonical_to_internal, normalize_framework
+
+        catalog_key = normalize_framework(framework) or framework
+        ctrls = catalog.controls(catalog_key)
         total = len(ctrls)
         atts = {a.control_id: a for a in self.list(tenant_id, framework)}
-        # auto-assessed controls (have at least one finding for this tenant)
-        auto_ids = {c["id"] for c in ctrls if c.get("automated")}
+
+        # Findings are written against INTERNAL control ids; the catalogue is
+        # keyed by canonical framework ids. Translate through the crosswalk
+        # rather than comparing the two vocabularies directly — matching them
+        # by identity counted 5 of 56 automated controls and dropped every
+        # finding for the other 51 out of the audit-readiness number.
+        internal_by_canonical = canonical_to_internal(catalog_key)
+        canonical_by_internal: dict[str, set[str]] = {}
+        for canonical, internals in internal_by_canonical.items():
+            for internal in internals:
+                canonical_by_internal.setdefault(internal, set()).add(canonical)
+
+        auto_ids = set(internal_by_canonical)
         auto_status: dict[str, str] = {}
         if auto_ids:
             rows = self.db.execute(
                 select(Finding.control_id, Finding.status).where(Finding.tenant_id == tenant_id)).all()
-            for cid, st in rows:
-                if cid in auto_ids:
+            for internal_cid, st in rows:
+                for cid in canonical_by_internal.get(internal_cid, ()):
                     # worst-case: any fail => fail
                     prev = auto_status.get(cid)
                     val = "compliant" if st == ControlStatus.PASS else "non_compliant" if st == ControlStatus.FAIL else prev or "in_progress"
