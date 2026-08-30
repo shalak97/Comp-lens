@@ -54,7 +54,13 @@ def _claim(db: Session, schedule_id: str, now: datetime) -> bool:
                Schedule.next_run_at <= now,
                or_(Schedule.locked_until.is_(None), Schedule.locked_until <= now))
         .values(locked_by=WORKER_ID,
-                locked_until=now + timedelta(seconds=LEASE_SECONDS)))
+                locked_until=now + timedelta(seconds=LEASE_SECONDS))
+        # Without this, SQLAlchemy's default "evaluate" strategy re-runs the
+        # WHERE clause in PYTHON against objects already in the session, where
+        # next_run_at has come back from SQLite naive and `now` is UTC-aware —
+        # raising TypeError before the statement ever reaches the database.
+        # The claimed row is refreshed by the caller anyway.
+        .execution_options(synchronize_session=False))
     db.commit()
     return bool(res.rowcount == 1)
 
@@ -66,7 +72,8 @@ def _release(db: Session, schedule_id: str) -> None:
             sa_update(Schedule)
             .where(Schedule.schedule_id == schedule_id,
                    Schedule.locked_by == WORKER_ID)
-            .values(locked_by=None, locked_until=None))
+            .values(locked_by=None, locked_until=None)
+            .execution_options(synchronize_session=False))
         db.commit()
     except Exception:  # noqa: BLE001 — releasing must never mask the real error
         db.rollback()

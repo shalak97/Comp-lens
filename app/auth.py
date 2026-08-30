@@ -103,8 +103,15 @@ def _parse_keys() -> dict[str, tuple[set[str], str]]:
         parts = entry.split(":")
         key = parts[0].strip()
         tset = {t.strip() for t in parts[1].split(",") if t.strip()}
+
+        # A key with no explicit role keeps exactly the reach it had before
+        # roles existed: an all-tenant (`*`) key was the admin key, and a
+        # tenant-scoped key could do everything within its tenants but nothing
+        # administrative. Defaulting `*` to operator would silently strip admin
+        # from every existing deployment's admin key.
+        default_role = "admin" if tset == {ALL} or not tset else DEFAULT_ROLE
         role = (parts[2].strip().lower() if len(parts) > 2 and parts[2].strip()
-                else DEFAULT_ROLE)
+                else default_role)
         if role not in ROLE_PERMISSIONS:
             # Fail closed on a typo: a misspelled role must not silently widen
             # access, and must not silently grant the default either.

@@ -162,7 +162,12 @@ def test_timeline_is_bounded(db_session):
     assert len(rows) == 10
     # the cap keeps the newest intervals, returned oldest-first
     assert rows[0]["valid_from"] < rows[-1]["valid_from"]
-    assert rows[-1]["valid_from"] == (base + timedelta(hours=29)).isoformat()
+    # SQLite drops tzinfo on round-trip, so compare the instant, not the string
+    from datetime import datetime as _dt
+    newest = _dt.fromisoformat(rows[-1]["valid_from"])
+    if newest.tzinfo is None:
+        newest = newest.replace(tzinfo=UTC)
+    assert newest == base + timedelta(hours=29)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -222,7 +227,7 @@ def test_roles_form_a_widening_ladder():
 def test_auditor_can_read_evidence_but_not_mutate():
     """The segregation-of-duties boundary this product assesses for customers
     but could not previously enforce on itself."""
-    from app.auth import Permission, ROLE_PERMISSIONS
+    from app.auth import ROLE_PERMISSIONS, Permission
 
     auditor = ROLE_PERMISSIONS["auditor"]
     assert Permission.READ_EVIDENCE in auditor
@@ -235,7 +240,7 @@ def test_auditor_can_read_evidence_but_not_mutate():
 def test_operator_cannot_approve_its_own_waivers():
     """Whoever runs the assessments must not also be able to waive their
     findings — that is the whole point of the approval separation."""
-    from app.auth import Permission, ROLE_PERMISSIONS
+    from app.auth import ROLE_PERMISSIONS, Permission
 
     operator = ROLE_PERMISSIONS["operator"]
     assert Permission.ASSESS in operator
@@ -247,11 +252,15 @@ def test_key_parsing_reads_the_role_field(monkeypatch):
     from app.auth import _parse_keys
 
     monkeypatch.setenv("COMP_LENS_API_KEYS",
-                       "k1:acme:auditor ; k2:acme ; k3:*:admin")
+                       "k1:acme:auditor ; k2:acme ; k3:*:admin ; k4:*")
     parsed = _parse_keys()
     assert parsed["k1"] == ({"acme"}, "auditor")
-    assert parsed["k2"] == ({"acme"}, "operator")   # role defaults
+    assert parsed["k2"] == ({"acme"}, "operator")   # scoped key defaults
     assert parsed["k3"] == ({"*"}, "admin")
+    # An all-tenant key with no role keeps the meaning it had before roles
+    # existed — `key:*` WAS the admin key, and defaulting it to operator would
+    # silently strip admin from every existing deployment.
+    assert parsed["k4"] == ({"*"}, "admin")
 
 
 def test_an_unknown_role_fails_closed(monkeypatch):

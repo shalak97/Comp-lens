@@ -69,6 +69,7 @@ from app.models import (
     WaiverOut,
     WaiverRequest,
 )
+from app.observability import configure_logging as _configure_logging
 from app.policy.engine import CONTROL_CATALOG
 from app.policy_as_code import get_engine as _policy_engine
 from app.policy_as_code import reload_engine as _reload_policies
@@ -93,7 +94,6 @@ from app.services.trends import TrendService
 from app.services.trust_graph import TrustGraphService as _TrustGraph
 from app.services.waivers import WaiverService
 
-from app.observability import configure_logging as _configure_logging
 
 # LOG_FORMAT=json switches to one JSON object per line for log aggregation;
 # the default stays human-readable so local development is unchanged.
