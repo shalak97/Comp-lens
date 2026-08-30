@@ -1125,6 +1125,45 @@ def automation_coverage(_: Principal = Depends(require(Permission.READ))) -> dic
     return coverage_matrix()
 
 
+# ── SCF-grounded crosswalk (independent of internal control ids) ──
+@app.get("/v1/scf/crosswalk", tags=["catalog"])
+def scf_crosswalk_lookup(
+    nist_id: str | None = Query(None, description="e.g. SC-28 or SC-28(1)"),
+    iso_id: str | None = Query(None, description="e.g. A.8.24"),
+    _: Principal = Depends(require(Permission.READ)),
+) -> dict:
+    """NIST 800-53 <-> ISO 27001 Annex A, via the Secure Controls Framework's
+    published crosswalk — usable for any control in either catalog, not just
+    the ones Comp-Lens can currently automate.
+    """
+    from app.services import scf_crosswalk as scf
+
+    if not nist_id and not iso_id:
+        raise HTTPException(400, "provide nist_id and/or iso_id")
+    out: dict = {"scf_version": scf.version()}
+    if nist_id:
+        out["nist_id"] = nist_id
+        out["iso_27001_annex_a"] = scf.iso_for_nist(nist_id)
+    if iso_id:
+        out["iso_id"] = iso_id
+        out["nist_800_53_r5"] = scf.nist_for_iso(iso_id)
+    return out
+
+
+@app.get("/v1/scf/verify-crosswalk", tags=["catalog"])
+def scf_verify_crosswalk(_: Principal = Depends(require(Permission.READ))) -> dict:
+    """How much of Comp-Lens's own hand-authored control crosswalk is
+    independently corroborated by SCF's published mapping, versus still
+    resting on the "confirm against official texts" caveat every check
+    carries. Not exhaustive — SCF not linking two controls means unconfirmed,
+    not wrong — but it upgrades most of the crosswalk from illustrative to
+    independently verified, and names exactly what's left.
+    """
+    from app.services.scf_crosswalk import verify_internal_crosswalk
+
+    return verify_internal_crosswalk()
+
+
 @app.get("/evidence/lexicon", tags=["evidence-graph"])
 def evidence_lexicon(_: Principal = Depends(require(Permission.READ_EVIDENCE))) -> dict:
     lex = _evg.lexicon()
