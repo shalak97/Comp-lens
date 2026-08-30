@@ -572,6 +572,26 @@ class AgentIdentity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class AgentChainHead(Base):
+    """The signed tip of a tenant's agent-action chain.
+
+    Hash-chaining alone cannot detect TRUNCATION: deleting the newest record
+    leaves every survivor's prev_hash still resolvable, so the chain verifies
+    clean. Recording where the chain is supposed to end — and how many entries
+    it should contain — is what makes removing or replacing the tail detectable.
+
+    The HMAC signature is over (tenant, head_hash, action_count) with the
+    server-side evidence signing key, so an attacker with database write access
+    but no key cannot repair the head after tampering.
+    """
+    __tablename__ = "agent_chain_heads"
+    tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    head_hash: Mapped[str] = mapped_column(String(64))
+    action_count: Mapped[int] = mapped_column(Integer, default=0)
+    signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class AgentAction(Base):
     """Append-only, hash-chained log of agent decisions — which agent did what,
     under whose authorization, with what confidence. record_hash chains to prev_hash

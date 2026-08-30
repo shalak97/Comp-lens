@@ -44,6 +44,38 @@ def record_hash(prev_hash: str | None, payload: dict[str, Any]) -> str:
     return hashlib.sha256(((prev_hash or "") + "\n" + body).encode("utf-8")).hexdigest()
 
 
+def head_signature(tenant_id: str, head_hash: str, action_count: int) -> str:
+    """HMAC over the chain tip, so the head cannot be repaired without the key.
+
+    Uses the same server-side signing key as evidence signing. Pure function,
+    kept here so the head can be verified without a database.
+    """
+    import hmac
+
+    from app.services.evidence_sign import _key
+
+    msg = f"{tenant_id}|{head_hash}|{action_count}".encode()
+    return hmac.new(_key(), msg, hashlib.sha256).hexdigest()
+
+
+def _upsert_head(db: Any, tenant_id: str, head_hash: str) -> None:
+    """Advance the tenant's chain tip after an append."""
+    from app.models import AgentChainHead
+
+    head = db.get(AgentChainHead, tenant_id)
+    count = (head.action_count if head else 0) + 1
+    sig = head_signature(tenant_id, head_hash, count)
+    if head:
+        head.head_hash = head_hash
+        head.action_count = count
+        head.signature = sig
+        head.updated_at = datetime.now(UTC)
+    else:
+        db.add(AgentChainHead(tenant_id=tenant_id, head_hash=head_hash,
+                              action_count=count, signature=sig,
+                              updated_at=datetime.now(UTC)))
+
+
 def register_agent(db: Any, *, name: str, kind: str,
                    model: str | None = None) -> Any:
     """Get-or-create a verifiable agent identity (idempotent by name+kind)."""
@@ -84,6 +116,7 @@ def record_action(db: Any, *, tenant_id: str, agent: Any, action: str,
         detail=detail, prev_hash=prev_hash, record_hash=record_hash(prev_hash, payload),
         created_at=created)
     db.add(act)
+    _upsert_head(db, tenant_id, act.record_hash)
     db.flush()
     return act
 
@@ -105,15 +138,30 @@ def list_actions(db: Any, tenant_id: str, limit: int = 100) -> list[dict[str, An
 
 
 def verify_chain(db: Any, tenant_id: str) -> dict[str, Any]:
-    """Recompute every record's hash and check its prev linkage — detects any
-    tampered or removed entry."""
+    """Recompute every record's hash and check its linkage.
+
+    Four distinct tampering shapes are checked, because hash-chaining alone
+    only catches the first two:
+
+      1. an edited record        -> its payload no longer matches its own hash
+      2. a removed middle record -> its successor's prev_hash dangles
+      3. a removed TAIL record   -> nothing dangles, so this is caught by
+                                    comparing against the signed chain head
+      4. a forked chain          -> two records claiming the same predecessor
+
+    (3) is the one that matters most in practice: the entries an attacker wants
+    gone are always the most recent ones, and before the head was recorded a
+    truncated log verified as clean.
+    """
     from sqlalchemy import select
 
-    from app.models import AgentAction
+    from app.models import AgentAction, AgentChainHead
     rows = db.execute(
         select(AgentAction).where(AgentAction.tenant_id == tenant_id)).scalars().all()
     by_hash = {r.record_hash: r for r in rows}
     broken: list[str] = []
+    issues: list[str] = []
+
     for r in rows:
         payload = _payload(tenant_id=r.tenant_id, agent_id=r.agent_id, agent_name=r.agent_name,
                            action=r.action, target=r.target, on_behalf_of=r.on_behalf_of,
@@ -123,7 +171,47 @@ def verify_chain(db: Any, tenant_id: str) -> dict[str, Any]:
             broken.append(r.id)          # payload doesn't match its hash
         elif r.prev_hash and r.prev_hash not in by_hash:
             broken.append(r.id)          # dangling chain link (predecessor removed)
-    return {"ok": not broken, "actions": len(rows), "broken": broken}
+
+    # (4) two records claiming the same predecessor means the chain forked.
+    seen_prev: dict[str, str] = {}
+    for r in rows:
+        if not r.prev_hash:
+            continue
+        if r.prev_hash in seen_prev:
+            issues.append("forked_chain")
+            broken.extend([seen_prev[r.prev_hash], r.id])
+            break
+        seen_prev[r.prev_hash] = r.id
+
+    # (3) compare against the signed head: the chain must end where it says it
+    # ends, and contain as many entries as it says it contains.
+    head = db.get(AgentChainHead, tenant_id)
+    head_verified = False
+    if head is not None:
+        expected_sig = head_signature(tenant_id, head.head_hash, head.action_count)
+        import hmac as _hmac
+        if not _hmac.compare_digest(head.signature or "", expected_sig):
+            issues.append("head_signature_invalid")
+        elif head.head_hash not in by_hash:
+            issues.append("tail_removed_or_replaced")
+        elif len(rows) != head.action_count:
+            issues.append("action_count_mismatch")
+        else:
+            head_verified = True
+    elif rows:
+        # Pre-existing data written before the head was introduced. The chain
+        # checks still apply, but the tail cannot be attested — say so rather
+        # than implying a stronger guarantee than is available.
+        issues.append("no_recorded_head")
+
+    return {
+        "ok": not broken and not issues,
+        "actions": len(rows),
+        "broken": broken,
+        "issues": issues,
+        "head_verified": head_verified,
+        "expected_actions": head.action_count if head is not None else None,
+    }
 
 
 __all__ = ["record_hash", "register_agent", "record_action", "list_actions", "verify_chain"]
