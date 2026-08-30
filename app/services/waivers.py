@@ -16,6 +16,21 @@ from sqlalchemy.orm import Session
 from app.models import ExceptionStatus, Waiver, WaiverRequest
 
 
+def _aware(dt: datetime | None) -> datetime | None:
+    """Coerce a DB-read datetime to UTC-aware.
+
+    SQLite has no native timezone type, so DateTime(timezone=True) round-trips
+    to a NAIVE datetime; comparing that against datetime.now(UTC) raises
+    TypeError. Every expiry comparison below goes through here. Eight other
+    modules in this codebase (freshness, bitemporal, posture_history,
+    evidence_policy, agent_audit, trust_graph, crawler, evidence_sign) each
+    carry the same helper for the same reason.
+    """
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
 class WaiverService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -44,7 +59,8 @@ class WaiverService:
         return True
 
     def _refresh_status(self, w: Waiver) -> Waiver:
-        if w.status == ExceptionStatus.ACTIVE and w.expires_at and w.expires_at < datetime.now(UTC):
+        expires = _aware(w.expires_at)
+        if w.status == ExceptionStatus.ACTIVE and expires and expires < datetime.now(UTC):
             w.status = ExceptionStatus.EXPIRED
         return w
 
@@ -59,7 +75,8 @@ class WaiverService:
             )
         ).scalars().all()
         for w in rows:
-            if w.expires_at and w.expires_at < now:
+            expires = _aware(w.expires_at)
+            if expires and expires < now:
                 continue
             if w.asset_id is None or w.asset_id == asset_id:
                 return w
@@ -77,7 +94,8 @@ class WaiverService:
         all_assets: set[str] = set()
         specific: set[tuple] = set()
         for control_id, asset_id, expires_at in rows:
-            if expires_at and expires_at < now:
+            expires = _aware(expires_at)
+            if expires and expires < now:
                 continue
             if asset_id is None:
                 all_assets.add(control_id)

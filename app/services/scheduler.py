@@ -56,9 +56,17 @@ class ScheduleService:
         self.db.flush()
         return True
 
-    def run(self, schedule_id: str) -> dict:
+    def run(self, tenant_id: str, schedule_id: str) -> dict:
+        """Run one schedule on demand.
+
+        tenant_id is required and enforced: loading by id alone let any
+        authenticated tenant trigger another tenant's schedule, which writes
+        findings and evidence into the victim's tenant, spends the victim's
+        connector API quota, and returns the victim's schedule id and next-run
+        time to the caller. Every sibling method here already scopes by tenant.
+        """
         s = self.db.get(Schedule, schedule_id)
-        if not s:
+        if not s or s.tenant_id != tenant_id:
             raise ValueError("schedule not found")
         return self._execute(s)
 

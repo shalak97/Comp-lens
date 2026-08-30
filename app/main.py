@@ -524,7 +524,7 @@ def run_schedule(schedule_id: str, tenant_id: str = "default", db: Session = Dep
                  p: Principal = Depends(require_principal)) -> dict:
     authorize_tenant(p, tenant_id)
     try:
-        return ScheduleService(db).run(schedule_id)
+        return ScheduleService(db).run(tenant_id, schedule_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Schedule not found.") from None
 
