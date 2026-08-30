@@ -30,13 +30,7 @@ from app.audit_models import AuditPatch as _AuditPatch
 from app.audit_models import ControlReviewPatch as _CtrlPatch
 from app.audit_models import EvidenceRequestIn as _ReqIn
 from app.audit_models import EvidenceRequestPatch as _ReqPatch
-from app.auth import (
-    Permission,
-    Principal,
-    auth_enabled,
-    authorize_tenant,
-    require,
-)
+from app.auth import Permission, Principal, auth_enabled, authorize_tenant, require
 from app.config import settings
 from app.connectors.base import ConnectorError
 from app.connectors.registry import registry

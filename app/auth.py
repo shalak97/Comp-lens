@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 ALL = "*"
 
 
-class Permission(str, enum.Enum):
+class Permission(enum.StrEnum):
     """What a caller may do, independent of which tenant they may do it in."""
 
     READ = "read"                 # list/read non-sensitive resources

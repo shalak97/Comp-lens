@@ -121,4 +121,10 @@ def test_all_schedules_succeed_reports_zero_errors(db_session, monkeypatch):
     monkeypatch.setattr(db_session, "close", lambda: None)
 
     result = ScheduleService.run_due()
-    assert result == {"attempted": 1, "succeeded": 1, "failed": 0, "errors": []}
+    # assert the outcome, not the exact dict shape — run_due's report grows
+    # (skipped_locked was added with the multi-replica lease) and an equality
+    # check on the whole payload turns every additive field into a failure.
+    assert result["attempted"] == 1
+    assert result["succeeded"] == 1
+    assert result["failed"] == 0
+    assert result["errors"] == []
