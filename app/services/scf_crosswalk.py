@@ -89,6 +89,46 @@ def scf_controls_linking(nist_id: str, iso_id: str) -> list[str]:
     return sorted(_indices()[2].get((nist_id, iso_id), ()))
 
 
+def _in_catalog(framework: str, control_id: str) -> bool | None:
+    """Is this a real control in our own catalog? None if we couldn't tell.
+
+    Deliberately tri-state. Answering False when the catalog itself failed to
+    load would assert "no such control" on no evidence — the same kind of
+    unfounded claim this module exists to avoid.
+    """
+    try:
+        from app.services import framework_catalog
+        return framework_catalog.get(framework, control_id) is not None
+    except Exception:  # noqa: BLE001 — an unavailable catalog is "unknown", not "absent"
+        return None
+
+
+def lookup(nist_id: str | None = None, iso_id: str | None = None) -> dict[str, Any]:
+    """Ad-hoc NIST <-> ISO lookup, with enough context to read the answer.
+
+    An empty list is ambiguous on its own: SCF genuinely not mapping a real
+    control looks identical to a typo'd id that no catalog contains, and both
+    look identical to the SCF data file having failed to load. A caller who
+    can't tell those apart will read "[]" as "there is no ISO equivalent for
+    this control", which is a claim we have not made. So each requested id is
+    reported with whether our catalog actually contains it, alongside the
+    reference-data status.
+    """
+    out: dict[str, Any] = {
+        "scf_version": version(),
+        "reference_data": _reference_data_status(),
+    }
+    if nist_id:
+        out["nist_id"] = nist_id
+        out["nist_id_in_catalog"] = _in_catalog("NIST_800_53", nist_id)
+        out["iso_27001_annex_a"] = iso_for_nist(nist_id)
+    if iso_id:
+        out["iso_id"] = iso_id
+        out["iso_id_in_catalog"] = _in_catalog("ISO_27001_2022", iso_id)
+        out["nist_800_53_r5"] = nist_for_iso(iso_id)
+    return out
+
+
 def _base(control_id: str) -> str:
     """Strip an enhancement suffix: "AC-2(7)" -> "AC-2". SCF's crosswalk is at
     base-control granularity for most entries; a hand-authored reference to a
@@ -230,5 +270,5 @@ def verify_internal_crosswalk() -> dict[str, Any]:
 
 __all__ = [
     "version", "iso_for_nist", "nist_for_iso", "scf_controls_linking",
-    "verify_link", "verify_internal_crosswalk",
+    "lookup", "verify_link", "verify_internal_crosswalk",
 ]

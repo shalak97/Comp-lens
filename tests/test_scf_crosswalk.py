@@ -52,6 +52,38 @@ class Lookups(unittest.TestCase):
         self.assertIn("CRY-05", linking)
 
 
+class Lookup(unittest.TestCase):
+    """An empty result must never be readable as a claim we didn't make."""
+
+    def test_typo_is_distinguishable_from_a_genuinely_unmapped_control(self):
+        # Both return no ISO controls, but for completely different reasons:
+        # AC-25 is a real NIST control SCF simply doesn't map; SC-999 doesn't
+        # exist. Reporting both as a bare [] invites reading a typo as
+        # "this control has no ISO equivalent".
+        real_but_unmapped = scf.lookup(nist_id="AC-25")
+        typo = scf.lookup(nist_id="SC-999")
+        self.assertEqual(real_but_unmapped["iso_27001_annex_a"], [])
+        self.assertEqual(typo["iso_27001_annex_a"], [])
+        self.assertTrue(real_but_unmapped["nist_id_in_catalog"])
+        self.assertFalse(typo["nist_id_in_catalog"])
+
+    def test_mapped_control_reports_its_links(self):
+        r = scf.lookup(nist_id="SC-28")
+        self.assertTrue(r["nist_id_in_catalog"])
+        self.assertIn("A.8.24", r["iso_27001_annex_a"])
+
+    def test_iso_side_works_the_same_way(self):
+        r = scf.lookup(iso_id="A.8.24")
+        self.assertTrue(r["iso_id_in_catalog"])
+        self.assertIn("SC-28", r["nist_800_53_r5"])
+        self.assertFalse(scf.lookup(iso_id="A.99.99")["iso_id_in_catalog"])
+
+    def test_lookup_carries_reference_data_status(self):
+        # Same reason as the verification report: with no SCF data every
+        # answer is [], which must not read as "no mapping exists".
+        self.assertIn("loaded", scf.lookup(nist_id="SC-28")["reference_data"])
+
+
 class VerifyLink(unittest.TestCase):
     def test_exact_match_reports_exact_granularity(self):
         result = scf.verify_link("SC-28", "A.8.24")
