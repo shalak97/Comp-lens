@@ -86,6 +86,23 @@ class VerifyInternalCrosswalk(unittest.TestCase):
             self.assertGreaterEqual(summary["verified_pct"], 0.0)
             self.assertLessEqual(summary["verified_pct"], 100.0)
 
+    def test_denominator_reconciles(self):
+        # The load-bearing invariant: nothing may drop out of the report
+        # unannounced. Every control in the crosswalk is either checked or
+        # explicitly skipped with a reason — never silently absent, which
+        # would shrink the denominator and inflate verified_pct.
+        summary = scf.verify_internal_crosswalk()
+        self.assertEqual(
+            summary["controls_checked"] + summary["controls_skipped"],
+            summary["controls_in_crosswalk"],
+            "checked + skipped must account for every control in the crosswalk")
+        self.assertEqual(len(summary["skipped"]), summary["controls_skipped"])
+
+    def test_every_skipped_control_carries_a_reason(self):
+        for entry in scf.verify_internal_crosswalk()["skipped"]:
+            self.assertTrue(entry["control_id"])
+            self.assertIn("reference", entry["reason"])
+
     def test_sc28_control_is_verified(self):
         # AC-2-7/CM-3/etc. aside, SC-28 is one of the hand-written CROSSWALK
         # entries (app/frameworks.py) and is independently corroborated by
@@ -104,6 +121,58 @@ class VerifyInternalCrosswalk(unittest.TestCase):
             self.assertTrue(r["nist_refs"])
             self.assertTrue(r["iso_refs"])
             self.assertEqual(len(r["pairs"]), len(r["nist_refs"]) * len(r["iso_refs"]))
+
+
+class DegradedRunsAnnounceThemselves(unittest.TestCase):
+    """A verification report that quietly narrows its own scope and then
+    returns a *better* percentage is worse than no report — it's a false
+    assurance in a product whose whole job is not making those. Both ways the
+    scope can silently shrink must show up in the payload.
+    """
+
+    def _without_reference_data(self):
+        """Point the loader at a missing file, restoring state afterwards."""
+        from pathlib import Path
+        original = scf._PATH
+        scf._PATH = Path("/nonexistent/scf_crosswalk.json")
+        scf._load.cache_clear()
+        scf._indices.cache_clear()
+
+        def restore():
+            scf._PATH = original
+            scf._load.cache_clear()
+            scf._indices.cache_clear()
+
+        self.addCleanup(restore)
+
+    def test_missing_reference_data_is_distinguishable_from_a_wrong_crosswalk(self):
+        # Without this signal, an absent scf_crosswalk.json makes every link
+        # fail and the report reads "0% verified" — accusing the crosswalk of
+        # being wrong when nothing was ever checked against it.
+        self._without_reference_data()
+        summary = scf.verify_internal_crosswalk()
+        self.assertFalse(summary["reference_data"]["loaded"])
+        self.assertEqual(summary["reference_data"]["scf_controls"], 0)
+        self.assertFalse(summary["scope_complete"],
+                         "a run with no reference data must not look complete")
+
+    def test_scope_complete_requires_both_reference_data_and_check_pack(self):
+        summary = scf.verify_internal_crosswalk()
+        self.assertEqual(
+            summary["scope_complete"],
+            summary["reference_data"]["loaded"] and summary["declarative_pack"]["loaded"])
+
+    def test_declarative_pack_failure_is_reported_with_a_cause(self):
+        # app.frameworks merges the declarative check pack inside a bare
+        # `except Exception: return`, so a failure there is invisible: the
+        # crosswalk silently shrinks to the hand-written entries. When that
+        # happens the report must say so, and say why.
+        pack = scf.verify_internal_crosswalk()["declarative_pack"]
+        if pack["loaded"]:
+            self.assertIsNone(pack["error"])
+            self.assertGreater(pack["checks_with_crosswalk"], 0)
+        else:
+            self.assertTrue(pack["error"], "a failed pack load must name its cause")
 
 
 if __name__ == "__main__":

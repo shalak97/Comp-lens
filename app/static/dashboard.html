@@ -2348,7 +2348,12 @@ async function renderScfVerification(host){
   box.innerHTML=`<div class="loading"><span class="spin"></span> Loading SCF verification…</div>`;
   let v;
   if(STATE.demo){
-    v={scf_version:"scf-2026.2",controls_checked:48,controls_verified:47,controls_unverified:1,verified_pct:97.9,
+    v={scf_version:"scf-2026.2",controls_in_crosswalk:56,controls_checked:48,controls_verified:47,
+       controls_unverified:1,controls_skipped:8,verified_pct:97.9,scope_complete:true,
+       reference_data:{loaded:true,version:"scf-2026.2",scf_controls:832},
+       declarative_pack:{loaded:true,error:null,checks_with_crosswalk:38},
+       skipped:[{control_id:"AI-INV",reason:"no NIST or ISO 27001 reference"},
+                {control_id:"AI-RISK",reason:"no NIST or ISO 27001 reference"}],
        results:[{control_id:"IA-2-ROOT-MFA",nist_refs:["IA-2(1)","AC-6(5)"],iso_refs:["A.5.17","A.8.5"],any_verified:false,
                  pairs:[{nist_id:"IA-2(1)",iso_id:"A.5.17",verified:false},{nist_id:"IA-2(1)",iso_id:"A.8.5",verified:false}]}]};
   }else{
@@ -2356,16 +2361,31 @@ async function renderScfVerification(host){
     catch(e){box.innerHTML=`<div class="note" style="border-left-color:var(--fail)">Couldn't load SCF verification: ${esc(e.message||e)}</div>`;return;}
   }
   const unverified=(v.results||[]).filter(r=>!r.any_verified);
+  /* A percentage is only coverage if the run actually examined the whole
+     crosswalk. When it didn't, say so before showing the number — a degraded
+     run reports a *higher* percentage off a smaller denominator. */
+  const degraded=v.scope_complete===false;
+  let why="";
+  if(degraded){
+    if(v.reference_data&&!v.reference_data.loaded)
+      why="the SCF reference data didn't load, so nothing could be checked against it — this is not a finding about the crosswalk";
+    else if(v.declarative_pack&&!v.declarative_pack.loaded)
+      why=`the declarative check pack didn't load (${esc(v.declarative_pack.error||"unknown cause")}), so only the hand-written controls were examined`;
+    else why="this run examined less than the whole crosswalk";
+  }
   box.innerHTML=`
   <div class="panel"><div class="panel-h"><h3>SCF-verified crosswalk</h3><div class="sub">Every control's NIST + ISO 27001 references, checked against the Secure Controls Framework's published mapping (${esc(v.scf_version||"—")})</div></div>
     <div class="panel-b">
+      ${degraded?`<div class="note" style="border-left-color:var(--fail);margin-bottom:12px"><b>Incomplete run — the percentage below isn't coverage.</b> ${why}.</div>`:""}
       <div class="readouts">
+        <div class="ro"><div class="k">In crosswalk</div><div class="v num">${v.controls_in_crosswalk??"—"}</div></div>
         <div class="ro"><div class="k">Checked</div><div class="v num">${v.controls_checked}</div></div>
         <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>SCF-verified</div><div class="v num">${v.controls_verified}</div></div>
         <div class="ro"><div class="k"><span class="tick" style="background:${v.controls_unverified?'var(--warn)':'var(--steel)'}"></span>Unconfirmed</div><div class="v num">${v.controls_unverified}</div></div>
-        <div class="ro"><div class="k">Verified</div><div class="v num">${v.verified_pct}%</div></div>
+        <div class="ro"><div class="k"><span class="tick" style="background:var(--steel)"></span>Not checkable</div><div class="v num">${v.controls_skipped??0}</div></div>
+        <div class="ro"><div class="k">Verified${degraded?" (partial)":""}</div><div class="v num">${v.verified_pct}%</div></div>
       </div>
-      <div class="note">A control here has both a NIST 800-53 and an ISO 27001 reference, and SCF independently links them through a shared SCF control. Unconfirmed doesn't mean wrong — SCF's own coverage isn't exhaustive — but it hasn't been corroborated, so it stays illustrative until it is.</div>
+      <div class="note">A control here has both a NIST 800-53 and an ISO 27001 reference, and SCF independently links them through a shared SCF control. Unconfirmed doesn't mean wrong — SCF's own coverage isn't exhaustive — but it hasn't been corroborated, so it stays illustrative until it is. <b>Not checkable</b> counts controls with only one side of the mapping (the AI-governance set has no NIST/ISO equivalent), so they can't be cross-checked at all — they're excluded from the percentage but not from the catalog.</div>
       ${unverified.length?`<div class="tbl-scroll" style="margin-top:12px"><table>
         <thead><tr><th>Control</th><th>NIST refs</th><th>ISO refs</th></tr></thead>
         <tbody>${unverified.map(r=>`<tr>
