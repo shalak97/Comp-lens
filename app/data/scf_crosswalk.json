@@ -1,6 +1,7 @@
 {
  "version": "scf-2026.2",
  "source": "https://github.com/securecontrolsframework/securecontrolsframework",
+ "generated_by": "tools/extract_scf_crosswalk.py",
  "license_note": "Per the source repository's README: \"The SCF is free via Creative Commons licensing.\" Confirm the exact CC variant at securecontrolsframework.com before any redistribution beyond this internal crosswalk use.",
  "note": "NIST refs pivot through SCF's NIST SP 800-53 R5 column (zero-padding normalized to match our catalog). ISO refs pivot through SCF's ISO 27002:2022 column, NOT its ISO 27001:2022 column - the latter maps to the ISO management-system clauses (4-10), not Annex A, and is not comparable to our Annex-A-only iso_27001_2022.json catalog. Every ref here is pre-filtered to exist in the corresponding catalog file.",
  "controls": [

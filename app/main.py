@@ -1140,14 +1140,7 @@ def scf_crosswalk_lookup(
 
     if not nist_id and not iso_id:
         raise HTTPException(400, "provide nist_id and/or iso_id")
-    out: dict = {"scf_version": scf.version()}
-    if nist_id:
-        out["nist_id"] = nist_id
-        out["iso_27001_annex_a"] = scf.iso_for_nist(nist_id)
-    if iso_id:
-        out["iso_id"] = iso_id
-        out["nist_800_53_r5"] = scf.nist_for_iso(iso_id)
-    return out
+    return scf.lookup(nist_id=nist_id, iso_id=iso_id)
 
 
 @app.get("/v1/scf/verify-crosswalk", tags=["catalog"])

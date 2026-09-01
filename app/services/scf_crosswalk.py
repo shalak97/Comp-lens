@@ -89,6 +89,46 @@ def scf_controls_linking(nist_id: str, iso_id: str) -> list[str]:
     return sorted(_indices()[2].get((nist_id, iso_id), ()))
 
 
+def _in_catalog(framework: str, control_id: str) -> bool | None:
+    """Is this a real control in our own catalog? None if we couldn't tell.
+
+    Deliberately tri-state. Answering False when the catalog itself failed to
+    load would assert "no such control" on no evidence — the same kind of
+    unfounded claim this module exists to avoid.
+    """
+    try:
+        from app.services import framework_catalog
+        return framework_catalog.get(framework, control_id) is not None
+    except Exception:  # noqa: BLE001 — an unavailable catalog is "unknown", not "absent"
+        return None
+
+
+def lookup(nist_id: str | None = None, iso_id: str | None = None) -> dict[str, Any]:
+    """Ad-hoc NIST <-> ISO lookup, with enough context to read the answer.
+
+    An empty list is ambiguous on its own: SCF genuinely not mapping a real
+    control looks identical to a typo'd id that no catalog contains, and both
+    look identical to the SCF data file having failed to load. A caller who
+    can't tell those apart will read "[]" as "there is no ISO equivalent for
+    this control", which is a claim we have not made. So each requested id is
+    reported with whether our catalog actually contains it, alongside the
+    reference-data status.
+    """
+    out: dict[str, Any] = {
+        "scf_version": version(),
+        "reference_data": _reference_data_status(),
+    }
+    if nist_id:
+        out["nist_id"] = nist_id
+        out["nist_id_in_catalog"] = _in_catalog("NIST_800_53", nist_id)
+        out["iso_27001_annex_a"] = iso_for_nist(nist_id)
+    if iso_id:
+        out["iso_id"] = iso_id
+        out["iso_id_in_catalog"] = _in_catalog("ISO_27001_2022", iso_id)
+        out["nist_800_53_r5"] = nist_for_iso(iso_id)
+    return out
+
+
 def _base(control_id: str) -> str:
     """Strip an enhancement suffix: "AC-2(7)" -> "AC-2". SCF's crosswalk is at
     base-control granularity for most entries; a hand-authored reference to a
@@ -113,27 +153,87 @@ def verify_link(nist_id: str, iso_id: str) -> dict[str, Any]:
             "granularity": None, "scf_controls": []}
 
 
-def verify_internal_crosswalk() -> dict[str, Any]:
-    """Cross-check every hand-authored internal control's NIST+ISO references
-    against SCF. Returns per-control results plus a summary, so the platform
-    can show — not just claim — how much of its own crosswalk is independently
-    corroborated versus still illustrative.
+def _reference_data_status() -> dict[str, Any]:
+    """Is the SCF reference data actually loaded?
+
+    Without this, a missing or empty app/data/scf_crosswalk.json makes every
+    link fail to verify and the report reads "0% verified" — which accuses the
+    crosswalk of being wrong when the truth is that there was nothing to check
+    it against. Those two states must never look alike.
     """
-    from app.frameworks import CROSSWALK, crosswalk_for
+    doc = _load()
+    controls = doc.get("controls", [])
+    return {
+        "loaded": bool(controls),
+        "version": doc.get("version"),
+        "scf_controls": len(controls),
+    }
 
-    # CROSSWALK starts with only the hand-written entries; the 38 declarative
-    # controls' crosswalk data is merged into it lazily, on first call to
-    # crosswalk_for()/controls_for_framework(). Reading CROSSWALK directly
-    # without triggering that merge would silently verify only the legacy
-    # controls and skip every one added this session.
-    crosswalk_for("__trigger_merge__")
 
-    results = []
-    for internal_id, mapping in sorted(CROSSWALK.items()):
+def _declarative_pack_status() -> dict[str, Any]:
+    """Did the declarative check pack load?
+
+    app.frameworks._merge_declarative_crosswalk() folds the check pack's
+    controls into CROSSWALK inside a bare ``except Exception: return`` — by
+    design, so malformed content can never break the core mapping. The cost is
+    that a failure is *invisible*: CROSSWALK silently shrinks to just the
+    hand-written entries and this report then verifies a fraction of the
+    catalog while reporting a higher percentage than the full run would. A
+    compliance report that quietly narrows its own denominator and comes back
+    with a better number is worse than no report, so probe the pack directly
+    and say so.
+    """
+    try:
+        from app.services.control_checks import all_checks
+    except Exception as exc:  # noqa: BLE001 — the failure is the finding
+        return {"loaded": False, "error": f"{type(exc).__name__}: {exc}",
+                "checks_with_crosswalk": 0}
+    try:
+        checks = all_checks()
+    except Exception as exc:  # noqa: BLE001
+        return {"loaded": False, "error": f"{type(exc).__name__}: {exc}",
+                "checks_with_crosswalk": 0}
+    return {"loaded": True, "error": None,
+            "checks_with_crosswalk": sum(1 for c in checks.values() if c.crosswalk)}
+
+
+def verify_internal_crosswalk() -> dict[str, Any]:
+    """Cross-check every internal control's NIST+ISO references against SCF.
+
+    Returns per-control results plus a summary that states its own scope: how
+    many controls are in the crosswalk at all, how many could be checked, and
+    which were skipped and why. ``verified_pct`` is a percentage *of the
+    controls that could be checked*, so it is only meaningful alongside
+    ``scope_complete`` — read on its own it silently flatters a degraded run.
+    """
+    from app.frameworks import CROSSWALK, controls_for_framework
+
+    # controls_for_framework() is the public entry point that folds the
+    # declarative check pack into CROSSWALK, so calling it both triggers that
+    # merge and yields the authoritative id list. Reading CROSSWALK directly
+    # would verify only the hand-written entries and skip every declarative
+    # control, without any sign that it had done so.
+    control_ids = controls_for_framework("ALL")
+
+    results: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+
+    for internal_id in sorted(control_ids):
+        mapping = CROSSWALK.get(internal_id, {})
         nist_refs = mapping.get("NIST", [])
         iso_refs = mapping.get("ISO27001", [])
         if not nist_refs or not iso_refs:
-            continue  # nothing to cross-check without both sides
+            # Not a failure — an SCF cross-check needs both sides to pivot
+            # through. But these controls must stay visible in the report
+            # rather than dropping out of the denominator unannounced.
+            missing = []
+            if not nist_refs:
+                missing.append("NIST")
+            if not iso_refs:
+                missing.append("ISO 27001")
+            skipped.append({"control_id": internal_id,
+                            "reason": f"no {' or '.join(missing)} reference"})
+            continue
         pairs = []
         for n in nist_refs:
             for i in iso_refs:
@@ -147,17 +247,28 @@ def verify_internal_crosswalk() -> dict[str, Any]:
 
     checked = len(results)
     verified = sum(1 for r in results if r["any_verified"])
+    reference = _reference_data_status()
+    pack = _declarative_pack_status()
     return {
         "scf_version": version(),
+        "controls_in_crosswalk": len(control_ids),
         "controls_checked": checked,
         "controls_verified": verified,
         "controls_unverified": checked - verified,
+        "controls_skipped": len(skipped),
         "verified_pct": round(verified / checked * 100, 1) if checked else 0.0,
+        # False means this run examined less than the whole crosswalk, or had
+        # no reference data to check it against — the percentage above is not
+        # comparable to a complete run and must not be reported as coverage.
+        "scope_complete": reference["loaded"] and pack["loaded"],
+        "reference_data": reference,
+        "declarative_pack": pack,
+        "skipped": skipped,
         "results": results,
     }
 
 
 __all__ = [
     "version", "iso_for_nist", "nist_for_iso", "scf_controls_linking",
-    "verify_link", "verify_internal_crosswalk",
+    "lookup", "verify_link", "verify_internal_crosswalk",
 ]
