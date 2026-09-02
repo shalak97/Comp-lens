@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -348,7 +347,10 @@ def test_24_anchoring_produces_a_root_and_a_verifiable_proof(client):
 
     a = client.post(f"/evidence/anchor?tenant_id={t}")
     assert a.status_code == 200, a.text
-    assert a.json().get("merkle_root"), f"anchoring returned no root: {a.json()}"
+    anchor = a.json()
+    assert anchor.get("root"), f"anchoring returned no root: {anchor}"
+    assert anchor["leaf_count"] == 4, f"the anchor covers {anchor['leaf_count']} of 4 records"
+    assert anchor.get("signature"), "the anchor is unsigned — anyone could publish a root"
 
     ledger = client.get(f"/evidence?tenant_id={t}").json()
     eid = ledger[0].get("evidence_id")
@@ -427,9 +429,13 @@ def test_31_a_tenant_cannot_mutate_another_tenants_finding(client):
     a, b = tenant("mut-a"), tenant("mut-b")
     f = assess(client, a, "SC-7", "host-1", fail=True)
     r = client.patch(f"/findings/{f['finding_id']}?tenant_id={b}",
-                     json={"lifecycle": "closed"})
+                     json={"lifecycle": "resolved", "assigned_to": "attacker"})
     assert r.status_code == 404, (
-        f"tenant {b} was allowed to touch tenant {a}'s finding: {r.status_code}")
+        f"tenant {b} was allowed to touch tenant {a}'s finding: {r.status_code} {r.text}")
+
+    # And the finding is genuinely untouched, not merely refused a response.
+    still = next(x for x in findings(client, a) if x["finding_id"] == f["finding_id"])
+    assert still["lifecycle"] == "open" and still["assigned_to"] is None
 
 
 def test_32_a_tenants_report_contains_only_its_own_findings(client):
@@ -446,7 +452,8 @@ def test_33_evidence_verification_is_scoped_to_the_tenant(client):
     a, b = tenant("ev-a"), tenant("ev-b")
     assess(client, a, "SC-7", "h")
     v = client.get(f"/evidence/verify?tenant_id={b}").json()
-    assert v["total"] == 0, f"tenant {b} sees tenant {a}'s evidence: {v}"
+    assert v["checked"] == 0, f"tenant {b} sees tenant {a}'s evidence: {v}"
+    assert client.get(f"/evidence/verify?tenant_id={a}").json()["checked"] >= 1
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -596,10 +603,18 @@ def test_46_posture_history_can_answer_what_was_true_last_week(client):
     """Point-in-time defensibility: an auditor asks about a date, not today."""
     t = tenant("as-of")
     assess(client, t, "SC-7", "h-1", fail=True)
-    r = client.get(f"/v1/posture/as-of?tenant_id={t}&as_of={datetime.now(UTC).isoformat()}")
+    now = datetime.now(UTC).isoformat()
+    r = client.get(f"/v1/posture/as-of?tenant_id={t}&at={now}")
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert body, "point-in-time posture returned nothing for a tenant with findings"
+    assert r.json(), "point-in-time posture returned nothing for a tenant with findings"
+
+    # Before the tenant existed, the honest answer is "nothing was true yet".
+    past = (datetime.now(UTC) - timedelta(days=365)).isoformat()
+    old = client.get(f"/v1/posture/as-of?tenant_id={t}&at={past}")
+    assert old.status_code == 200, old.text
+    rows = old.json()
+    rows = rows.get("controls", rows.get("posture", [])) if isinstance(rows, dict) else rows
+    assert not rows, f"posture a year before the tenant existed is not empty: {rows}"
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -806,15 +821,34 @@ def test_68_metrics_are_exposed_for_operations(client):
     assert b"comp_lens" in r.content or b"# HELP" in r.content
 
 
-def test_69_the_dashboard_aggregates_without_contradicting_the_summary(client):
-    """The screen a CISO looks at must not disagree with the API underneath."""
-    t = tenant("dashboard")
+def test_69_the_console_is_served_and_its_data_agrees_with_the_api(client):
+    """The screen a CISO looks at must not disagree with the API underneath.
+
+    /dashboard is the static console, so the coherence check belongs on the
+    endpoint it reads: unified trust fuses posture with the other signal lanes,
+    and it must not score controls the tenant has no posture for.
+    """
+    t = tenant("console")
     for i in range(4):
         assess(client, t, "SC-7", f"h-{i}", fail=(i < 2))
-    d = client.get(f"/dashboard?tenant_id={t}")
-    assert d.status_code == 200, d.text
-    body = json.loads(d.content)
-    s = summary(client, t)
-    for key in ("total", "compliance_score"):
-        if key in body:
-            assert body[key] == s[key], f"dashboard.{key}={body[key]} but summary says {s[key]}"
+
+    page = client.get("/dashboard")
+    assert page.status_code == 200, "the console is advertised but not served"
+    assert b"<" in page.content[:200], "the console did not return a document"
+
+    u = client.get(f"/v1/grc-trust/unified?tenant_id={t}")
+    assert u.status_code == 200, u.text
+    body = u.json()
+    assert body["controls_scored"] <= summary(client, t)["total"] + len(body["lanes_available"]), (
+        f"unified trust scores more controls than the tenant has evidence for: {body}")
+    for c in body["controls"]:
+        assert c["lanes"], f"{c['control_id']} was scored with no lane behind it"
+
+
+def test_70_an_untouched_tenant_scores_no_trust(client):
+    """The empty state again, one layer up: fusing zero lanes must produce no
+    score rather than a confident one."""
+    body = client.get(f"/v1/grc-trust/unified?tenant_id={tenant('trust-empty')}").json()
+    assert body["controls_scored"] == 0
+    assert body["unified_trust_score"] is None, (
+        f"a tenant with no evidence was given a trust score: {body['unified_trust_score']}")
