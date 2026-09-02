@@ -137,40 +137,30 @@ def test_reports_do_not_depend_on_the_api_page_limit(db_session, loaded_tenant):
 
 def test_pdf_says_so_when_its_table_is_truncated(db_session, loaded_tenant):
     """The PDF may cap its table. It may not do so silently."""
-    reportlab = pytest.importorskip("reportlab")
-    assert reportlab
+    pytest.importorskip("reportlab")
     pdf = ReportService(db_session).pdf_bytes(loaded_tenant)
     assert pdf.startswith(b"%PDF")
     assert TOTAL > PDF_TABLE_ROWS, "fixture no longer exercises the cap"
-    # reportlab compresses page streams, so search the extracted text rather
-    # than the raw bytes.
+
     text = _pdf_text(pdf)
-    # Self-check first: if the extractor stops working, fail on that rather than
-    # on the disclosure, so the failure message points at the right thing.
+    # Self-check first: if extraction stops working, fail on that rather than on
+    # the disclosure, so the message points at the right thing.
     assert "comp-lenscompliancereport" in text, "PDF text extraction found nothing"
     assert str(TOTAL) in text, "the PDF does not disclose the true finding count"
     assert "showingthefirst" in text
 
 
 def _pdf_text(pdf: bytes) -> str:
-    """Text of a reportlab PDF, without taking on a parser dependency.
+    """Text of the PDF, normalised for matching.
 
-    Page content streams are Flate-compressed, and the drawn strings are the
-    parenthesised operands inside them. A line of prose can be split across
-    several of those operands (kerning), so they are concatenated with no
-    separator and matched against case- and whitespace-free — which is why the
-    assertions above look for "showingthefirst".
+    pypdf is already a dependency, so read the document properly rather than
+    hand-parsing content streams. A line of prose can be split across several
+    text-showing operators, and pypdf's extraction reflects that, so whitespace
+    is stripped before matching — which is why the assertions above look for
+    "showingthefirst".
     """
-    import re
-    import zlib
+    from pypdf import PdfReader
 
-    out: list[str] = []
-    for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S):
-        body = match.group(1)
-        try:
-            body = zlib.decompress(body)
-        except zlib.error:
-            pass  # reportlab can be configured not to compress; read it raw
-        out += [m.group(1).decode("latin-1")
-                for m in re.finditer(rb"\(((?:\\.|[^()\\])*)\)", body)]
-    return "".join(out).replace(" ", "").replace("\\", "").lower()
+    reader = PdfReader(io.BytesIO(pdf))
+    text = "".join(page.extract_text() or "" for page in reader.pages)
+    return "".join(text.split()).lower()
