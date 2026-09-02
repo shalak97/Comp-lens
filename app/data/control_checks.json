@@ -9,12 +9,29 @@
       "severity": "critical",
       "asset_type": "cloud_account",
       "plane": "identity_access",
-      "requires": ["root_mfa_enabled"],
+      "requires": [
+        "root_mfa_enabled"
+      ],
       "expression": "root_mfa_enabled == true",
       "pass_reason": "Root account has MFA enabled.",
       "fail_reason": "Root account does NOT have MFA enabled — full account compromise is one password away.",
       "remediation": "Enable a hardware or virtual MFA device on the root user, then store the recovery codes in the organisation's break-glass vault.",
-      "crosswalk": {"NIST": ["IA-2(1)", "AC-6(5)"], "ISO27001": ["A.5.17", "A.8.5"], "SOC2": ["CC6.1"], "CIS": ["1.5"]}
+      "crosswalk": {
+        "NIST": [
+          "IA-2(1)",
+          "AC-6(5)"
+        ],
+        "ISO27001": [
+          "A.5.17",
+          "A.8.5"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "1.5"
+        ]
+      }
     },
     {
       "control_id": "AC-6-ROOT-KEYS",
@@ -23,12 +40,28 @@
       "severity": "critical",
       "asset_type": "cloud_account",
       "plane": "identity_access",
-      "requires": ["root_access_keys_present"],
+      "requires": [
+        "root_access_keys_present"
+      ],
       "expression": "root_access_keys_present == false",
       "pass_reason": "No programmatic access keys exist for the root account.",
       "fail_reason": "Root account has active access keys — these bypass MFA and cannot be scoped.",
       "remediation": "Delete all root access keys and replace their use with a scoped IAM role.",
-      "crosswalk": {"NIST": ["AC-6(5)", "IA-5"], "ISO27001": ["A.5.17"], "SOC2": ["CC6.1"], "CIS": ["1.4"]}
+      "crosswalk": {
+        "NIST": [
+          "AC-6(5)",
+          "IA-5"
+        ],
+        "ISO27001": [
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "1.4"
+        ]
+      }
     },
     {
       "control_id": "IA-5-PW-LENGTH",
@@ -37,12 +70,27 @@
       "severity": "medium",
       "asset_type": "cloud_account",
       "plane": "identity_access",
-      "requires": ["password_min_length"],
+      "requires": [
+        "password_min_length"
+      ],
       "expression": "password_min_length >= 14",
       "pass_reason": "Account password policy requires at least 14 characters.",
       "fail_reason": "Account password policy allows passwords shorter than 14 characters.",
       "remediation": "Set the account password policy minimum length to 14 or more.",
-      "crosswalk": {"NIST": ["IA-5(1)"], "ISO27001": ["A.5.17"], "SOC2": ["CC6.1"], "CIS": ["1.8"]}
+      "crosswalk": {
+        "NIST": [
+          "IA-5(1)"
+        ],
+        "ISO27001": [
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "1.8"
+        ]
+      }
     },
     {
       "control_id": "IA-5-PW-REUSE",
@@ -51,12 +99,27 @@
       "severity": "low",
       "asset_type": "cloud_account",
       "plane": "identity_access",
-      "requires": ["password_reuse_prevention"],
+      "requires": [
+        "password_reuse_prevention"
+      ],
       "expression": "password_reuse_prevention >= 24",
       "pass_reason": "Account password policy prevents reuse of the last 24 passwords.",
       "fail_reason": "Account password policy permits reusing recent passwords.",
       "remediation": "Set password reuse prevention to 24 in the account password policy.",
-      "crosswalk": {"NIST": ["IA-5(1)"], "ISO27001": ["A.5.17"], "SOC2": ["CC6.1"], "CIS": ["1.9"]}
+      "crosswalk": {
+        "NIST": [
+          "IA-5(1)"
+        ],
+        "ISO27001": [
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "1.9"
+        ]
+      }
     },
     {
       "control_id": "IA-5-PW-COMPLEXITY",
@@ -75,9 +138,21 @@
       "pass_reason": "Account password policy enforces symbols, numbers, and mixed case.",
       "fail_reason": "Account password policy is missing one or more complexity requirements.",
       "remediation": "Enable symbol, number, uppercase and lowercase requirements in the account password policy.",
-      "crosswalk": {"NIST": ["IA-5(1)"], "ISO27001": ["A.5.17"], "SOC2": ["CC6.1"], "CIS": ["1.8"]}
+      "crosswalk": {
+        "NIST": [
+          "IA-5(1)"
+        ],
+        "ISO27001": [
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "1.8"
+        ]
+      }
     },
-
     {
       "control_id": "AC-2-KEY-ROTATION",
       "title": "Access keys rotated within 90 days",
@@ -85,12 +160,28 @@
       "severity": "medium",
       "asset_type": "iam_user",
       "plane": "identity_access",
-      "requires": ["days_since_key_rotation"],
+      "requires": [
+        "days_since_key_rotation"
+      ],
       "expression": "days_since_key_rotation <= 90",
       "pass_reason": "All access keys for this principal were rotated within 90 days.",
       "fail_reason": "This principal has an access key older than 90 days.",
       "remediation": "Rotate the access key, update any consumer of it, then delete the superseded key.",
-      "crosswalk": {"NIST": ["AC-2", "IA-5(1)"], "ISO27001": ["A.5.17"], "SOC2": ["CC6.1"], "CIS": ["1.14"]}
+      "crosswalk": {
+        "NIST": [
+          "AC-2",
+          "IA-5(1)"
+        ],
+        "ISO27001": [
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "1.14"
+        ]
+      }
     },
     {
       "control_id": "AC-6-NO-INLINE-POLICY",
@@ -99,12 +190,28 @@
       "severity": "low",
       "asset_type": "iam_user",
       "plane": "identity_access",
-      "requires": ["has_inline_policy"],
+      "requires": [
+        "has_inline_policy"
+      ],
       "expression": "has_inline_policy == false",
       "pass_reason": "Principal has no inline policies; permissions are managed centrally.",
       "fail_reason": "Principal has an inline policy, which bypasses centrally reviewed managed policies.",
       "remediation": "Move the inline policy into a managed policy attached via a group or role.",
-      "crosswalk": {"NIST": ["AC-6", "CM-7"], "ISO27001": ["A.5.15"], "SOC2": ["CC6.3"], "CIS": ["1.16"]}
+      "crosswalk": {
+        "NIST": [
+          "AC-6",
+          "CM-7"
+        ],
+        "ISO27001": [
+          "A.5.15"
+        ],
+        "SOC2": [
+          "CC6.3"
+        ],
+        "CIS": [
+          "1.16"
+        ]
+      }
     },
     {
       "control_id": "AC-6-NO-DIRECT-ADMIN",
@@ -113,12 +220,29 @@
       "severity": "high",
       "asset_type": "iam_user",
       "plane": "identity_access",
-      "requires": ["has_admin_policy"],
+      "requires": [
+        "has_admin_policy"
+      ],
       "expression": "has_admin_policy == false",
       "pass_reason": "Principal does not hold AdministratorAccess directly.",
       "fail_reason": "Principal has AdministratorAccess attached directly, defeating least privilege.",
       "remediation": "Detach AdministratorAccess and grant the narrowest role that satisfies the principal's actual usage.",
-      "crosswalk": {"NIST": ["AC-6(5)", "AC-6(7)"], "ISO27001": ["A.5.15", "A.8.2"], "SOC2": ["CC6.3"], "CIS": ["1.16"]}
+      "crosswalk": {
+        "NIST": [
+          "AC-6(5)",
+          "AC-6(7)"
+        ],
+        "ISO27001": [
+          "A.5.15",
+          "A.8.2"
+        ],
+        "SOC2": [
+          "CC6.3"
+        ],
+        "CIS": [
+          "1.16"
+        ]
+      }
     },
     {
       "control_id": "AC-2-KEY-COUNT",
@@ -127,14 +251,29 @@
       "severity": "low",
       "asset_type": "iam_user",
       "plane": "identity_access",
-      "requires": ["access_key_count"],
+      "requires": [
+        "access_key_count"
+      ],
       "expression": "access_key_count <= 1",
       "pass_reason": "Principal has at most one active access key.",
       "fail_reason": "Principal has more than one active access key, widening the credential blast radius.",
       "remediation": "Delete the unused access key; keep a second key only transiently during a rotation.",
-      "crosswalk": {"NIST": ["AC-2", "IA-5"], "ISO27001": ["A.5.17"], "SOC2": ["CC6.1"], "CIS": ["1.13"]}
+      "crosswalk": {
+        "NIST": [
+          "AC-2",
+          "IA-5"
+        ],
+        "ISO27001": [
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "1.13"
+        ]
+      }
     },
-
     {
       "control_id": "SC-28-OBJSTORE-KMS",
       "title": "Object storage encrypted with managed keys",
@@ -142,12 +281,28 @@
       "severity": "medium",
       "asset_type": "object_storage",
       "plane": "data_protection",
-      "requires": ["kms_encrypted"],
+      "requires": [
+        "kms_encrypted"
+      ],
       "expression": "kms_encrypted == true",
       "pass_reason": "Bucket uses KMS-managed encryption at rest.",
       "fail_reason": "Bucket does not use KMS-managed encryption, so key access cannot be audited or revoked.",
       "remediation": "Set the bucket's default encryption to SSE-KMS with a customer-managed key.",
-      "crosswalk": {"NIST": ["SC-28", "SC-12"], "ISO27001": ["A.8.24"], "SOC2": ["CC6.1"], "CIS": ["2.1.1"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-28",
+          "SC-12"
+        ],
+        "ISO27001": [
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "2.1.1"
+        ]
+      }
     },
     {
       "control_id": "SC-8-OBJSTORE-TLS",
@@ -156,12 +311,28 @@
       "severity": "high",
       "asset_type": "object_storage",
       "plane": "data_protection",
-      "requires": ["tls_required"],
+      "requires": [
+        "tls_required"
+      ],
       "expression": "tls_required == true",
       "pass_reason": "Bucket policy denies requests that do not use TLS.",
       "fail_reason": "Bucket accepts plaintext requests — data can be read in transit.",
       "remediation": "Add a bucket policy statement denying requests where aws:SecureTransport is false.",
-      "crosswalk": {"NIST": ["SC-8", "SC-8(1)"], "ISO27001": ["A.8.24"], "SOC2": ["CC6.7"], "CIS": ["2.1.2"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-8",
+          "SC-8(1)"
+        ],
+        "ISO27001": [
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.7"
+        ],
+        "CIS": [
+          "2.1.2"
+        ]
+      }
     },
     {
       "control_id": "CP-9-OBJSTORE-VERSIONING",
@@ -170,12 +341,28 @@
       "severity": "medium",
       "asset_type": "object_storage",
       "plane": "data_protection",
-      "requires": ["versioning_enabled"],
+      "requires": [
+        "versioning_enabled"
+      ],
       "expression": "versioning_enabled == true",
       "pass_reason": "Bucket versioning is enabled, so overwrites and deletions are recoverable.",
       "fail_reason": "Bucket versioning is disabled — an accidental or malicious overwrite is unrecoverable.",
       "remediation": "Enable versioning on the bucket and pair it with a lifecycle rule to bound storage cost.",
-      "crosswalk": {"NIST": ["CP-9", "SI-12"], "ISO27001": ["A.8.13"], "SOC2": ["A1.2"], "CIS": ["2.1.3"]}
+      "crosswalk": {
+        "NIST": [
+          "CP-9",
+          "SI-12"
+        ],
+        "ISO27001": [
+          "A.8.13"
+        ],
+        "SOC2": [
+          "A1.2"
+        ],
+        "CIS": [
+          "2.1.3"
+        ]
+      }
     },
     {
       "control_id": "AU-2-OBJSTORE-LOGGING",
@@ -184,12 +371,28 @@
       "severity": "medium",
       "asset_type": "object_storage",
       "plane": "data_protection",
-      "requires": ["access_logging_enabled"],
+      "requires": [
+        "access_logging_enabled"
+      ],
       "expression": "access_logging_enabled == true",
       "pass_reason": "Bucket access logging is enabled.",
       "fail_reason": "Bucket access logging is disabled — object reads leave no audit trail.",
       "remediation": "Enable server access logging to a dedicated, restricted log bucket.",
-      "crosswalk": {"NIST": ["AU-2", "AU-12"], "ISO27001": ["A.8.15"], "SOC2": ["CC7.2"], "CIS": ["2.1.4"]}
+      "crosswalk": {
+        "NIST": [
+          "AU-2",
+          "AU-12"
+        ],
+        "ISO27001": [
+          "A.8.15"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "2.1.4"
+        ]
+      }
     },
     {
       "control_id": "SI-12-OBJSTORE-LIFECYCLE",
@@ -198,14 +401,29 @@
       "severity": "low",
       "asset_type": "object_storage",
       "plane": "data_protection",
-      "requires": ["lifecycle_configured"],
+      "requires": [
+        "lifecycle_configured"
+      ],
       "expression": "lifecycle_configured == true",
       "pass_reason": "Bucket has a lifecycle configuration governing retention.",
       "fail_reason": "Bucket has no lifecycle configuration, so retention limits are unenforced.",
       "remediation": "Add a lifecycle rule expiring or transitioning objects per the data retention schedule.",
-      "crosswalk": {"NIST": ["SI-12", "AU-11"], "ISO27001": ["A.8.10"], "SOC2": ["CC6.5"], "CIS": ["2.1.3"]}
+      "crosswalk": {
+        "NIST": [
+          "SI-12",
+          "AU-11"
+        ],
+        "ISO27001": [
+          "A.8.10"
+        ],
+        "SOC2": [
+          "CC6.5"
+        ],
+        "CIS": [
+          "2.1.3"
+        ]
+      }
     },
-
     {
       "control_id": "AU-2-TRAIL-MULTIREGION",
       "title": "Audit trail covers all regions",
@@ -213,12 +431,28 @@
       "severity": "high",
       "asset_type": "cloud_account",
       "plane": "logging_monitoring",
-      "requires": ["multi_region_enabled"],
+      "requires": [
+        "multi_region_enabled"
+      ],
       "expression": "multi_region_enabled == true",
       "pass_reason": "A multi-region audit trail is active.",
       "fail_reason": "No multi-region audit trail — activity in unmonitored regions is invisible.",
       "remediation": "Enable a multi-region CloudTrail trail so no region is left unlogged.",
-      "crosswalk": {"NIST": ["AU-2", "AU-12"], "ISO27001": ["A.8.15"], "SOC2": ["CC7.2"], "CIS": ["3.1"]}
+      "crosswalk": {
+        "NIST": [
+          "AU-2",
+          "AU-12"
+        ],
+        "ISO27001": [
+          "A.8.15"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "3.1"
+        ]
+      }
     },
     {
       "control_id": "AU-9-LOG-VALIDATION",
@@ -227,12 +461,28 @@
       "severity": "high",
       "asset_type": "cloud_account",
       "plane": "logging_monitoring",
-      "requires": ["log_file_validation_enabled"],
+      "requires": [
+        "log_file_validation_enabled"
+      ],
       "expression": "log_file_validation_enabled == true",
       "pass_reason": "Audit log file integrity validation is enabled.",
       "fail_reason": "Audit log file validation is disabled — tampering with logs would be undetectable.",
       "remediation": "Enable log file validation on the trail so digest files can prove log integrity.",
-      "crosswalk": {"NIST": ["AU-9", "AU-9(3)"], "ISO27001": ["A.8.15"], "SOC2": ["CC7.2"], "CIS": ["3.2"]}
+      "crosswalk": {
+        "NIST": [
+          "AU-9",
+          "AU-9(3)"
+        ],
+        "ISO27001": [
+          "A.8.15"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "3.2"
+        ]
+      }
     },
     {
       "control_id": "AU-9-TRAIL-ENCRYPTION",
@@ -241,12 +491,29 @@
       "severity": "medium",
       "asset_type": "cloud_account",
       "plane": "logging_monitoring",
-      "requires": ["trail_kms_encrypted"],
+      "requires": [
+        "trail_kms_encrypted"
+      ],
       "expression": "trail_kms_encrypted == true",
       "pass_reason": "Audit trail logs are encrypted with a managed key.",
       "fail_reason": "Audit trail logs are not encrypted with a managed key.",
       "remediation": "Configure the trail to encrypt log files with a customer-managed KMS key.",
-      "crosswalk": {"NIST": ["AU-9", "SC-28"], "ISO27001": ["A.8.15", "A.8.24"], "SOC2": ["CC6.1"], "CIS": ["3.5"]}
+      "crosswalk": {
+        "NIST": [
+          "AU-9",
+          "SC-28"
+        ],
+        "ISO27001": [
+          "A.8.15",
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "3.5"
+        ]
+      }
     },
     {
       "control_id": "AU-6-TRAIL-MONITORING",
@@ -255,14 +522,30 @@
       "severity": "medium",
       "asset_type": "cloud_account",
       "plane": "logging_monitoring",
-      "requires": ["cloudwatch_logs_integrated"],
+      "requires": [
+        "cloudwatch_logs_integrated"
+      ],
       "expression": "cloudwatch_logs_integrated == true",
       "pass_reason": "Audit trail is streamed to a log monitoring service for alerting.",
       "fail_reason": "Audit trail is stored but not streamed for monitoring — nothing alerts on it.",
       "remediation": "Send the trail to CloudWatch Logs and attach metric filters for high-risk API calls.",
-      "crosswalk": {"NIST": ["AU-6", "SI-4"], "ISO27001": ["A.8.15", "A.8.16"], "SOC2": ["CC7.2"], "CIS": ["3.4"]}
+      "crosswalk": {
+        "NIST": [
+          "AU-6",
+          "SI-4"
+        ],
+        "ISO27001": [
+          "A.8.15",
+          "A.8.16"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "3.4"
+        ]
+      }
     },
-
     {
       "control_id": "SC-7-IMDSV2",
       "title": "Instance metadata service requires session tokens",
@@ -270,12 +553,29 @@
       "severity": "high",
       "asset_type": "compute_instance",
       "plane": "host_runtime",
-      "requires": ["imdsv2_required"],
+      "requires": [
+        "imdsv2_required"
+      ],
       "expression": "imdsv2_required == true",
       "pass_reason": "Instance requires IMDSv2 session tokens.",
       "fail_reason": "Instance allows IMDSv1, which turns any SSRF into credential theft.",
       "remediation": "Set the instance metadata options to require HTTP tokens (IMDSv2).",
-      "crosswalk": {"NIST": ["SC-7", "AC-6"], "ISO27001": ["A.8.20", "A.8.9"], "SOC2": ["CC6.6"], "CIS": ["5.6"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-7",
+          "AC-6"
+        ],
+        "ISO27001": [
+          "A.8.20",
+          "A.8.9"
+        ],
+        "SOC2": [
+          "CC6.6"
+        ],
+        "CIS": [
+          "5.6"
+        ]
+      }
     },
     {
       "control_id": "SC-7-COMPUTE-PUBLIC-IP",
@@ -284,12 +584,29 @@
       "severity": "medium",
       "asset_type": "compute_instance",
       "plane": "host_runtime",
-      "requires": ["public_ip_assigned"],
+      "requires": [
+        "public_ip_assigned"
+      ],
       "expression": "public_ip_assigned == false",
       "pass_reason": "Instance has no public IP; it is reachable only through controlled ingress.",
       "fail_reason": "Instance has a public IP, exposing it directly to the internet.",
       "remediation": "Move the instance to a private subnet behind a load balancer or NAT gateway.",
-      "crosswalk": {"NIST": ["SC-7", "SC-7(3)"], "ISO27001": ["A.8.20", "A.8.22"], "SOC2": ["CC6.6"], "CIS": ["5.7"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-7",
+          "SC-7(3)"
+        ],
+        "ISO27001": [
+          "A.8.20",
+          "A.8.22"
+        ],
+        "SOC2": [
+          "CC6.6"
+        ],
+        "CIS": [
+          "5.7"
+        ]
+      }
     },
     {
       "control_id": "SI-4-COMPUTE-MONITORING",
@@ -298,14 +615,29 @@
       "severity": "low",
       "asset_type": "compute_instance",
       "plane": "host_runtime",
-      "requires": ["detailed_monitoring_enabled"],
+      "requires": [
+        "detailed_monitoring_enabled"
+      ],
       "expression": "detailed_monitoring_enabled == true",
       "pass_reason": "Detailed monitoring is enabled on the instance.",
       "fail_reason": "Detailed monitoring is disabled, reducing detection fidelity to 5-minute granularity.",
       "remediation": "Enable detailed monitoring so anomalies surface within one minute.",
-      "crosswalk": {"NIST": ["SI-4", "AU-12"], "ISO27001": ["A.8.16"], "SOC2": ["CC7.2"], "CIS": ["5.13"]}
+      "crosswalk": {
+        "NIST": [
+          "SI-4",
+          "AU-12"
+        ],
+        "ISO27001": [
+          "A.8.16"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "5.13"
+        ]
+      }
     },
-
     {
       "control_id": "SC-28-BLOCKSTORE",
       "title": "Block storage encrypted at rest",
@@ -313,14 +645,29 @@
       "severity": "high",
       "asset_type": "block_storage",
       "plane": "data_protection",
-      "requires": ["encryption_at_rest"],
+      "requires": [
+        "encryption_at_rest"
+      ],
       "expression": "encryption_at_rest == true",
       "pass_reason": "Block storage volume is encrypted at rest.",
       "fail_reason": "Block storage volume is NOT encrypted at rest.",
       "remediation": "Snapshot the volume, create an encrypted copy, and replace the unencrypted volume.",
-      "crosswalk": {"NIST": ["SC-28", "SC-28(1)"], "ISO27001": ["A.8.24"], "SOC2": ["CC6.1"], "CIS": ["2.2.1"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-28",
+          "SC-28(1)"
+        ],
+        "ISO27001": [
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "2.2.1"
+        ]
+      }
     },
-
     {
       "control_id": "SC-28-DATABASE",
       "title": "Managed database encrypted at rest",
@@ -328,12 +675,28 @@
       "severity": "high",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["encryption_at_rest"],
+      "requires": [
+        "encryption_at_rest"
+      ],
       "expression": "encryption_at_rest == true",
       "pass_reason": "Database storage is encrypted at rest.",
       "fail_reason": "Database storage is NOT encrypted at rest.",
       "remediation": "Restore the instance from a snapshot into an encrypted instance; encryption cannot be enabled in place.",
-      "crosswalk": {"NIST": ["SC-28", "SC-28(1)"], "ISO27001": ["A.8.24"], "SOC2": ["CC6.1"], "CIS": ["2.3.1"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-28",
+          "SC-28(1)"
+        ],
+        "ISO27001": [
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "2.3.1"
+        ]
+      }
     },
     {
       "control_id": "SC-7-DATABASE-PUBLIC",
@@ -342,12 +705,29 @@
       "severity": "critical",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["publicly_accessible"],
+      "requires": [
+        "publicly_accessible"
+      ],
       "expression": "publicly_accessible == false",
       "pass_reason": "Database is not publicly accessible.",
       "fail_reason": "Database is publicly accessible from the internet.",
       "remediation": "Set the instance to private and reach it through a bastion, VPN, or private endpoint.",
-      "crosswalk": {"NIST": ["SC-7", "AC-3"], "ISO27001": ["A.8.20", "A.8.22"], "SOC2": ["CC6.6"], "CIS": ["2.3.3"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-7",
+          "AC-3"
+        ],
+        "ISO27001": [
+          "A.8.20",
+          "A.8.22"
+        ],
+        "SOC2": [
+          "CC6.6"
+        ],
+        "CIS": [
+          "2.3.3"
+        ]
+      }
     },
     {
       "control_id": "CP-9-DATABASE-BACKUP",
@@ -356,12 +736,28 @@
       "severity": "medium",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["backup_retention_days"],
+      "requires": [
+        "backup_retention_days"
+      ],
       "expression": "backup_retention_days >= 7",
       "pass_reason": "Database retains at least 7 days of automated backups.",
       "fail_reason": "Database backup retention is under 7 days, narrowing the recovery window.",
       "remediation": "Raise the automated backup retention period to at least 7 days.",
-      "crosswalk": {"NIST": ["CP-9", "CP-9(1)"], "ISO27001": ["A.8.13"], "SOC2": ["A1.2"], "CIS": ["2.3.2"]}
+      "crosswalk": {
+        "NIST": [
+          "CP-9",
+          "CP-9(1)"
+        ],
+        "ISO27001": [
+          "A.8.13"
+        ],
+        "SOC2": [
+          "A1.2"
+        ],
+        "CIS": [
+          "2.3.2"
+        ]
+      }
     },
     {
       "control_id": "CP-10-DATABASE-HA",
@@ -370,12 +766,28 @@
       "severity": "medium",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["multi_az_enabled"],
+      "requires": [
+        "multi_az_enabled"
+      ],
       "expression": "multi_az_enabled == true",
       "pass_reason": "Database is deployed across multiple availability zones.",
       "fail_reason": "Database is single-AZ — a zone failure takes it offline with no automatic failover.",
       "remediation": "Convert the instance to a Multi-AZ deployment.",
-      "crosswalk": {"NIST": ["CP-10", "CP-6"], "ISO27001": ["A.8.14"], "SOC2": ["A1.2"], "CIS": ["2.3.4"]}
+      "crosswalk": {
+        "NIST": [
+          "CP-10",
+          "CP-6"
+        ],
+        "ISO27001": [
+          "A.8.14"
+        ],
+        "SOC2": [
+          "A1.2"
+        ],
+        "CIS": [
+          "2.3.4"
+        ]
+      }
     },
     {
       "control_id": "CM-3-DATABASE-DELETION-PROTECTION",
@@ -384,12 +796,28 @@
       "severity": "medium",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["deletion_protection_enabled"],
+      "requires": [
+        "deletion_protection_enabled"
+      ],
       "expression": "deletion_protection_enabled == true",
       "pass_reason": "Database has deletion protection enabled.",
       "fail_reason": "Database can be deleted without an additional safeguard.",
       "remediation": "Enable deletion protection on the database instance.",
-      "crosswalk": {"NIST": ["CM-3", "CP-9"], "ISO27001": ["A.8.32"], "SOC2": ["CC8.1"], "CIS": ["2.3.5"]}
+      "crosswalk": {
+        "NIST": [
+          "CM-3",
+          "CP-9"
+        ],
+        "ISO27001": [
+          "A.8.32"
+        ],
+        "SOC2": [
+          "CC8.1"
+        ],
+        "CIS": [
+          "2.3.5"
+        ]
+      }
     },
     {
       "control_id": "SI-2-DATABASE-PATCHING",
@@ -398,12 +826,28 @@
       "severity": "medium",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["auto_minor_version_upgrade"],
+      "requires": [
+        "auto_minor_version_upgrade"
+      ],
       "expression": "auto_minor_version_upgrade == true",
       "pass_reason": "Database applies minor version security patches automatically.",
       "fail_reason": "Database does not auto-apply minor patches, so known CVEs persist until manual action.",
       "remediation": "Enable auto minor version upgrade and set a maintenance window.",
-      "crosswalk": {"NIST": ["SI-2", "SI-2(5)"], "ISO27001": ["A.8.8"], "SOC2": ["CC7.1"], "CIS": ["2.3.2"]}
+      "crosswalk": {
+        "NIST": [
+          "SI-2",
+          "SI-2(5)"
+        ],
+        "ISO27001": [
+          "A.8.8"
+        ],
+        "SOC2": [
+          "CC7.1"
+        ],
+        "CIS": [
+          "2.3.2"
+        ]
+      }
     },
     {
       "control_id": "AU-2-DATABASE-LOGS",
@@ -412,12 +856,28 @@
       "severity": "medium",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["log_exports_enabled"],
+      "requires": [
+        "log_exports_enabled"
+      ],
       "expression": "log_exports_enabled == true",
       "pass_reason": "Database exports logs to the central log service.",
       "fail_reason": "Database logs are not exported, so database activity is outside central audit.",
       "remediation": "Enable CloudWatch log exports for the engine's audit, error and slow-query logs.",
-      "crosswalk": {"NIST": ["AU-2", "AU-12"], "ISO27001": ["A.8.15"], "SOC2": ["CC7.2"], "CIS": ["2.3.9"]}
+      "crosswalk": {
+        "NIST": [
+          "AU-2",
+          "AU-12"
+        ],
+        "ISO27001": [
+          "A.8.15"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "2.3.9"
+        ]
+      }
     },
     {
       "control_id": "IA-2-DATABASE-CENTRAL-AUTH",
@@ -426,14 +886,30 @@
       "severity": "low",
       "asset_type": "managed_database",
       "plane": "data_protection",
-      "requires": ["iam_auth_enabled"],
+      "requires": [
+        "iam_auth_enabled"
+      ],
       "expression": "iam_auth_enabled == true",
       "pass_reason": "Database authenticates via central IAM rather than static credentials.",
       "fail_reason": "Database relies on static passwords instead of central identity.",
       "remediation": "Enable IAM database authentication and migrate application connections to token auth.",
-      "crosswalk": {"NIST": ["IA-2", "IA-5"], "ISO27001": ["A.5.16", "A.5.17"], "SOC2": ["CC6.1"], "CIS": ["2.3.6"]}
+      "crosswalk": {
+        "NIST": [
+          "IA-2",
+          "IA-5"
+        ],
+        "ISO27001": [
+          "A.5.16",
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "2.3.6"
+        ]
+      }
     },
-
     {
       "control_id": "SC-7-ADMIN-SSH",
       "title": "Administrative SSH not open to the internet",
@@ -441,12 +917,30 @@
       "severity": "critical",
       "asset_type": "network_ruleset",
       "plane": "network_boundary",
-      "requires": ["ssh_open_to_world"],
+      "requires": [
+        "ssh_open_to_world"
+      ],
       "expression": "ssh_open_to_world == false",
       "pass_reason": "No rule exposes SSH (22) to 0.0.0.0/0.",
       "fail_reason": "Security group exposes SSH (22) to the entire internet.",
       "remediation": "Restrict port 22 to the bastion or corporate CIDR, or replace direct SSH with session manager.",
-      "crosswalk": {"NIST": ["SC-7", "SC-7(3)", "AC-17"], "ISO27001": ["A.8.20", "A.8.22"], "SOC2": ["CC6.6"], "CIS": ["5.2"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-7",
+          "SC-7(3)",
+          "AC-17"
+        ],
+        "ISO27001": [
+          "A.8.20",
+          "A.8.22"
+        ],
+        "SOC2": [
+          "CC6.6"
+        ],
+        "CIS": [
+          "5.2"
+        ]
+      }
     },
     {
       "control_id": "SC-7-ADMIN-RDP",
@@ -455,12 +949,30 @@
       "severity": "critical",
       "asset_type": "network_ruleset",
       "plane": "network_boundary",
-      "requires": ["rdp_open_to_world"],
+      "requires": [
+        "rdp_open_to_world"
+      ],
       "expression": "rdp_open_to_world == false",
       "pass_reason": "No rule exposes RDP (3389) to 0.0.0.0/0.",
       "fail_reason": "Security group exposes RDP (3389) to the entire internet.",
       "remediation": "Restrict port 3389 to the bastion or corporate CIDR.",
-      "crosswalk": {"NIST": ["SC-7", "SC-7(3)", "AC-17"], "ISO27001": ["A.8.20", "A.8.22"], "SOC2": ["CC6.6"], "CIS": ["5.3"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-7",
+          "SC-7(3)",
+          "AC-17"
+        ],
+        "ISO27001": [
+          "A.8.20",
+          "A.8.22"
+        ],
+        "SOC2": [
+          "CC6.6"
+        ],
+        "CIS": [
+          "5.3"
+        ]
+      }
     },
     {
       "control_id": "SC-7-UNRESTRICTED-INGRESS",
@@ -469,14 +981,30 @@
       "severity": "high",
       "asset_type": "network_ruleset",
       "plane": "network_boundary",
-      "requires": ["unrestricted_ingress"],
+      "requires": [
+        "unrestricted_ingress"
+      ],
       "expression": "unrestricted_ingress == false",
       "pass_reason": "Security group has no ingress rule open to the whole internet.",
       "fail_reason": "Security group has at least one ingress rule open to 0.0.0.0/0 or ::/0.",
       "remediation": "Replace the open CIDR with the narrowest source range the workload actually needs.",
-      "crosswalk": {"NIST": ["SC-7", "SC-7(5)"], "ISO27001": ["A.8.20", "A.8.22"], "SOC2": ["CC6.6"], "CIS": ["5.4"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-7",
+          "SC-7(5)"
+        ],
+        "ISO27001": [
+          "A.8.20",
+          "A.8.22"
+        ],
+        "SOC2": [
+          "CC6.6"
+        ],
+        "CIS": [
+          "5.4"
+        ]
+      }
     },
-
     {
       "control_id": "SC-12-KMS-ROTATION",
       "title": "Encryption key rotation enabled",
@@ -484,14 +1012,29 @@
       "severity": "medium",
       "asset_type": "encryption_key",
       "plane": "data_protection",
-      "requires": ["key_rotation_enabled"],
+      "requires": [
+        "key_rotation_enabled"
+      ],
       "expression": "key_rotation_enabled == true",
       "pass_reason": "Automatic annual key rotation is enabled.",
       "fail_reason": "Key rotation is disabled — a compromised key stays valid indefinitely.",
       "remediation": "Enable automatic key rotation on the customer-managed key.",
-      "crosswalk": {"NIST": ["SC-12", "SC-12(1)"], "ISO27001": ["A.8.24"], "SOC2": ["CC6.1"], "CIS": ["3.6"]}
+      "crosswalk": {
+        "NIST": [
+          "SC-12",
+          "SC-12(1)"
+        ],
+        "ISO27001": [
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "3.6"
+        ]
+      }
     },
-
     {
       "control_id": "AU-12-NETWORK-FLOWLOGS",
       "title": "Network flow logging enabled",
@@ -499,14 +1042,30 @@
       "severity": "medium",
       "asset_type": "virtual_network",
       "plane": "network_boundary",
-      "requires": ["flow_logs_enabled"],
+      "requires": [
+        "flow_logs_enabled"
+      ],
       "expression": "flow_logs_enabled == true",
       "pass_reason": "Network flow logs are active for this network.",
       "fail_reason": "Network flow logs are not active — lateral movement would leave no network record.",
       "remediation": "Enable VPC flow logs delivering to a restricted log destination.",
-      "crosswalk": {"NIST": ["AU-12", "SI-4(4)"], "ISO27001": ["A.8.15", "A.8.16"], "SOC2": ["CC7.2"], "CIS": ["3.9"]}
+      "crosswalk": {
+        "NIST": [
+          "AU-12",
+          "SI-4(4)"
+        ],
+        "ISO27001": [
+          "A.8.15",
+          "A.8.16"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "3.9"
+        ]
+      }
     },
-
     {
       "control_id": "SI-4-THREAT-DETECTION",
       "title": "Continuous threat detection enabled",
@@ -514,12 +1073,29 @@
       "severity": "high",
       "asset_type": "cloud_account",
       "plane": "vulnerability_threat",
-      "requires": ["threat_detection_enabled"],
+      "requires": [
+        "threat_detection_enabled"
+      ],
       "expression": "threat_detection_enabled == true",
       "pass_reason": "Managed threat detection is enabled for the account.",
       "fail_reason": "Managed threat detection is not enabled — malicious activity is undetected.",
       "remediation": "Enable GuardDuty in every active region and route findings to the security queue.",
-      "crosswalk": {"NIST": ["SI-4", "SI-4(2)", "RA-5"], "ISO27001": ["A.8.16"], "SOC2": ["CC7.2"], "CIS": ["3.8"]}
+      "crosswalk": {
+        "NIST": [
+          "SI-4",
+          "SI-4(2)",
+          "RA-5"
+        ],
+        "ISO27001": [
+          "A.8.16"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "3.8"
+        ]
+      }
     },
     {
       "control_id": "CM-8-CONFIG-RECORDER",
@@ -528,12 +1104,30 @@
       "severity": "high",
       "asset_type": "cloud_account",
       "plane": "configuration",
-      "requires": ["config_recording_enabled"],
+      "requires": [
+        "config_recording_enabled"
+      ],
       "expression": "config_recording_enabled == true",
       "pass_reason": "Configuration recording is active for the account.",
       "fail_reason": "Configuration recording is off — configuration drift leaves no history.",
       "remediation": "Turn on the AWS Config recorder with a delivery channel in every active region.",
-      "crosswalk": {"NIST": ["CM-8", "CM-3", "CM-6"], "ISO27001": ["A.8.9", "A.8.32"], "SOC2": ["CC8.1"], "CIS": ["3.3"]}
+      "crosswalk": {
+        "NIST": [
+          "CM-8",
+          "CM-3",
+          "CM-6"
+        ],
+        "ISO27001": [
+          "A.8.9",
+          "A.8.32"
+        ],
+        "SOC2": [
+          "CC8.1"
+        ],
+        "CIS": [
+          "3.3"
+        ]
+      }
     },
     {
       "control_id": "CM-8-CONFIG-ALL-RESOURCES",
@@ -542,12 +1136,393 @@
       "severity": "medium",
       "asset_type": "cloud_account",
       "plane": "configuration",
-      "requires": ["config_records_all_resources"],
+      "requires": [
+        "config_records_all_resources"
+      ],
       "expression": "config_records_all_resources == true",
       "pass_reason": "Configuration recording covers all supported resource types.",
       "fail_reason": "Configuration recording covers only a subset of resource types, leaving blind spots.",
       "remediation": "Set the Config recording group to record all supported resource types, including global ones.",
-      "crosswalk": {"NIST": ["CM-8", "CM-8(2)"], "ISO27001": ["A.8.9"], "SOC2": ["CC8.1"], "CIS": ["3.3"]}
+      "crosswalk": {
+        "NIST": [
+          "CM-8",
+          "CM-8(2)"
+        ],
+        "ISO27001": [
+          "A.8.9"
+        ],
+        "SOC2": [
+          "CC8.1"
+        ],
+        "CIS": [
+          "3.3"
+        ]
+      }
+    },
+    {
+      "control_id": "IA-2-CONSOLE-MFA",
+      "title": "Interactive user has MFA",
+      "domain": "Identification & Authentication",
+      "severity": "critical",
+      "asset_type": "iam_user",
+      "plane": "identity_access",
+      "requires": [
+        "console_access_enabled",
+        "mfa_enabled"
+      ],
+      "expression": "console_access_enabled == false or mfa_enabled == true",
+      "pass_reason": "Every principal that can sign in interactively has MFA.",
+      "fail_reason": "A principal can sign in interactively without MFA — a single stolen password is enough to use it.",
+      "remediation": "Enrol the account in MFA, or remove its interactive sign-in if it is a machine identity that should not have one.",
+      "crosswalk": {
+        "NIST": [
+          "IA-2(1)",
+          "IA-2(2)"
+        ],
+        "ISO27001": [
+          "A.5.17",
+          "A.8.5"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "6.3"
+        ]
+      }
+    },
+    {
+      "control_id": "AC-2-INACTIVE-ACCOUNT",
+      "title": "No dormant interactive accounts",
+      "domain": "Access Control",
+      "severity": "high",
+      "asset_type": "iam_user",
+      "plane": "identity_access",
+      "requires": [
+        "days_since_last_login"
+      ],
+      "expression": "days_since_last_login <= 90",
+      "pass_reason": "Account has been used within the last 90 days.",
+      "fail_reason": "Account has not been used in over 90 days — dormant accounts are the ones nobody notices being taken over.",
+      "remediation": "Disable the account. If it is still needed, record the business owner and the reason it stays open.",
+      "crosswalk": {
+        "NIST": [
+          "AC-2(3)",
+          "AC-2"
+        ],
+        "ISO27001": [
+          "A.5.18"
+        ],
+        "SOC2": [
+          "CC6.2"
+        ],
+        "CIS": [
+          "5.3"
+        ]
+      }
+    },
+    {
+      "control_id": "SC-28-OBJSTORE",
+      "title": "Object storage encrypted at rest",
+      "domain": "Data Protection",
+      "severity": "high",
+      "asset_type": "object_storage",
+      "plane": "data_protection",
+      "requires": [
+        "encryption_at_rest"
+      ],
+      "expression": "encryption_at_rest == true",
+      "pass_reason": "Bucket contents are encrypted at rest.",
+      "fail_reason": "Bucket contents are NOT encrypted at rest.",
+      "remediation": "Enable default encryption on the bucket. Existing objects are not re-encrypted retroactively, so re-write or copy them once it is on.",
+      "crosswalk": {
+        "NIST": [
+          "SC-28"
+        ],
+        "ISO27001": [
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "3.11"
+        ]
+      }
+    },
+    {
+      "control_id": "AC-3-OBJSTORE-PUBLIC",
+      "title": "Object storage not publicly readable",
+      "domain": "Access Control",
+      "severity": "critical",
+      "asset_type": "object_storage",
+      "plane": "data_protection",
+      "requires": [
+        "public_access_blocked"
+      ],
+      "expression": "public_access_blocked == true",
+      "pass_reason": "Public access to the bucket is blocked.",
+      "fail_reason": "Bucket is reachable by anonymous callers — anything in it should be treated as already disclosed.",
+      "remediation": "Turn on the account- and bucket-level public access block, then review the access logs for what was fetched while it was open.",
+      "crosswalk": {
+        "NIST": [
+          "AC-3",
+          "SC-7"
+        ],
+        "ISO27001": [
+          "A.8.3",
+          "A.5.10"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "3.3"
+        ]
+      }
+    },
+    {
+      "control_id": "SC-28-BLOCKSTORE-KMS",
+      "title": "Block storage uses a managed key",
+      "domain": "Data Protection",
+      "severity": "medium",
+      "asset_type": "block_storage",
+      "plane": "data_protection",
+      "requires": [
+        "kms_encrypted"
+      ],
+      "expression": "kms_encrypted == true",
+      "pass_reason": "Volume is encrypted with a managed key.",
+      "fail_reason": "Volume uses default encryption only — key custody and revocation cannot be demonstrated separately from the provider.",
+      "remediation": "Re-create the volume from a snapshot encrypted with a customer-managed key.",
+      "crosswalk": {
+        "NIST": [
+          "SC-28(1)",
+          "SC-12"
+        ],
+        "ISO27001": [
+          "A.8.24"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "3.11"
+        ]
+      }
+    },
+    {
+      "control_id": "AU-2-ACCOUNT-LOGGING",
+      "title": "Account activity logging enabled",
+      "domain": "Logging & Monitoring",
+      "severity": "critical",
+      "asset_type": "cloud_account",
+      "plane": "logging_monitoring",
+      "requires": [
+        "logging_enabled"
+      ],
+      "expression": "logging_enabled == true",
+      "pass_reason": "Account-level activity logging is on.",
+      "fail_reason": "No account-level activity log is being written — there will be no record of who did what.",
+      "remediation": "Enable the account activity log and ship it to a retained, access-controlled destination.",
+      "crosswalk": {
+        "NIST": [
+          "AU-2",
+          "AU-12"
+        ],
+        "ISO27001": [
+          "A.8.15"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "3.1"
+        ]
+      }
+    },
+    {
+      "control_id": "IA-5-PW-MAX-AGE",
+      "title": "Passwords expire",
+      "domain": "Identification & Authentication",
+      "severity": "medium",
+      "asset_type": "cloud_account",
+      "plane": "identity_access",
+      "requires": [
+        "password_max_age_days"
+      ],
+      "expression": "password_max_age_days > 0 and password_max_age_days <= 90",
+      "pass_reason": "Console passwords expire within 90 days.",
+      "fail_reason": "Console passwords never expire, or expire too slowly — a credential leaked today stays valid indefinitely.",
+      "remediation": "Set a maximum password age of 90 days or less in the account password policy.",
+      "crosswalk": {
+        "NIST": [
+          "IA-5(1)"
+        ],
+        "ISO27001": [
+          "A.5.17"
+        ],
+        "SOC2": [
+          "CC6.1"
+        ],
+        "CIS": [
+          "5.2"
+        ]
+      }
+    },
+    {
+      "control_id": "RA-5-HOST-CRITICAL",
+      "title": "No open critical host vulnerabilities",
+      "domain": "Vulnerability Management",
+      "severity": "critical",
+      "asset_type": "host",
+      "plane": "vulnerability_threat",
+      "requires": [
+        "critical_vulnerabilities"
+      ],
+      "expression": "critical_vulnerabilities == 0",
+      "pass_reason": "No critical vulnerabilities are open on this host.",
+      "fail_reason": "Critical vulnerabilities are open on this host.",
+      "remediation": "Patch or mitigate the critical findings. If one cannot be fixed, record a waiver with an owner and an expiry rather than leaving it silently open.",
+      "crosswalk": {
+        "NIST": [
+          "RA-5",
+          "RA-5(2)",
+          "SI-2"
+        ],
+        "ISO27001": [
+          "A.8.8"
+        ],
+        "SOC2": [
+          "CC7.1"
+        ],
+        "CIS": [
+          "7.1"
+        ]
+      }
+    },
+    {
+      "control_id": "RA-5-CODE-DEPENDENCIES",
+      "title": "No critical dependency vulnerabilities",
+      "domain": "Vulnerability Management",
+      "severity": "high",
+      "asset_type": "code_repository",
+      "plane": "vulnerability_threat",
+      "requires": [
+        "critical_vulnerabilities"
+      ],
+      "expression": "critical_vulnerabilities == 0",
+      "pass_reason": "No critical issues are open in this project's dependencies or code.",
+      "fail_reason": "Critical issues are open in this project — they ship with every build until fixed.",
+      "remediation": "Upgrade the affected dependencies. Where no fixed version exists, record the accepted risk against the project.",
+      "crosswalk": {
+        "NIST": [
+          "RA-5",
+          "SA-11"
+        ],
+        "ISO27001": [
+          "A.8.8",
+          "A.8.28"
+        ],
+        "SOC2": [
+          "CC7.1"
+        ],
+        "CIS": [
+          "16.1"
+        ]
+      }
+    },
+    {
+      "control_id": "SA-11-CODE-SCANNING",
+      "title": "Code scanning enabled",
+      "domain": "Secure Development",
+      "severity": "medium",
+      "asset_type": "code_repository",
+      "plane": "vulnerability_threat",
+      "requires": [
+        "code_scanning_enabled"
+      ],
+      "expression": "code_scanning_enabled == true",
+      "pass_reason": "The project is under continuous code and dependency scanning.",
+      "fail_reason": "The project is not being scanned — new vulnerable dependencies will land unnoticed.",
+      "remediation": "Enable scanning for the project and require it to run on every pull request.",
+      "crosswalk": {
+        "NIST": [
+          "SA-11",
+          "SA-11(1)"
+        ],
+        "ISO27001": [
+          "A.8.28",
+          "A.8.25"
+        ],
+        "SOC2": [
+          "CC8.1"
+        ],
+        "CIS": [
+          "16.12"
+        ]
+      }
+    },
+    {
+      "control_id": "AU-11-LOG-RETENTION",
+      "title": "Audit logs retained for a year",
+      "domain": "Logging & Monitoring",
+      "severity": "high",
+      "asset_type": "log_index",
+      "plane": "logging_monitoring",
+      "requires": [
+        "retention_days"
+      ],
+      "expression": "retention_days >= 365",
+      "pass_reason": "Audit logs are retained for at least a year.",
+      "fail_reason": "Audit logs are discarded in under a year — an investigation that starts late will find nothing.",
+      "remediation": "Raise the index retention to 365 days or more, and confirm the storage tier is sized for it.",
+      "crosswalk": {
+        "NIST": [
+          "AU-11",
+          "AU-4"
+        ],
+        "ISO27001": [
+          "A.8.15"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "8.3"
+        ]
+      }
+    },
+    {
+      "control_id": "SI-4-SIEM-ALERTING",
+      "title": "Log index has active alerting",
+      "domain": "Logging & Monitoring",
+      "severity": "high",
+      "asset_type": "log_index",
+      "plane": "logging_monitoring",
+      "requires": [
+        "siem_alerts_monitored"
+      ],
+      "expression": "siem_alerts_monitored == true",
+      "pass_reason": "Scheduled alerts are watching this index.",
+      "fail_reason": "Logs are collected but nothing alerts on them — collection without monitoring is storage, not detection.",
+      "remediation": "Add scheduled alerts for the detections this index is meant to support, and route them to an on-call destination.",
+      "crosswalk": {
+        "NIST": [
+          "SI-4",
+          "AU-6",
+          "SI-4(4)"
+        ],
+        "ISO27001": [
+          "A.8.16"
+        ],
+        "SOC2": [
+          "CC7.2"
+        ],
+        "CIS": [
+          "8.11"
+        ]
+      }
     }
   ]
 }
