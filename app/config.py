@@ -119,6 +119,10 @@ class Settings(BaseSettings):
     # ── GCP ──
     gcp_project_id: str | None = Field(default=None)
     gcp_credentials_json: str | None = Field(default=None)  # raw JSON or path
+    # Security Command Center is an organization-level service, so threat
+    # detection is only observable when the org id is supplied. Left unset,
+    # that one signal is omitted rather than guessed.
+    gcp_organization_id: str | None = Field(default=None)
 
     # ── Okta ──
     okta_org_url: str | None = Field(default=None)
@@ -158,6 +162,28 @@ class Settings(BaseSettings):
     crowdstrike_client_id: str | None = Field(default=None)
     crowdstrike_client_secret: str | None = Field(default=None)
     crowdstrike_base_url: str = Field(default="https://api.crowdstrike.com")
+
+    # ── Snyk ──
+    snyk_token: str | None = Field(default=None)
+    snyk_org_id: str | None = Field(default=None)
+    snyk_api_url: str = Field(default="https://api.snyk.io")
+
+    # ── Tenable.io ──
+    tenable_access_key: str | None = Field(default=None)
+    tenable_secret_key: str | None = Field(default=None)
+    tenable_base_url: str = Field(default="https://cloud.tenable.com")
+
+    # ── Wiz ──
+    wiz_client_id: str | None = Field(default=None)
+    wiz_client_secret: str | None = Field(default=None)
+    #: Wiz endpoints are tenant-specific (api.<region>.app.wiz.io), so there is
+    #: no safe default to fall back on.
+    wiz_api_url: str | None = Field(default=None)
+    wiz_auth_url: str = Field(default="https://auth.app.wiz.io/oauth/token")
+
+    # ── Splunk ──
+    splunk_url: str | None = Field(default=None)
+    splunk_token: str | None = Field(default=None)
 
     @property
     def is_production(self) -> bool:
