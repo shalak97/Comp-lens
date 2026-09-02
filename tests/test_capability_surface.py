@@ -110,23 +110,43 @@ def test_inverted_threshold_check_boundaries():
     assert control_checks.evaluate(check, {"days_since_key_rotation": 91})[0] is ControlStatus.FAIL
 
 
+#: Signals naming a quantity where a *lower* reading is the compliant one.
+_LOWER_IS_BETTER = ("days_since", "_count", "vulnerabilities")
+
+#: Signals describing the situation a control applies to rather than whether it
+#: is satisfied. Inverting one does not violate the control, it makes the
+#: control inapplicable — flipping console_access_enabled turns "a login user
+#: without MFA" into "not a login user", which passes for the wrong reason. The
+#: same distinction the DEMO estate draws in app/connectors/mock.py.
+_PRECONDITIONS = frozenset({"console_access_enabled"})
+
+#: Numeric signals with a compliant floor the generic heuristic cannot guess.
+_COMPLIANT_NUMBERS = {
+    "password_min_length": 16,
+    "password_reuse_prevention": 24,
+    "password_max_age_days": 60,
+    "backup_retention_days": 30,
+    "retention_days": 400,
+}
+
+#: Booleans whose compliant value is False rather than True.
+_COMPLIANT_FALSE = frozenset({
+    "publicly_accessible", "root_access_keys_present", "has_inline_policy",
+    "has_admin_policy", "public_ip_assigned", "unrestricted_ingress",
+    "ssh_open_to_world", "rdp_open_to_world",
+})
+
+
 def test_every_check_evaluates_in_all_three_states():
     """Exercise the whole pack so a malformed expression cannot ship."""
-    lower_is_better = ("days_since", "_count")
     for cid, check in control_checks.all_checks().items():
         compliant: dict = {}
         for sig in check.requires:
-            if any(tok in sig for tok in lower_is_better):
+            if sig in _COMPLIANT_NUMBERS:
+                compliant[sig] = _COMPLIANT_NUMBERS[sig]
+            elif any(tok in sig for tok in _LOWER_IS_BETTER):
                 compliant[sig] = 0
-            elif sig == "password_min_length":
-                compliant[sig] = 16
-            elif sig == "password_reuse_prevention":
-                compliant[sig] = 24
-            elif sig == "backup_retention_days":
-                compliant[sig] = 30
-            elif sig in ("publicly_accessible", "root_access_keys_present",
-                         "has_inline_policy", "has_admin_policy", "public_ip_assigned",
-                         "unrestricted_ingress", "ssh_open_to_world", "rdp_open_to_world"):
+            elif sig in _COMPLIANT_FALSE:
                 compliant[sig] = False
             else:
                 compliant[sig] = True
@@ -134,11 +154,16 @@ def test_every_check_evaluates_in_all_three_states():
         status, _, _ = control_checks.evaluate(check, compliant)
         assert status is ControlStatus.PASS, f"{cid}: compliant telemetry did not pass"
 
-        violating = {
-            s: (not v) if isinstance(v, bool)
-            else (9999 if any(t in s for t in lower_is_better) else 0)
-            for s, v in compliant.items()
-        }
+        violating = {}
+        for s, v in compliant.items():
+            if s in _PRECONDITIONS:
+                violating[s] = v          # keep the control applicable
+            elif isinstance(v, bool):
+                violating[s] = not v
+            elif any(t in s for t in _LOWER_IS_BETTER):
+                violating[s] = 9999
+            else:
+                violating[s] = 0
         status, _, _ = control_checks.evaluate(check, violating)
         assert status is ControlStatus.FAIL, f"{cid}: violating telemetry did not fail"
 

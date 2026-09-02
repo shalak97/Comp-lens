@@ -95,13 +95,43 @@ _COMPLIANT: dict[str, dict[str, Any]] = {
     "virtual_network": {
         "flow_logs_enabled": True,
     },
+    # Asset types owned by the security tooling connectors rather than a cloud.
+    # DEMO carries them so demo mode exercises the whole check pack; without
+    # them the product would demonstrate less coverage than it advertises,
+    # which is the drift test_every_declarative_control_is_demoable exists to
+    # catch.
+    "host": {
+        "critical_vulnerabilities": 0,
+    },
+    "code_repository": {
+        "critical_vulnerabilities": 0,
+        "code_scanning_enabled": True,
+    },
+    "log_index": {
+        "logging_enabled": True,
+        "retention_days": 400,
+        "audit_logs_retained": True,
+        "siem_alerts_monitored": True,
+    },
 }
+
+#: Signals that describe the *situation* a control applies to rather than
+#: whether it is satisfied. Inverting these does not make an estate
+#: non-compliant, it makes the control inapplicable — flipping
+#: console_access_enabled to False turns "a login without MFA" into "not a
+#: login user at all", which passes IA-2-CONSOLE-MFA for the wrong reason and
+#: makes the failing demo estate quietly stop demonstrating the failure.
+_PRECONDITION_SIGNALS = frozenset({
+    "console_access_enabled",
+    "instance_state",
+    "volume_state",
+})
 
 #: Numeric signals where a *higher* reading is the compliant one, so `fail`
 #: has to drive them down rather than up.
 _HIGHER_IS_BETTER = frozenset({
     "password_min_length", "password_reuse_prevention", "password_max_age_days",
-    "backup_retention_days",
+    "backup_retention_days", "retention_days",
 })
 
 _PLANES = {
@@ -114,6 +144,9 @@ _PLANES = {
     "network_ruleset": "network_boundary",
     "encryption_key": "data_protection",
     "virtual_network": "network_boundary",
+    "host": "vulnerability_threat",
+    "code_repository": "vulnerability_threat",
+    "log_index": "logging_monitoring",
 }
 
 
@@ -121,7 +154,9 @@ def _failing(signals: dict[str, Any]) -> dict[str, Any]:
     """The same estate, non-compliant — so remediation paths are demoable too."""
     out: dict[str, Any] = {}
     for k, v in signals.items():
-        if isinstance(v, bool):
+        if k in _PRECONDITION_SIGNALS:
+            out[k] = v  # the control still applies; only its outcome changes
+        elif isinstance(v, bool):
             out[k] = not v
         elif isinstance(v, int):
             out[k] = 0 if k in _HIGHER_IS_BETTER else 999

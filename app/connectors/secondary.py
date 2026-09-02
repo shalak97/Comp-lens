@@ -153,6 +153,10 @@ class AzureConnector(BaseConnector):
                 # directly rather than inherited from a group membership.
                 "has_admin_policy",
                 "has_inline_policy",
+                # Whether the account can sign in interactively at all. An
+                # account that cannot is not a console user, and demanding MFA
+                # of it would be a finding about nothing.
+                "console_access_enabled",
                 "principal",
                 "owner",
             ),
@@ -418,7 +422,15 @@ class AzureConnector(BaseConnector):
             return {"mfa_enforced": registered, "mfa_enabled": registered,
                     "principal": user_ref, "owner": "identity-team"}
 
-        return {
+        # accountEnabled is Entra's "can this principal sign in", the same
+        # question an AWS login profile answers.
+        enabled = None
+        try:
+            enabled = bool(self._graph(f"/users/{user_ref}").get("accountEnabled"))
+        except ConnectorError as exc:
+            logger.warning("Azure user read failed for %s: %s", user_ref, exc)
+
+        out = {
             "mfa_enforced": registered,
             "mfa_enabled": registered,
             "has_admin_policy": admin,
@@ -426,6 +438,9 @@ class AzureConnector(BaseConnector):
             "principal": user_ref,
             "owner": "identity-team",
         }
+        if enabled is not None:
+            out["console_access_enabled"] = enabled
+        return out
 
     def _service_principal_telemetry(self, app_ref: str | None) -> dict[str, Any]:
         """Client secrets and certificates are an application's access keys."""

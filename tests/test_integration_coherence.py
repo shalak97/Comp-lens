@@ -230,19 +230,41 @@ def test_bulk_assess_keeps_legacy_behaviour_for_handwritten_controls(client):
 # The coverage metric is reachable from the product, not just the API
 # ──────────────────────────────────────────────────────────────────────────
 def test_automation_coverage_endpoint_reports_full_coverage(client):
+    from app.services import control_checks
+
     body = client.get("/coverage/automation").json()
-    assert body["total_checks"] == 38
+    # Derived from the pack rather than hard-coded: the count is a fact about
+    # the check pack, and pinning it as a literal meant every added control
+    # broke this test for no reason while telling us nothing about coverage.
+    assert body["total_checks"] == len(control_checks.all_checks())
     assert body["uncovered"] == 0, f"unsatisfiable controls: {body['uncovered']}"
     assert body["coverage_pct"] == 100.0
 
 
 def test_connector_capabilities_endpoint_lists_demo_and_aws(client):
+    from app.connectors.registry import registry
+    from app.services import control_checks
+
     body = client.get("/connectors/capabilities").json()
     names = {c["source_system"] for c in body["connectors"]}
     assert {"AWS", "DEMO"} <= names
-    for c in body["connectors"]:
-        if c["source_system"] in ("AWS", "DEMO"):
-            assert c["controls_satisfied_count"] == body["total_checks"]
+
+    counts = {c["source_system"]: c["controls_satisfied_count"] for c in body["connectors"]}
+
+    # DEMO must satisfy everything: it is what demo mode runs on, so any check
+    # it cannot serve is coverage the product advertises but cannot show.
+    assert counts["DEMO"] == body["total_checks"]
+
+    # AWS is held to the asset types it actually claims. The pack now also
+    # covers hosts, code repositories and log indexes — asset types owned by
+    # the scanning and SIEM connectors, not by a cloud — and requiring AWS to
+    # answer for a Splunk index would assert something false rather than
+    # protect anything.
+    aws = registry.surface("AWS")
+    aws_scope = [c for c in control_checks.all_checks().values()
+                 if aws.for_asset_type(c.asset_type)]
+    assert counts["AWS"] == len(aws_scope), (
+        "AWS does not cover every check for an asset type it declares a probe for")
 
 
 def test_dashboard_exposes_the_automation_view():
