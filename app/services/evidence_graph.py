@@ -195,18 +195,36 @@ class EvidenceService:
                 "hits": [{"concept_id": h["concept_id"], "confidence": h["confidence"],
                           "quote": h["quote"]} for h in hits]}
 
-    def list_documents(self, tenant_id: str) -> list[dict[str, Any]]:
-        docs = self.db.execute(select(EvidenceDocument).where(
-            EvidenceDocument.tenant_id == tenant_id)).scalars().all()
-        out = []
-        for d in docs:
-            n = self.db.execute(select(EvidenceConceptHit).where(
-                EvidenceConceptHit.doc_id == d.doc_id)).scalars().all()
-            out.append({"doc_id": d.doc_id, "name": d.name, "source_type": d.source_type,
-                        "method": d.method, "status": d.status, "char_count": d.char_count,
-                        "concepts_found": len(n), "model": d.model,
-                        "created_at": d.created_at.isoformat() if d.created_at else None})
-        return out
+    def list_documents(self, tenant_id: str, limit: int | None = None,
+                       offset: int = 0) -> list[dict[str, Any]]:
+        from sqlalchemy import func
+
+        from app import pagination
+
+        stmt = pagination.apply(
+            select(EvidenceDocument).where(EvidenceDocument.tenant_id == tenant_id)
+            .order_by(EvidenceDocument.created_at.desc(), EvidenceDocument.doc_id),
+            limit, offset)
+        docs = self.db.execute(stmt).scalars().all()
+
+        # One grouped count for the whole page. This used to run a query per
+        # document and load every hit row just to take its length, so listing
+        # N documents cost N+1 queries — unbounded before, and still needless
+        # work now that the page is bounded.
+        counts: dict[str, int] = {}
+        doc_ids = [d.doc_id for d in docs]
+        if doc_ids:
+            counts = dict(self.db.execute(
+                select(EvidenceConceptHit.doc_id, func.count())
+                .where(EvidenceConceptHit.tenant_id == tenant_id,
+                       EvidenceConceptHit.doc_id.in_(doc_ids))
+                .group_by(EvidenceConceptHit.doc_id)).all())
+
+        return [{"doc_id": d.doc_id, "name": d.name, "source_type": d.source_type,
+                 "method": d.method, "status": d.status, "char_count": d.char_count,
+                 "concepts_found": counts.get(d.doc_id, 0), "model": d.model,
+                 "created_at": d.created_at.isoformat() if d.created_at else None}
+                for d in docs]
 
     def graph(self, tenant_id: str, framework: str | None = None) -> dict[str, Any]:
         docs = self.db.execute(select(EvidenceDocument).where(

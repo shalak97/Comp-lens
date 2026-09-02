@@ -191,9 +191,15 @@ def resolve(db: Session, tenant_id: str, framework: str, control_id: str,
 
 
 def list_decisions(db: Session, tenant_id: str, control_id: str | None = None,
-                   limit: int = 100) -> list[RoutingDecision]:
+                   limit: int | None = 100, offset: int = 0) -> list[RoutingDecision]:
+    from app import pagination
+
     stmt = select(RoutingDecision).where(RoutingDecision.tenant_id == tenant_id)
     if control_id:
         stmt = stmt.where(RoutingDecision.control_id == control_id)
-    stmt = stmt.order_by(RoutingDecision.created_at.desc()).limit(limit)
+    # The limit was already here but the route never exposed it, so callers
+    # were hard-capped at 100 with no way to reach the rest.
+    stmt = pagination.apply(
+        stmt.order_by(RoutingDecision.created_at.desc(), RoutingDecision.id),
+        limit, offset)
     return list(db.execute(stmt).scalars().all())

@@ -51,13 +51,22 @@ class InventoryService:
         return count
 
     def list(self, tenant_id: str, source_system: str | None = None,
-             asset_type: str | None = None) -> builtins.list[AssetRecord]:
+             asset_type: str | None = None, limit: int | None = None,
+             offset: int = 0) -> builtins.list[AssetRecord]:
+        from app import pagination
+
         stmt = select(AssetRecord).where(AssetRecord.tenant_id == tenant_id)
         if source_system:
             stmt = stmt.where(AssetRecord.source_system == source_system.upper())
         if asset_type:
             stmt = stmt.where(AssetRecord.asset_type == asset_type)
-        return list(self.db.execute(stmt.order_by(AssetRecord.discovered_at.desc())).scalars().all())
+        # asset_id breaks ties: discovered_at alone is not unique, and a
+        # non-deterministic order makes LIMIT/OFFSET drop or repeat rows
+        # between pages.
+        stmt = pagination.apply(
+            stmt.order_by(AssetRecord.discovered_at.desc(), AssetRecord.asset_id),
+            limit, offset)
+        return list(self.db.execute(stmt).scalars().all())
 
     def bulk_assess(self, tenant_id: str, framework: str, control_id: str,
                     source_system: str, params: dict[str, Any]) -> dict[str, Any]:
