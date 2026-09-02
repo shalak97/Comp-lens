@@ -322,6 +322,51 @@ class AssessmentService:
             reason=reason, idem_key=key, telemetry=telemetry, owner=telemetry.get("owner"),
             renew=renew)
 
+    def record_unverifiable(self, req: AssessmentRequest, *, error: Exception) -> Finding | None:
+        """Record that a control could not be evaluated on an asset.
+
+        A fan-out that loses an asset to a connector failure used to increment a
+        counter and write nothing. The asset then had no posture row at all, so
+        it left the denominator entirely: a control that errored on 400 of 500
+        assets produced a compliance score computed over the 100 that worked,
+        presented as the tenant's score with nothing marking the hole. The
+        estate looked smaller and healthier than the evidence supported.
+
+        ERROR is the honest status for it, and the one the summary already
+        handles: error rows count as applicable but not as passes, so a control
+        nobody could verify lowers the score instead of vanishing from it. That
+        is the same tri-state discipline the evaluator applies to a missing
+        signal — "we could not observe this" is its own answer, distinct from
+        both "it is fine" and "it is wrong".
+
+        No telemetry is passed, so no evidence artifact and no EvidenceMeta row
+        are written: there is no evidence, and inventing a record of one is the
+        failure this whole platform exists to prevent. The finding carries the
+        error text as its description instead.
+
+        Returns None if a finding already answers for this control and asset, or
+        if the write itself fails — recording the hole must never mask the
+        original failure, which the caller is already reporting.
+        """
+        try:
+            return self._retry_on_locked(lambda: self._record_unverifiable_once(req, error))
+        except Exception:  # noqa: BLE001
+            logger.exception("could not record unverifiable control=%s asset=%s",
+                             req.control_id, req.asset_id)
+            return None
+
+    def _record_unverifiable_once(self, req: AssessmentRequest, error: Exception) -> Finding | None:
+        key = _idem_key(req)
+        renew = self._stale_implicit_record(key, explicit=bool(req.idempotency_key))
+        if renew is None and self._existing(key) is not None:
+            return None
+        return self._commit_finding(
+            tenant_id=req.tenant_id, framework=req.framework, control_id=req.control_id,
+            source_system=req.source_system, asset_id=req.asset_id,
+            status=ControlStatus.ERROR, severity=Severity.MEDIUM,
+            reason=f"Could not verify: {type(error).__name__}: {error}",
+            idem_key=key, telemetry=None, owner=None, renew=renew)
+
     def record_external_finding(self, *, tenant_id: str, framework: str, control_id: str,
                                 source_system: str, asset_id: str | None, status: ControlStatus,
                                 severity: Severity, description: str | None = None,
@@ -342,17 +387,47 @@ class AssessmentService:
             telemetry=raw or {"ingested": True}, owner=None)
 
     def run_batch(self, tenant_id: str, requests: list[AssessmentRequest]) -> dict[str, Any]:
-        results: dict[str, Any] = {"succeeded": 0, "failed": 0, "findings": [], "errors": []}
+        """Assess many controls, recording the ones that could not be assessed.
+
+        A failure here splits two ways, and the split decides whether anything
+        is written:
+
+        Resolving the connector fails — an unknown source system, or one whose
+        credentials are not configured. That is a bad request or a deployment
+        gap, not a statement about the estate, so it is reported and nothing is
+        persisted; writing a finding per malformed request would fill the log
+        with junk from a typo.
+
+        Collection or evaluation fails once the connector exists. Then the
+        target was real and we genuinely could not verify it, which is a fact
+        about the estate and belongs in posture as ERROR. See
+        record_unverifiable().
+        """
+        results: dict[str, Any] = {"succeeded": 0, "failed": 0, "unverifiable": 0,
+                                   "findings": [], "errors": []}
         for r in requests:
             r.tenant_id = tenant_id
+            try:
+                registry.get(r.source_system)
+            except Exception as exc:  # noqa: BLE001
+                results["failed"] += 1
+                results["errors"].append({"control_id": r.control_id, "source_system": r.source_system,
+                                          "error_type": type(exc).__name__, "recorded": False})
+                logger.warning("batch item unroutable control=%s: %s", r.control_id, exc)
+                continue
             try:
                 f = self.run_single(r)
                 results["succeeded"] += 1
                 results["findings"].append(f.finding_id)
             except Exception as exc:  # noqa: BLE001
                 results["failed"] += 1
+                recorded = self.record_unverifiable(r, error=exc)
+                if recorded is not None:
+                    results["unverifiable"] += 1
+                    results["findings"].append(recorded.finding_id)
                 results["errors"].append({"control_id": r.control_id, "source_system": r.source_system,
-                                          "error_type": type(exc).__name__})
+                                          "error_type": type(exc).__name__,
+                                          "recorded": recorded is not None})
                 logger.warning("batch item failed control=%s: %s", r.control_id, exc)
         return results
 
