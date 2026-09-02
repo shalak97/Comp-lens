@@ -21,6 +21,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+# Imported at module scope, not inside the fixture: the crawler tables only
+# register on Base.metadata when this module is imported, and conftest's
+# create_all() runs before any fixture body does. A local import leaves the
+# tables uncreated — which is also why _drift_signal treats the crawler plane
+# as optional.
+from app.crawler_models import CrawlResult, CrawlTarget
 from app.services.trust_telemetry import _DRIFT_SAMPLE, _DRIFT_WINDOW_DAYS, unified_trust
 
 TENANT = "t-drift"
@@ -33,8 +39,6 @@ OUTSIDE = 40
 
 @pytest.fixture
 def crawl_history(db_session):
-    from app.crawler_models import CrawlResult, CrawlTarget
-
     now = datetime.now(UTC)
     db_session.add(CrawlTarget(
         id="tgt-1", tenant_id=TENANT, kind="vendor_trust", name="acme trust",
