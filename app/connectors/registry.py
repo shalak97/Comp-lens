@@ -36,6 +36,12 @@ def _load_registry() -> dict[str, type[BaseConnector]]:
         ServiceNowConnector,
         SlackConnector,
     )
+    from app.connectors.security_tools import (
+        SnykConnector,
+        SplunkConnector,
+        TenableConnector,
+        WizConnector,
+    )
     from app.connectors.ssh_linux import SSHLinuxConnector
 
     return {
@@ -54,6 +60,10 @@ def _load_registry() -> dict[str, type[BaseConnector]]:
         "SERVICENOW": ServiceNowConnector,
         "QUALYS": QualysConnector,
         "CROWDSTRIKE": CrowdStrikeConnector,
+        "SNYK": SnykConnector,
+        "TENABLE": TenableConnector,
+        "WIZ": WizConnector,
+        "SPLUNK": SplunkConnector,
     }
 
 

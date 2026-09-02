@@ -105,9 +105,13 @@ CONNECTOR_CATALOG: list[dict[str, Any]] = [
     _c("SONARQUBE", "SonarQube", "devops", "api_token",
        ["SONARQUBE_URL", "SONARQUBE_TOKEN"],
        ["code_scanning_enabled", "vulnerability_findings"], vendor="Sonar"),
+    # evidence_types list what the connector actually returns. patch_status was
+    # advertised here before there was an implementation to check it against;
+    # Snyk reports open issues, not host patch level.
     _c("SNYK", "Snyk", "devops", "api_token",
        ["SNYK_TOKEN", "SNYK_ORG_ID"],
-       ["vulnerability_findings", "code_scanning_enabled", "patch_status"], vendor="Snyk"),
+       ["vulnerability_findings", "code_scanning_enabled"],
+       registry_key="SNYK", vendor="Snyk"),
     # ── ITSM / Ticketing ─────────────────────────────────────────────────────
     _c("JIRA", "Jira", "itsm", "api_token",
        ["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"],
@@ -131,10 +135,12 @@ CONNECTOR_CATALOG: list[dict[str, Any]] = [
        registry_key="QUALYS", maturity="production", vendor="Qualys"),
     _c("TENABLE", "Tenable.io", "security", "api_keys",
        ["TENABLE_ACCESS_KEY", "TENABLE_SECRET_KEY"],
-       ["vulnerability_findings", "patch_status"], vendor="Tenable"),
+       ["vulnerability_findings"], registry_key="TENABLE", vendor="Tenable"),
+    # WIZ_API_URL is required, not optional: Wiz endpoints are tenant-specific
+    # (api.<region>.app.wiz.io) so there is no default to fall back on.
     _c("WIZ", "Wiz", "security", "oauth_client_credentials",
-       ["WIZ_CLIENT_ID", "WIZ_CLIENT_SECRET"],
-       ["vulnerability_findings", "encryption_enabled", "logging_enabled"], vendor="Wiz"),
+       ["WIZ_CLIENT_ID", "WIZ_CLIENT_SECRET", "WIZ_API_URL"],
+       ["vulnerability_findings"], registry_key="WIZ", vendor="Wiz"),
     _c("PRISMA_CLOUD", "Prisma Cloud", "security", "api_keys",
        ["PRISMA_ACCESS_KEY", "PRISMA_SECRET_KEY", "PRISMA_API_URL"],
        ["vulnerability_findings", "encryption_enabled", "logging_enabled"], vendor="Palo Alto"),
@@ -143,7 +149,8 @@ CONNECTOR_CATALOG: list[dict[str, Any]] = [
        ["endpoint_protection_active", "incidents_tracked", "patch_status"], vendor="SentinelOne"),
     _c("SPLUNK", "Splunk", "security", "api_token",
        ["SPLUNK_URL", "SPLUNK_TOKEN"],
-       ["siem_alerts_monitored", "audit_logs_retained", "logging_enabled"], vendor="Splunk"),
+       ["siem_alerts_monitored", "audit_logs_retained", "logging_enabled"],
+       registry_key="SPLUNK", vendor="Splunk"),
     _c("MS_SENTINEL", "Microsoft Sentinel", "security", "oauth_client_credentials",
        ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "SENTINEL_WORKSPACE_ID"],
        ["siem_alerts_monitored", "incidents_tracked", "audit_logs_retained"], vendor="Microsoft"),
