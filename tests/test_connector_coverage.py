@@ -23,6 +23,11 @@ from app.connectors.registry import registry
 from app.services import control_checks
 
 
+def _satisfied_by_any(check) -> list[str]:
+    return [n for n in registry.supported() if n != "DEMO"
+            and (s := registry.surface(n)) and s.resolve(check.asset_type, check.requires)]
+
+
 def _covered(source_system: str) -> set[str]:
     surface = registry.surface(source_system)
     assert surface is not None, f"{source_system} is not registered"
@@ -43,7 +48,20 @@ AWS_ONLY = {
     "IA-5-PW-COMPLEXITY",
     "IA-5-PW-REUSE",
     "SC-7-IMDSV2",                 # no v1/v2 metadata split off AWS
+    # Signals only the AWS probes collect today. Azure and GCP could answer
+    # these — an inactive-principal query, a password expiry policy, a disk's
+    # key custody — so unlike the entries above these are a gap to close, not
+    # a concept that does not exist off AWS.
+    "AC-2-INACTIVE-ACCOUNT",
+    "IA-5-PW-MAX-AGE",
+    "SC-28-BLOCKSTORE-KMS",
 }
+
+#: Asset types that belong to the scanning and SIEM connectors rather than to
+#: any cloud. Checks on these are not "AWS-only" — no cloud provider is the
+#: right answer for a Splunk index or a Snyk project — so they sit outside the
+#: portable/AWS-only split entirely.
+NON_CLOUD_ASSET_TYPES = {"host", "code_repository", "log_index"}
 
 
 def test_aws_still_covers_every_declarative_check():
@@ -69,14 +87,29 @@ def test_no_cloud_claims_an_aws_specific_check(cloud):
 
 
 def test_every_check_is_covered_by_aws_or_deliberately_aws_only():
-    """Nothing falls outside the two categories — a check is either portable
-    (some non-AWS connector can satisfy it) or explicitly listed as AWS-only."""
-    checks = set(control_checks.all_checks())
+    """Nothing falls outside the three categories: a cloud check is either
+    portable (some non-AWS cloud can satisfy it) or explicitly listed as
+    AWS-only, and anything on a non-cloud asset type is out of scope for this
+    split."""
+    all_checks = control_checks.all_checks()
+    cloud_checks = {cid for cid, c in all_checks.items()
+                    if c.asset_type not in NON_CLOUD_ASSET_TYPES}
     portable = _covered("AZURE") | _covered("GCP")
-    unexplained = checks - portable - AWS_ONLY
+    unexplained = cloud_checks - portable - AWS_ONLY
     assert not unexplained, (
         "checks neither portable nor recorded as AWS-only — either add a probe "
         f"or add them to AWS_ONLY with a reason: {sorted(unexplained)}")
+
+
+def test_non_cloud_checks_are_served_by_a_real_tool():
+    """The other half of that split: a check on a non-cloud asset type must
+    still be satisfiable by something, or it is an orphan wearing a category
+    as an excuse."""
+    for cid, check in control_checks.all_checks().items():
+        if check.asset_type not in NON_CLOUD_ASSET_TYPES:
+            continue
+        satisfied = _satisfied_by_any(check)
+        assert satisfied, f"{cid} ({check.asset_type}) is served by no connector"
 
 
 # ── the four newly-implemented security tools ──
