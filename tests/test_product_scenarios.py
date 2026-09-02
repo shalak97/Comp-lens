@@ -353,7 +353,7 @@ def test_24_anchoring_produces_a_root_and_a_verifiable_proof(client):
     assert anchor.get("signature"), "the anchor is unsigned — anyone could publish a root"
 
     ledger = client.get(f"/evidence?tenant_id={t}").json()
-    eid = ledger[0].get("evidence_id")
+    eid = ledger[0].get("evidence_id") or ledger[0].get("id")
     assert eid, f"evidence ledger row has no id: {ledger[0]}"
 
     p = client.get(f"/evidence/proof?evidence_id={eid}&tenant_id={t}")
@@ -606,15 +606,43 @@ def test_46_posture_history_can_answer_what_was_true_last_week(client):
     now = datetime.now(UTC).isoformat()
     r = client.get(f"/v1/posture/as-of?tenant_id={t}&at={now}")
     assert r.status_code == 200, r.text
-    assert r.json(), "point-in-time posture returned nothing for a tenant with findings"
+    assert r.json()["controls"], "point-in-time posture is empty for a tenant with findings"
 
     # Before the tenant existed, the honest answer is "nothing was true yet".
     past = (datetime.now(UTC) - timedelta(days=365)).isoformat()
     old = client.get(f"/v1/posture/as-of?tenant_id={t}&at={past}")
     assert old.status_code == 200, old.text
-    rows = old.json()
-    rows = rows.get("controls", rows.get("posture", [])) if isinstance(rows, dict) else rows
-    assert not rows, f"posture a year before the tenant existed is not empty: {rows}"
+    assert not old.json()["controls"], (
+        f"posture a year before the tenant existed is not empty: {old.json()}")
+
+
+def test_46b_a_timestamp_from_the_standard_library_is_accepted(client):
+    """The offset trap.
+
+    `+` is a space in a query string, so `datetime.now(UTC).isoformat()` —
+    the most natural way any Python or curl caller builds this — arrives as
+    "…T12:00:00 00:00" unless the caller escapes it. The endpoint answered
+    that with "invalid; use ISO 8601", which is a rejection *and* a wrong
+    explanation: the caller did use ISO 8601.
+
+    Both spellings must work, and something genuinely malformed must still be
+    refused rather than guessed at.
+    """
+    t = tenant("as-of-encoding")
+    assess(client, t, "SC-7", "h-1")
+    stamp = datetime.now(UTC).isoformat()
+
+    unescaped = client.get(f"/v1/posture/as-of?tenant_id={t}&at={stamp}")
+    escaped = client.get("/v1/posture/as-of",
+                         params={"tenant_id": t, "at": stamp})   # httpx escapes the +
+    assert unescaped.status_code == 200, f"an unescaped UTC offset was refused: {unescaped.text}"
+    assert escaped.status_code == 200, escaped.text
+    assert unescaped.json()["as_of"] == escaped.json()["as_of"], (
+        "the same instant read differently depending on how it was escaped")
+
+    bad = client.get(f"/v1/posture/as-of?tenant_id={t}&at=yesterday-ish")
+    assert bad.status_code == 400
+    assert "yesterday-ish" in bad.text, "the error does not say what it rejected"
 
 
 # ══════════════════════════════════════════════════════════════════════════
