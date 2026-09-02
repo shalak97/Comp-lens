@@ -1,5 +1,6 @@
 {
   "version": "control-checks-v1",
+  "expression_language": "cel",
   "note": "Declarative, vendor-neutral control checks. Each check names an asset type and the normalized signals it needs; any connector whose capability surface exposes a probe emitting those signals for that asset type can satisfy it. Adding a control here requires no connector or policy-engine code. Crosswalk references are working mappings — confirm against official framework texts before a formal audit.",
   "checks": [
     {
@@ -134,7 +135,7 @@
         "password_requires_uppercase",
         "password_requires_lowercase"
       ],
-      "expression": "password_requires_symbols == true and password_requires_numbers == true and password_requires_uppercase == true and password_requires_lowercase == true",
+      "expression": "password_requires_symbols == true && password_requires_numbers == true && password_requires_uppercase == true && password_requires_lowercase == true",
       "pass_reason": "Account password policy enforces symbols, numbers, and mixed case.",
       "fail_reason": "Account password policy is missing one or more complexity requirements.",
       "remediation": "Enable symbol, number, uppercase and lowercase requirements in the account password policy.",
@@ -1170,7 +1171,7 @@
         "console_access_enabled",
         "mfa_enabled"
       ],
-      "expression": "console_access_enabled == false or mfa_enabled == true",
+      "expression": "console_access_enabled == false || mfa_enabled == true",
       "pass_reason": "Every principal that can sign in interactively has MFA.",
       "fail_reason": "A principal can sign in interactively without MFA — a single stolen password is enough to use it.",
       "remediation": "Enrol the account in MFA, or remove its interactive sign-in if it is a machine identity that should not have one.",
@@ -1351,7 +1352,7 @@
       "requires": [
         "password_max_age_days"
       ],
-      "expression": "password_max_age_days > 0 and password_max_age_days <= 90",
+      "expression": "password_max_age_days > 0 && password_max_age_days <= 90",
       "pass_reason": "Console passwords expire within 90 days.",
       "fail_reason": "Console passwords never expire, or expire too slowly — a credential leaked today stays valid indefinitely.",
       "remediation": "Set a maximum password age of 90 days or less in the account password policy.",

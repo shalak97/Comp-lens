@@ -39,6 +39,14 @@ _PACK_PATH = Path(__file__).resolve().parent.parent / "data" / "control_checks.j
 
 SCHEMA_VERSION = "control-checks-v1"
 
+
+@lru_cache(maxsize=1)
+def _pack_document() -> dict[str, Any]:
+    """The raw pack, read once. Static content behind a cache."""
+    if not _PACK_PATH.exists():
+        return {}
+    return json.loads(_PACK_PATH.read_text())
+
 _SEVERITIES = {s.value for s in Severity}
 
 
@@ -128,7 +136,7 @@ def load_checks() -> dict[str, Check]:
         logger.warning("control check pack not found at %s", _PACK_PATH)
         return {}
 
-    doc = json.loads(_PACK_PATH.read_text())
+    doc = _pack_document()
     version = doc.get("version")
     if version != SCHEMA_VERSION:
         raise CheckPackError(
@@ -156,6 +164,39 @@ def all_checks() -> dict[str, Check]:
 # ──────────────────────────────────────────────────────────────────────────
 # Evaluation
 # ──────────────────────────────────────────────────────────────────────────
+def expression_language() -> str:
+    """Which dialect the pack's expressions are written in.
+
+    Declared by the pack itself rather than assumed, so a pack and the
+    evaluator that reads it cannot drift apart silently: "cel" means real
+    Common Expression Language (&& || !), "python" the legacy AST-allowlist
+    dialect that spelled those and/or/not. Unknown values raise rather than
+    falling back, because guessing the language of a boolean expression can
+    silently inspect the wrong thing.
+    """
+    doc = _pack_document()
+    lang = str(doc.get("expression_language", "python")).lower()
+    if lang not in ("cel", "python"):
+        raise CheckPackError(
+            f"pack declares unknown expression_language {lang!r}; expected 'cel' or 'python'")
+    return lang
+
+
+def _evaluate_expression(expression: str, telemetry: dict[str, Any]) -> bool:
+    if expression_language() == "cel":
+        from app.policy_as_code.cel import evaluate as cel_evaluate
+
+        result = cel_evaluate(expression, telemetry)
+        if not isinstance(result, bool):
+            raise CheckPackError(
+                f"check expression must evaluate to a bool, got {type(result).__name__}")
+        return result
+
+    from app.policy_as_code.evaluator import evaluate_expression
+
+    return bool(evaluate_expression(expression, telemetry))
+
+
 def evaluate(check: Check, telemetry: dict[str, Any]) -> tuple[ControlStatus, str, Severity]:
     """Decide a check against collected telemetry.
 
@@ -172,11 +213,9 @@ def evaluate(check: Check, telemetry: dict[str, Any]) -> tuple[ControlStatus, st
             check.severity,
         )
 
-    from app.policy_as_code.evaluator import PolicyExpressionError, evaluate_expression
-
     try:
-        ok = evaluate_expression(check.expression, telemetry)
-    except PolicyExpressionError as exc:
+        ok = _evaluate_expression(check.expression, telemetry)
+    except Exception as exc:  # noqa: BLE001 — either dialect's parse/eval error
         logger.error("check %s has an invalid expression: %s", check.control_id, exc)
         return (ControlStatus.ERROR, f"Invalid check expression: {exc}", Severity.INFO)
 
