@@ -157,6 +157,10 @@ class AzureConnector(BaseConnector):
                 # account that cannot is not a console user, and demanding MFA
                 # of it would be a finding about nothing.
                 "console_access_enabled",
+                # Entra reports last interactive sign-in on the user object
+                # (signInActivity), which is the same question AWS answers with
+                # a credential report's password_last_used.
+                "days_since_last_login",
                 "principal",
                 "owner",
             ),
@@ -233,6 +237,10 @@ class AzureConnector(BaseConnector):
                 "multi_region_enabled",
                 "cloudwatch_logs_integrated",
                 "threat_detection_enabled",
+                # Entra expresses password expiry per verified domain, which is
+                # the tenant-wide policy an AWS account states in its IAM
+                # password policy.
+                "password_max_age_days",
                 "owner",
             ),
         ),
@@ -287,7 +295,7 @@ class AzureConnector(BaseConnector):
             plane="data_protection",
             asset_param="disk",
             description="Managed disk encryption posture.",
-            signals=("encryption_at_rest", "owner"),
+            signals=("encryption_at_rest", "kms_encrypted", "owner"),
         ),
     )
 
@@ -430,6 +438,17 @@ class AzureConnector(BaseConnector):
         except ConnectorError as exc:
             logger.warning("Azure user read failed for %s: %s", user_ref, exc)
 
+        # signInActivity needs AuditLog.Read.All and an Entra ID P1 licence, so
+        # it is requested separately and omitted when unavailable rather than
+        # defaulted — a principal we cannot date is not a dormant one.
+        last_login_days = None
+        try:
+            act = self._graph(f"/users/{user_ref}?$select=signInActivity")
+            last_login_days = _days_since(_parse_graph_time(
+                (act.get("signInActivity") or {}).get("lastSignInDateTime")))
+        except ConnectorError as exc:
+            logger.warning("Azure signInActivity read failed for %s: %s", user_ref, exc)
+
         out = {
             "mfa_enforced": registered,
             "mfa_enabled": registered,
@@ -440,6 +459,8 @@ class AzureConnector(BaseConnector):
         }
         if enabled is not None:
             out["console_access_enabled"] = enabled
+        if last_login_days is not None:
+            out["days_since_last_login"] = last_login_days
         return out
 
     def _service_principal_telemetry(self, app_ref: str | None) -> dict[str, Any]:
@@ -617,6 +638,20 @@ class AzureConnector(BaseConnector):
         except ConnectorError as exc:
             logger.warning("Azure Defender pricing read failed: %s", exc)
 
+        # Password expiry lives in Entra, not ARM. Read it from the tenant's
+        # default verified domain; 2147483647 is Entra's sentinel for "never
+        # expires", which the check must see as a real value rather than a gap.
+        max_age = None
+        try:
+            domains = self._graph("/domains").get("value", []) or []
+            default = next((d for d in domains if d.get("isDefault")), None)
+            if default is not None:
+                raw = default.get("passwordValidityPeriodInDays")
+                if isinstance(raw, int):
+                    max_age = 0 if raw >= 2147483647 else raw
+        except ConnectorError as exc:
+            logger.warning("Azure domain policy read failed: %s", exc)
+
         out: dict[str, Any] = {
             "logging_enabled": bool(exports),
             # The Activity Log is subscription-wide and covers every region by
@@ -628,6 +663,8 @@ class AzureConnector(BaseConnector):
         }
         if threat is not None:
             out["threat_detection_enabled"] = threat
+        if max_age is not None:
+            out["password_max_age_days"] = max_age
         return out
 
     def _virtual_machine_telemetry(self, name: str | None,
@@ -756,8 +793,14 @@ class AzureConnector(BaseConnector):
             api_version="2023-04-02")
         enc = (doc.get("properties", {}) or {}).get("encryption", {}) or {}
         # Managed disks are always encrypted; the type says whether the key is
-        # platform- or customer-managed. Either satisfies encryption at rest.
-        return {"encryption_at_rest": bool(enc.get("type")), "owner": "cloud-platform-team"}
+        # platform- or customer-managed. Either satisfies encryption at rest,
+        # but only a customer-managed key demonstrates separate key custody.
+        enc_type = str(enc.get("type") or "")
+        return {
+            "encryption_at_rest": bool(enc_type),
+            "kms_encrypted": "CustomerKey" in enc_type,
+            "owner": "cloud-platform-team",
+        }
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -854,7 +897,7 @@ class GCPConnector(BaseConnector):
             plane="data_protection",
             asset_param="disk",
             description="Persistent disk encryption posture.",
-            signals=("encryption_at_rest", "owner"),
+            signals=("encryption_at_rest", "kms_encrypted", "owner"),
         ),
         Probe(
             probe_id="cloud_sql",
@@ -1122,12 +1165,17 @@ class GCPConnector(BaseConnector):
         zone = params.get("zone")
         if not zone:
             raise ConnectorError("GCP disk controls require a 'zone' param.")
-        self._rest(
+        doc = self._rest(
             f"https://compute.googleapis.com/compute/v1/projects/{self._project}"
             f"/zones/{zone}/disks/{name}")
+        key = doc.get("diskEncryptionKey") or {}
         # Persistent disks are encrypted at rest unconditionally; a
         # customer-supplied or KMS key changes custody, not whether it is on.
-        return {"encryption_at_rest": True, "owner": "cloud-platform-team"}
+        return {
+            "encryption_at_rest": True,
+            "kms_encrypted": bool(key.get("kmsKeyName") or key.get("kmsKeyServiceAccount")),
+            "owner": "cloud-platform-team",
+        }
 
 
 # ──────────────────────────────────────────────────────────────────────────

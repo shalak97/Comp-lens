@@ -48,14 +48,11 @@ AWS_ONLY = {
     "IA-5-PW-COMPLEXITY",
     "IA-5-PW-REUSE",
     "SC-7-IMDSV2",                 # no v1/v2 metadata split off AWS
-    # Signals only the AWS probes collect today. Azure and GCP could answer
-    # these — an inactive-principal query, a password expiry policy, a disk's
-    # key custody — so unlike the entries above these are a gap to close, not
-    # a concept that does not exist off AWS.
-    "AC-2-INACTIVE-ACCOUNT",
-    "IA-5-PW-MAX-AGE",
-    "SC-28-BLOCKSTORE-KMS",
 }
+# AC-2-INACTIVE-ACCOUNT, IA-5-PW-MAX-AGE and SC-28-BLOCKSTORE-KMS were listed
+# here as gaps to close rather than boundaries. They are closed: Entra reports
+# last sign-in and per-domain password expiry, and both clouds report disk key
+# custody. Everything left above is a concept that does not exist off AWS.
 
 #: Asset types that belong to the scanning and SIEM connectors rather than to
 #: any cloud. Checks on these are not "AWS-only" — no cloud provider is the

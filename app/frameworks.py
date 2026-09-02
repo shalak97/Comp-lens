@@ -20,15 +20,34 @@ CROSSWALK: dict[str, dict[str, list[str]]] = {
     "SA-15-BRANCH":  {"NIST": ["SA-15"], "ISO27001": ["A.8.25"], "SOC2": ["CC8.1"], "CIS": ["16.12"]},
     "SA-15-SECRETS": {"NIST": ["SA-15", "SA-11"], "ISO27001": ["A.8.25"], "SOC2": ["CC8.1"], "CIS": ["16.11"]},
     "SC-28-HOST":    {"NIST": ["SC-28"], "ISO27001": ["A.8.24"], "SOC2": ["CC6.1"], "CIS": ["3.11"]},
-    # AI governance controls (ISO 42001 Annex A / NIST AI RMF functions / EU AI Act articles)
-    "AI-INV":       {"ISO42001": ["A.6.2.1"], "NIST_AI_RMF": ["MAP-1"], "EU_AI_ACT": ["Art.11"]},
-    "AI-RISK":      {"ISO42001": ["A.5.2"], "NIST_AI_RMF": ["MAP-1", "MEASURE-2"], "EU_AI_ACT": ["Art.9"]},
-    "AI-DATA":      {"ISO42001": ["A.7.4"], "NIST_AI_RMF": ["MAP-2"], "EU_AI_ACT": ["Art.10"]},
+    # AI governance controls (ISO 42001 Annex A / NIST AI RMF functions / EU AI Act articles).
+    #
+    # These also carry NIST 800-53 and ISO 27001 Annex A references wherever a
+    # genuine equivalent exists. That is not decoration: without a reference on
+    # both of those catalogues an AI control cannot appear in a NIST or ISO
+    # report, and the SCF cross-check (app/services/scf_crosswalk.py) has no
+    # pair to corroborate, so it sits outside the verified set by construction.
+    #
+    # Only defensible equivalents are listed. AI-OVERSIGHT gets none: "a human
+    # can intervene in an automated decision" has no counterpart in either
+    # catalogue, and inventing one to raise a coverage figure is the failure
+    # this codebase spends most of its effort avoiding. It keeps its AI-specific
+    # mappings and stays outside the SCF denominator, honestly.
+    "AI-INV":       {"ISO42001": ["A.6.2.1"], "NIST_AI_RMF": ["MAP-1"], "EU_AI_ACT": ["Art.11"],
+                     "NIST": ["CM-8", "PM-5"], "ISO27001": ["A.5.9"]},
+    "AI-RISK":      {"ISO42001": ["A.5.2"], "NIST_AI_RMF": ["MAP-1", "MEASURE-2"], "EU_AI_ACT": ["Art.9"],
+                     "NIST": ["RA-3", "PM-9"]},
+    "AI-DATA":      {"ISO42001": ["A.7.4"], "NIST_AI_RMF": ["MAP-2"], "EU_AI_ACT": ["Art.10"],
+                     "NIST": ["RA-2", "SI-12"], "ISO27001": ["A.5.12", "A.5.13"]},
     "AI-OVERSIGHT": {"ISO42001": ["A.9.2"], "NIST_AI_RMF": ["MANAGE-1"], "EU_AI_ACT": ["Art.14"]},
-    "AI-TRANSP":    {"ISO42001": ["A.8.2"], "NIST_AI_RMF": ["GOVERN-4"], "EU_AI_ACT": ["Art.13"]},
-    "AI-EVAL":      {"ISO42001": ["A.6.2.4"], "NIST_AI_RMF": ["MEASURE-2"], "EU_AI_ACT": ["Art.15"]},
-    "AI-LOG":       {"ISO42001": ["A.6.2.8"], "NIST_AI_RMF": ["MANAGE-4"], "EU_AI_ACT": ["Art.12"]},
-    "AI-ROBUST":    {"ISO42001": ["A.6.2.4"], "NIST_AI_RMF": ["MEASURE-2"], "EU_AI_ACT": ["Art.15"]},
+    "AI-TRANSP":    {"ISO42001": ["A.8.2"], "NIST_AI_RMF": ["GOVERN-4"], "EU_AI_ACT": ["Art.13"],
+                     "NIST": ["PT-5"], "ISO27001": ["A.5.34"]},
+    "AI-EVAL":      {"ISO42001": ["A.6.2.4"], "NIST_AI_RMF": ["MEASURE-2"], "EU_AI_ACT": ["Art.15"],
+                     "NIST": ["SA-11"], "ISO27001": ["A.8.29"]},
+    "AI-LOG":       {"ISO42001": ["A.6.2.8"], "NIST_AI_RMF": ["MANAGE-4"], "EU_AI_ACT": ["Art.12"],
+                     "NIST": ["AU-2", "AU-12"], "ISO27001": ["A.8.15"]},
+    "AI-ROBUST":    {"ISO42001": ["A.6.2.4"], "NIST_AI_RMF": ["MEASURE-2"], "EU_AI_ACT": ["Art.15"],
+                     "NIST": ["SA-11", "SI-10"], "ISO27001": ["A.8.29"]},
 }
 
 FRAMEWORKS = ["NIST", "ISO27001", "SOC2", "CIS", "ISO42001", "NIST_AI_RMF", "EU_AI_ACT"]
