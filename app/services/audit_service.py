@@ -79,10 +79,15 @@ class AuditService:
                 "approval_pct": round(100 * approved / total) if total else 0,
                 "evidence_requests_total": len(reqs), "evidence_requests_open": open_reqs}
 
-    def list(self, tenant_id: str) -> builtins.list[dict[str, Any]]:
-        rows = self.db.execute(select(Audit).where(Audit.tenant_id == tenant_id)
-                               .order_by(Audit.created_at.desc())).scalars().all()
-        return [self._ser(a) for a in rows]
+    def list(self, tenant_id: str, limit: int | None = None,
+             offset: int = 0) -> builtins.list[dict[str, Any]]:
+        from app import pagination
+
+        stmt = pagination.apply(
+            select(Audit).where(Audit.tenant_id == tenant_id)
+            .order_by(Audit.created_at.desc(), Audit.id),
+            limit, offset)
+        return [self._ser(a) for a in self.db.execute(stmt).scalars().all()]
 
     def get(self, tenant_id: str, audit_id: str) -> dict[str, Any] | None:
         a = self.db.get(Audit, audit_id)
@@ -176,10 +181,15 @@ class AuditService:
         return {"controls": len(ctrls), "updated": updated}
 
     # ── checklist ──
-    def list_controls(self, tenant_id: str, audit_id: str) -> builtins.list[dict[str, Any]]:
-        rows = self.db.execute(select(AuditControl).where(
-            AuditControl.audit_id == audit_id, AuditControl.tenant_id == tenant_id)
-            .order_by(AuditControl.control_id)).scalars().all()
+    def list_controls(self, tenant_id: str, audit_id: str, limit: int | None = None,
+                      offset: int = 0) -> builtins.list[dict[str, Any]]:
+        from app import pagination
+
+        rows = self.db.execute(pagination.apply(
+            select(AuditControl).where(
+                AuditControl.audit_id == audit_id, AuditControl.tenant_id == tenant_id)
+            .order_by(AuditControl.control_id),
+            limit, offset)).scalars().all()
         return [{"id": c.id, "control_id": c.control_id, "title": c.title,
                  "review_state": c.review_state, "auto_status": c.auto_status,
                  "owner": c.owner, "evidence_ref": c.evidence_ref,
@@ -202,10 +212,16 @@ class AuditService:
                 "owner": c.owner, "reviewer_note": c.reviewer_note}
 
     # ── evidence requests (PBC list) ──
-    def list_requests(self, tenant_id: str, audit_id: str) -> builtins.list[dict[str, Any]]:
-        rows = self.db.execute(select(EvidenceRequest).where(
-            EvidenceRequest.audit_id == audit_id, EvidenceRequest.tenant_id == tenant_id)
-            .order_by(EvidenceRequest.created_at.desc())).scalars().all()
+    def list_requests(self, tenant_id: str, audit_id: str, limit: int | None = None,
+                      offset: int = 0) -> builtins.list[dict[str, Any]]:
+        from app import pagination
+
+        rows = self.db.execute(pagination.apply(
+            select(EvidenceRequest).where(
+                EvidenceRequest.audit_id == audit_id,
+                EvidenceRequest.tenant_id == tenant_id)
+            .order_by(EvidenceRequest.created_at.desc(), EvidenceRequest.id),
+            limit, offset)).scalars().all()
         return [self._ser_req(r) for r in rows]
 
     def _ser_req(self, r: EvidenceRequest) -> dict[str, Any]:

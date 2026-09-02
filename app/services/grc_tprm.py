@@ -49,12 +49,23 @@ class RiskService:
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
         }
 
-    def list(self, tenant_id: str) -> builtins.list[dict[str, Any]]:
-        rows = self.db.execute(select(Risk).where(Risk.tenant_id == tenant_id)
-                               .order_by(Risk.created_at.desc())).scalars().all()
-        out = [self._ser(r) for r in rows]
-        out.sort(key=lambda x: x["inherent_score"], reverse=True)
-        return out
+    def list(self, tenant_id: str, limit: int | None = None,
+             offset: int = 0) -> builtins.list[dict[str, Any]]:
+        from app import pagination
+
+        # Ordering is done in SQL rather than by sorting the fetched rows.
+        # inherent_score is likelihood * impact — both columns — so the
+        # database can rank by it. Sorting after the fetch would rank only the
+        # rows inside the current window, meaning page 1 of a paginated risk
+        # register would show the worst of the first 100 risks created rather
+        # than the worst 100 risks. On a risk register that ordering is the
+        # entire point of the view.
+        score = (Risk.likelihood * Risk.impact).desc()
+        stmt = pagination.apply(
+            select(Risk).where(Risk.tenant_id == tenant_id)
+            .order_by(score, Risk.created_at.desc(), Risk.id),
+            limit, offset)
+        return [self._ser(r) for r in self.db.execute(stmt).scalars().all()]
 
     def create(self, tenant_id: str, data: RiskIn) -> dict[str, Any]:
         r = Risk(tenant_id=tenant_id, title=data.title, description=data.description,
@@ -145,10 +156,15 @@ class VendorService:
             "updated_at": v.updated_at.isoformat() if v.updated_at else None,
         }
 
-    def list(self, tenant_id: str) -> builtins.list[dict[str, Any]]:
-        rows = self.db.execute(select(Vendor).where(Vendor.tenant_id == tenant_id)
-                               .order_by(Vendor.onboarded_at.desc())).scalars().all()
-        return [self._ser(v) for v in rows]
+    def list(self, tenant_id: str, limit: int | None = None,
+             offset: int = 0) -> builtins.list[dict[str, Any]]:
+        from app import pagination
+
+        stmt = pagination.apply(
+            select(Vendor).where(Vendor.tenant_id == tenant_id)
+            .order_by(Vendor.onboarded_at.desc(), Vendor.id),
+            limit, offset)
+        return [self._ser(v) for v in self.db.execute(stmt).scalars().all()]
 
     def create(self, tenant_id: str, data: VendorIn) -> dict[str, Any]:
         v = Vendor(tenant_id=tenant_id, name=data.name, category=data.category,

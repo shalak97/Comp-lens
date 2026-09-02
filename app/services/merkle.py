@@ -96,12 +96,14 @@ class MerkleService:
         return {"anchor_id": a.id, "root": root, "leaf_count": len(leaves),
                 "signature": signature, "created_at": a.created_at.isoformat()}
 
-    def anchors(self, tenant_id: str) -> list[dict[str, Any]]:
+    def anchors(self, tenant_id: str, limit: int | None = None,
+                offset: int = 0) -> list[dict[str, Any]]:
+        from app import pagination
         from app.services.evidence_sign import verify_root
-        rows = self.db.execute(
+        rows = self.db.execute(pagination.apply(
             select(MerkleAnchor).where(MerkleAnchor.tenant_id == tenant_id)
-            .order_by(MerkleAnchor.created_at.desc())
-        ).scalars().all()
+            .order_by(MerkleAnchor.created_at.desc(), MerkleAnchor.id),
+            limit, offset)).scalars().all()
         return [{"anchor_id": a.id, "root": a.root, "leaf_count": a.leaf_count,
                  "signature": a.signature,
                  "signature_valid": verify_root(a.root, a.tenant_id, a.leaf_count, a.signature or ""),

@@ -24,6 +24,7 @@ from pydantic import BaseModel as _PydBase
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import pagination
 from app.ai_governance_models import AISystemPET as _PET
 from app.audit_models import AuditIn as _AuditIn
 from app.audit_models import AuditPatch as _AuditPatch
@@ -171,7 +172,13 @@ install_exception_handlers(app)
 _wildcard = "*" in settings.cors_origins
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins,
                    allow_credentials=not _wildcard, allow_methods=["GET", "POST", "PATCH", "DELETE"],
-                   allow_headers=["Content-Type", "X-API-Key"])
+                   allow_headers=["Content-Type", "X-API-Key"],
+                   # Without this a browser hides these from JS on any
+                   # cross-origin call, and the dashboard's API base is
+                   # configurable — so the "this list is partial" warning
+                   # would silently never fire for exactly the deployments
+                   # most likely to have enough data to need it.
+                   expose_headers=["X-Limit", "X-Offset", "X-Returned"])
 
 
 def _client_error(exc: ConnectorError) -> HTTPException:
@@ -465,21 +472,27 @@ def connector_sync(name: str, req: _SyncRequest | None = None,
 
 
 @app.get("/connectors/{name}/evidence", tags=["connectors"])
-def connector_evidence(name: str, tenant_id: str = "default",
+def connector_evidence(name: str, response: Response, tenant_id: str = "default",
+                       page: pagination.Page = Depends(pagination.page_params),
                        db: Session = Depends(get_db),
                        p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.connectors import framework as cfw
-    return cfw.evidence_for(db, name, tenant_id)
+    rows = cfw.evidence_for(db, name, tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.get("/evidence/by-connector/{name}", tags=["connectors"])
-def evidence_by_connector(name: str, tenant_id: str = "default",
+def evidence_by_connector(name: str, response: Response, tenant_id: str = "default",
+                          page: pagination.Page = Depends(pagination.page_params),
                           db: Session = Depends(get_db),
                           p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.connectors import framework as cfw
-    return cfw.evidence_for(db, name, tenant_id)
+    rows = cfw.evidence_for(db, name, tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.get("/legacy/sources")
@@ -532,11 +545,15 @@ def bulk_assess(req: BulkAssessRequest, db: Session = Depends(get_db),
 
 # ── findings + lifecycle ──
 @app.get("/findings", response_model=list[FindingOut])
-def list_findings(tenant_id: str = "default", control_id: str | None = None,
+def list_findings(response: Response, tenant_id: str = "default", control_id: str | None = None,
                   limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
                   db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> list[FindingOut]:
     authorize_tenant(p, tenant_id)
-    return [FindingOut.model_validate(f) for f in AssessmentService(db).list_findings(tenant_id, control_id, limit, offset)]
+    rows = AssessmentService(db).list_findings(tenant_id, control_id, limit, offset)
+    # Keeps this route's own limit ceiling (500) rather than adopting the
+    # shared default; the headers are what needed to be consistent.
+    pagination.describe(response, pagination.Page(limit=limit, offset=offset), len(rows))
+    return [FindingOut.model_validate(f) for f in rows]
 
 
 @app.patch("/findings/{finding_id}", response_model=FindingOut)
@@ -565,10 +582,14 @@ def create_waiver(req: WaiverRequest, db: Session = Depends(get_db),
 
 
 @app.get("/waivers", response_model=list[WaiverOut])
-def list_waivers(tenant_id: str = "default", db: Session = Depends(get_db),
+def list_waivers(response: Response, tenant_id: str = "default",
+                 page: pagination.Page = Depends(pagination.page_params),
+                 db: Session = Depends(get_db),
                  p: Principal = Depends(require(Permission.READ))) -> list[WaiverOut]:
     authorize_tenant(p, tenant_id)
-    return [WaiverOut.model_validate(w) for w in WaiverService(db).list(tenant_id)]
+    rows = WaiverService(db).list(tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return [WaiverOut.model_validate(w) for w in rows]
 
 
 @app.delete("/waivers/{waiver_id}")
@@ -594,11 +615,15 @@ def discover(source_system: str, tenant_id: str = "default", db: Session = Depen
 
 
 @app.get("/inventory")
-def inventory(tenant_id: str = "default", source_system: str | None = None,
+def inventory(response: Response, tenant_id: str = "default", source_system: str | None = None,
+              page: pagination.Page = Depends(pagination.page_params),
               db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
+    rows = InventoryService(db).list(tenant_id, source_system,
+                                     limit=page.limit, offset=page.offset)
+    pagination.describe(response, page, len(rows))
     return [{"asset_id": a.asset_id, "asset_type": a.asset_type, "source_system": a.source_system,
-             "owner": a.owner, "criticality": a.criticality} for a in InventoryService(db).list(tenant_id, source_system)]
+             "owner": a.owner, "criticality": a.criticality} for a in rows]
 
 
 # ── schedules ──
@@ -610,10 +635,14 @@ def create_schedule(req: ScheduleRequest, db: Session = Depends(get_db),
 
 
 @app.get("/schedules", response_model=list[ScheduleOut])
-def list_schedules(tenant_id: str = "default", db: Session = Depends(get_db),
+def list_schedules(response: Response, tenant_id: str = "default",
+                   page: pagination.Page = Depends(pagination.page_params),
+                   db: Session = Depends(get_db),
                    p: Principal = Depends(require(Permission.READ))) -> list[ScheduleOut]:
     authorize_tenant(p, tenant_id)
-    return [ScheduleOut.model_validate(s) for s in ScheduleService(db).list(tenant_id)]
+    rows = ScheduleService(db).list(tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return [ScheduleOut.model_validate(s) for s in rows]
 
 
 @app.post("/schedules/{schedule_id}/run")
@@ -704,11 +733,16 @@ def register_ai_system(req: AISystemRequest, db: Session = Depends(get_db),
 
 
 @app.get("/ai-systems")
-def list_ai_systems(tenant_id: str = "default", db: Session = Depends(get_db),
+def list_ai_systems(response: Response, tenant_id: str = "default",
+                    page: pagination.Page = Depends(pagination.page_params),
+                    db: Session = Depends(get_db),
                     p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.models import AISystem
-    rows = db.execute(select(AISystem).where(AISystem.tenant_id == tenant_id)).scalars().all()
+    rows = db.execute(pagination.apply(
+        select(AISystem).where(AISystem.tenant_id == tenant_id).order_by(AISystem.id),
+        page.limit, page.offset)).scalars().all()
+    pagination.describe(response, page, len(rows))
     return [{"id": s.id, "name": s.name, "owner": s.owner, "risk_tier": s.risk_tier} for s in rows]
 
 
@@ -722,11 +756,15 @@ def evidence_anchor(tenant_id: str = "default", db: Session = Depends(get_db),
 
 
 @app.get("/evidence/anchors")
-def evidence_anchors(tenant_id: str = "default", db: Session = Depends(get_db),
+def evidence_anchors(response: Response, tenant_id: str = "default",
+                     page: pagination.Page = Depends(pagination.page_params),
+                     db: Session = Depends(get_db),
                      p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from app.services.merkle import MerkleService
-    return MerkleService(db).anchors(tenant_id)
+    rows = MerkleService(db).anchors(tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.get("/evidence/proof")
@@ -773,15 +811,21 @@ def import_policy(req: _PolicyImport, p: Principal = Depends(require(Permission.
 
 
 @app.get("/evidence", tags=["evidence-graph"])
-def evidence_ledger(tenant_id: str = "default", limit: int = Query(200, ge=1, le=1000),
+def evidence_ledger(response: Response, tenant_id: str = "default",
+                    limit: int = Query(200, ge=1, le=1000),
+                    offset: int = Query(0, ge=0),
                     db: Session = Depends(get_db),
                     p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
     from sqlalchemy import desc, select
 
     from app.models import EvidenceMeta
-    rows = db.execute(select(EvidenceMeta).where(EvidenceMeta.tenant_id == tenant_id)
-                      .order_by(desc(EvidenceMeta.created_at)).limit(limit)).scalars().all()
+    # evidence_id breaks ties so paging is stable across requests.
+    rows = db.execute(pagination.apply(
+        select(EvidenceMeta).where(EvidenceMeta.tenant_id == tenant_id)
+        .order_by(desc(EvidenceMeta.created_at), EvidenceMeta.evidence_id),
+        limit, offset)).scalars().all()
+    pagination.describe(response, pagination.Page(limit=limit, offset=offset), len(rows))
     return [{"id": r.evidence_id, "control": r.control_id, "framework": r.framework,
              "source": r.run_id, "hash": r.record_hash or r.telemetry_hash,
              "verified": bool(r.record_hash),
@@ -1120,13 +1164,17 @@ def upsert_attestation(req: _AttestationRequest, db: Session = Depends(get_db),
 
 
 @app.get("/attestations", tags=["catalog"])
-def list_attestations(tenant_id: str = "default", framework: str | None = None,
+def list_attestations(response: Response, tenant_id: str = "default",
+                      framework: str | None = None,
+                      page: pagination.Page = Depends(pagination.page_params),
                       db: Session = Depends(get_db), p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
+    rows = _AttestationService(db).list(tenant_id, framework, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
     return [{"control_id": a.control_id, "framework": a.framework, "status": a.status.value,
              "owner": a.owner, "approver": a.approver, "note": a.note,
              "evidence_ref": a.evidence_ref, "updated_at": a.updated_at.isoformat()}
-            for a in _AttestationService(db).list(tenant_id, framework)]
+            for a in rows]
 
 
 @app.get("/coverage", tags=["catalog"])
@@ -1347,10 +1395,14 @@ def add_evidence_document(req: _DocumentRequest, db: Session = Depends(get_db),
 
 
 @app.get("/evidence/documents", tags=["evidence-graph"])
-def list_evidence_documents(tenant_id: str = "default", db: Session = Depends(get_db),
+def list_evidence_documents(response: Response, tenant_id: str = "default",
+                            page: pagination.Page = Depends(pagination.page_params),
+                            db: Session = Depends(get_db),
                             p: Principal = Depends(require(Permission.READ_EVIDENCE))) -> list[dict]:
     authorize_tenant(p, tenant_id)
-    return _EvidenceService(db).list_documents(tenant_id)
+    rows = _EvidenceService(db).list_documents(tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.get("/evidence/graph", tags=["evidence-graph"])
@@ -1435,16 +1487,20 @@ def resolve_control(req: _ResolveRequest, db: Session = Depends(get_db),
 
 
 @app.get("/resolve/decisions", tags=["ontology"])
-def list_routing_decisions(tenant_id: str = "default", control_id: str | None = None,
+def list_routing_decisions(response: Response, tenant_id: str = "default",
+                           control_id: str | None = None,
+                           page: pagination.Page = Depends(pagination.page_params),
                            db: Session = Depends(get_db),
                            p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
+    rows = _resolver.list_decisions(db, tenant_id, control_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
     return [{"decision_id": d.id, "control_id": d.control_id, "framework": d.framework,
              "asset_type": d.asset_type, "plane": d.plane, "strategy_type": d.strategy_type,
              "module": d.module, "status": d.status, "reason": d.reason,
              "executed": d.executed, "skipped": d.skipped, "finding_id": d.finding_id,
              "created_at": d.created_at.isoformat()}
-            for d in _resolver.list_decisions(db, tenant_id, control_id)]
+            for d in rows]
 
 
 # ── evidence mindmap ──
@@ -1465,10 +1521,14 @@ def _serve_evidence_map():
 
 
 @app.get("/grc/risks", tags=["grc"])
-def grc_list_risks(tenant_id: str = "default", db: Session = Depends(get_db),
+def grc_list_risks(response: Response, tenant_id: str = "default",
+                   page: pagination.Page = Depends(pagination.page_params),
+                   db: Session = Depends(get_db),
                    p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
-    return _RiskService(db).list(tenant_id)
+    rows = _RiskService(db).list(tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.get("/grc/risks/summary", tags=["grc"])
@@ -1508,10 +1568,14 @@ def grc_delete_risk(risk_id: str, tenant_id: str = "default",
 
 
 @app.get("/tprm/vendors", tags=["tprm"])
-def tprm_list_vendors(tenant_id: str = "default", db: Session = Depends(get_db),
+def tprm_list_vendors(response: Response, tenant_id: str = "default",
+                      page: pagination.Page = Depends(pagination.page_params),
+                      db: Session = Depends(get_db),
                       p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
-    return _VendorService(db).list(tenant_id)
+    rows = _VendorService(db).list(tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.get("/tprm/vendors/summary", tags=["tprm"])
@@ -1572,10 +1636,14 @@ def trust_risk_telemetry(tenant_id: str = "default", db: Session = Depends(get_d
 
 
 @app.get("/audits", tags=["audit"])
-def audit_list(tenant_id: str = "default", db: Session = Depends(get_db),
+def audit_list(response: Response, tenant_id: str = "default",
+               page: pagination.Page = Depends(pagination.page_params),
+               db: Session = Depends(get_db),
                p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
-    return _AuditSvc(db).list(tenant_id)
+    rows = _AuditSvc(db).list(tenant_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.post("/audits", tags=["audit"])
@@ -1625,10 +1693,14 @@ def audit_refresh(audit_id: str, tenant_id: str = "default", db: Session = Depen
 
 
 @app.get("/audits/{audit_id}/controls", tags=["audit"])
-def audit_controls(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+def audit_controls(audit_id: str, response: Response, tenant_id: str = "default",
+                   page: pagination.Page = Depends(pagination.page_params),
+                   db: Session = Depends(get_db),
                    p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
-    return _AuditSvc(db).list_controls(tenant_id, audit_id)
+    rows = _AuditSvc(db).list_controls(tenant_id, audit_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.patch("/audits/controls/{control_row_id}", tags=["audit"])
@@ -1642,10 +1714,14 @@ def audit_review_control(control_row_id: str, patch: _CtrlPatch, tenant_id: str 
 
 
 @app.get("/audits/{audit_id}/requests", tags=["audit"])
-def audit_requests(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
+def audit_requests(audit_id: str, response: Response, tenant_id: str = "default",
+                   page: pagination.Page = Depends(pagination.page_params),
+                   db: Session = Depends(get_db),
                    p: Principal = Depends(require(Permission.READ))) -> list[dict]:
     authorize_tenant(p, tenant_id)
-    return _AuditSvc(db).list_requests(tenant_id, audit_id)
+    rows = _AuditSvc(db).list_requests(tenant_id, audit_id, page.limit, page.offset)
+    pagination.describe(response, page, len(rows))
+    return rows
 
 
 @app.post("/audits/{audit_id}/requests", tags=["audit"])

@@ -452,6 +452,9 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
       <button class="icbtn" id="themebtn" onclick="toggleTheme()" title="Toggle theme"></button>
     </header>
     <div id="databanner" class="databanner"></div>
+    <!-- Truncation notice. Lives outside <main> so a view re-render can't wipe
+         it, same as the demo/offline banner above. -->
+    <div id="pagebanner" class="databanner"></div>
     <main id="main"><div class="loading"><span class="spin"></span> Calibrating…</div></main>
   </div>
 </div>
@@ -650,7 +653,21 @@ async function api(path,opts){
     err.status=r.status; err.body=body; err.text=text; err.endpoint=url;
     throw err;
   }
-  return r.json();
+  const data=await r.json();
+  /* List endpoints are bounded server-side and describe the window they
+     returned in X-Limit / X-Offset / X-Returned. Carry that alongside the rows
+     so a view can tell whether it is showing everything. Non-enumerable so it
+     is invisible to .map/.length/JSON.stringify and cannot disturb any
+     existing caller. */
+  const lim=r.headers.get("X-Limit");
+  if(lim!==null&&Array.isArray(data)){
+    Object.defineProperty(data,"_page",{value:{
+      limit:Number(lim),
+      offset:Number(r.headers.get("X-Offset")||0),
+      returned:Number(r.headers.get("X-Returned")||data.length),
+    },enumerable:false});
+  }
+  return data;
 }
 const apiGET=p=>api(p);
 const apiPOST=(p,b)=>api(p,{method:"POST",body:JSON.stringify(b||{})});
@@ -716,9 +733,32 @@ function setConn(cls,label,sub){
    demo ON  : return the sample dataset (clearly badged everywhere).
    demo OFF : live data only; on error return an EMPTY shape — never demo — so
               sample rows can't bleed into a live session. */
+/* Paths whose list came back exactly full, i.e. there is probably more that
+   this view is not showing. Reset per view render by render(). */
+const PAGE_TRUNC=new Set();
+function notePage(path,data){
+  const p=data&&data._page;
+  if(!p)return;
+  /* A full page means "there may be more" — see app/pagination.py. It can
+     over-warn on an exactly-full final page, which is the safe direction:
+     showing a partial compliance list as if it were complete is the failure
+     that matters. */
+  if(p.returned>=p.limit)PAGE_TRUNC.add(path.split("?")[0]);
+  renderPageBanner();
+}
+function renderPageBanner(){
+  const b=$("#pagebanner"); if(!b)return;
+  if(!PAGE_TRUNC.size){b.className="databanner";b.innerHTML="";return;}
+  const paths=[...PAGE_TRUNC];
+  b.className="databanner offline show";
+  b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>`+
+    `<span><b>PARTIAL LIST</b> — this view is showing the first page of ${paths.map(esc).join(", ")}. `+
+    `There are more records than are displayed here, so counts and charts on this screen describe the page, not the whole set.</span>`;
+}
+
 async function load(path,demo){
   if(STATE.demo)return{data:demo,live:false,demo:true};
-  try{return{data:await apiGET(path),live:true};}
+  try{const d=await apiGET(path);notePage(path,d);return{data:d,live:true};}
   catch(e){
     const status=(String(e.message||"").match(/HTTP (\d+)/)||[])[1];
     return{data:emptyLike(demo),live:false,error:true,status:status?Number(status):null,message:String(e.message||e)};
@@ -3114,6 +3154,10 @@ function render(){
     try{closeCmd();}catch(e){}
   }
   window._lastView=STATE.active;
+  /* Truncation applies to the data the *current* view loaded; clear it before
+     the new view fetches, or a partial-list warning would linger on a screen
+     it does not describe. */
+  PAGE_TRUNC.clear();renderPageBanner();
   buildNav();wireDelegation();
   $("#crumb").innerHTML=`comp-lens / <b>${esc(LABELS[STATE.active]||STATE.active)}</b>`;
   const fn=RENDER[STATE.active];

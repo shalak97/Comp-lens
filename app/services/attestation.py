@@ -43,10 +43,20 @@ class AttestationService:
         self.db.refresh(row)
         return row
 
-    def list(self, tenant_id: str, framework: str | None = None) -> builtins.list[ControlAttestation]:
+    def list(self, tenant_id: str, framework: str | None = None,
+             limit: int | None = None, offset: int = 0) -> builtins.list[ControlAttestation]:
+        from app import pagination
+
         stmt = select(ControlAttestation).where(ControlAttestation.tenant_id == tenant_id)
         if framework:
             stmt = stmt.where(ControlAttestation.framework == framework)
+        # This query had no ORDER BY at all, which was survivable while it
+        # returned everything but is not once it returns a window: without a
+        # deterministic order the database may repeat a row on one page and
+        # omit it from the next.
+        stmt = pagination.apply(
+            stmt.order_by(ControlAttestation.framework, ControlAttestation.control_id),
+            limit, offset)
         return list(self.db.execute(stmt).scalars().all())
 
     def coverage(self, tenant_id: str, framework: str) -> dict[str, Any]:

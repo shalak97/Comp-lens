@@ -212,10 +212,16 @@ def sync(db: Session, c: dict[str, Any], tenant_id: str = "default",
             "synced_at": st.last_sync_at.replace(tzinfo=UTC).isoformat()}
 
 
-def evidence_for(db: Session, key: str, tenant_id: str = "default") -> list[dict[str, Any]]:
-    rows = db.execute(select(ConnectorEvidenceItem).where(
-        ConnectorEvidenceItem.tenant_id == tenant_id,
-        ConnectorEvidenceItem.connector_key == key.upper())).scalars().all()
+def evidence_for(db: Session, key: str, tenant_id: str = "default",
+                 limit: int | None = None, offset: int = 0) -> list[dict[str, Any]]:
+    from app import pagination
+
+    rows = db.execute(pagination.apply(
+        select(ConnectorEvidenceItem).where(
+            ConnectorEvidenceItem.tenant_id == tenant_id,
+            ConnectorEvidenceItem.connector_key == key.upper())
+        .order_by(ConnectorEvidenceItem.collected_at.desc(), ConnectorEvidenceItem.id),
+        limit, offset)).scalars().all()
     return [{"id": r.id, "evidence_type": r.evidence_type, "title": r.title,
              "status": r.status, "mode": r.mode, "signals": r.signals,
              "controls": r.controls,

@@ -94,11 +94,15 @@ class ScheduleService:
         self.db.flush()
         return s
 
-    def list(self, tenant_id: str) -> builtins.list[Schedule]:
-        return list(self.db.execute(
+    def list(self, tenant_id: str, limit: int | None = None,
+             offset: int = 0) -> builtins.list[Schedule]:
+        from app import pagination
+
+        stmt = pagination.apply(
             select(Schedule).where(Schedule.tenant_id == tenant_id)
-            .order_by(Schedule.created_at.desc())
-        ).scalars().all())
+            .order_by(Schedule.created_at.desc(), Schedule.schedule_id),
+            limit, offset)
+        return list(self.db.execute(stmt).scalars().all())
 
     def delete(self, tenant_id: str, schedule_id: str) -> bool:
         s = self.db.get(Schedule, schedule_id)

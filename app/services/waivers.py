@@ -44,10 +44,15 @@ class WaiverService:
         self.db.flush()
         return w
 
-    def list(self, tenant_id: str) -> builtins.list[Waiver]:
-        rows = self.db.execute(
-            select(Waiver).where(Waiver.tenant_id == tenant_id).order_by(Waiver.created_at.desc())
-        ).scalars().all()
+    def list(self, tenant_id: str, limit: int | None = None,
+             offset: int = 0) -> builtins.list[Waiver]:
+        from app import pagination
+
+        stmt = pagination.apply(
+            select(Waiver).where(Waiver.tenant_id == tenant_id)
+            .order_by(Waiver.created_at.desc(), Waiver.waiver_id),
+            limit, offset)
+        rows = self.db.execute(stmt).scalars().all()
         return [self._refresh_status(w) for w in rows]
 
     def revoke(self, tenant_id: str, waiver_id: str) -> bool:
