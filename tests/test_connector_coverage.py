@@ -65,7 +65,16 @@ NON_CLOUD_ASSET_TYPES = {"host", "code_repository", "log_index"}
 
 
 def test_aws_still_covers_every_declarative_check():
-    assert _covered("AWS") == set(control_checks.all_checks())
+    """AWS is held to the asset types it declares a probe for.
+
+    It covered literally every check when the pack was entirely cloud checks.
+    The pack now also covers hosts, code repositories and log indexes — owned
+    by the scanning and SIEM connectors — and asserting AWS answers for a
+    Splunk index would pin something false rather than protect anything.
+    """
+    in_scope = {cid for cid, c in control_checks.all_checks().items()
+                if c.asset_type not in NON_CLOUD_ASSET_TYPES}
+    assert _covered("AWS") == in_scope
 
 
 @pytest.mark.parametrize(("cloud", "floor"), [("AZURE", 24), ("GCP", 20)])
