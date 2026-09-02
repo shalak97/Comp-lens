@@ -58,10 +58,16 @@ class AuditService:
         return d
 
     def _progress(self, audit_id: str, tenant_id: str) -> dict[str, Any]:
+        # tenant_id was accepted here but not applied, which was safe only
+        # because every current caller verifies audit ownership first. That is
+        # an invariant held by convention at a distance; scoping the queries
+        # makes it hold locally instead.
         ctrls = self.db.execute(select(AuditControl).where(
-            AuditControl.audit_id == audit_id)).scalars().all()
+            AuditControl.audit_id == audit_id,
+            AuditControl.tenant_id == tenant_id)).scalars().all()
         reqs = self.db.execute(select(EvidenceRequest).where(
-            EvidenceRequest.audit_id == audit_id)).scalars().all()
+            EvidenceRequest.audit_id == audit_id,
+            EvidenceRequest.tenant_id == tenant_id)).scalars().all()
         total = len(ctrls)
         approved = sum(1 for c in ctrls if c.review_state == "approved")
         rejected = sum(1 for c in ctrls if c.review_state == "rejected")
@@ -128,8 +134,23 @@ class AuditService:
         return True
 
     # ── live posture: pull current pass/fail into each control's auto_status ──
-    def refresh_posture(self, tenant_id: str, audit_id: str) -> dict[str, Any]:
-        """Best-effort: map current findings onto the audit's controls."""
+    def refresh_posture(self, tenant_id: str, audit_id: str) -> dict[str, Any] | None:
+        """Best-effort: map current findings onto the audit's controls.
+
+        Returns None when the audit does not belong to this tenant, so the
+        route can 404 the same way get()/export_package() do.
+
+        The ownership check is load-bearing, not decorative. The caller's
+        authorize_tenant() only proves the principal may act as *their own*
+        tenant; it says nothing about who owns the audit named in the URL.
+        Without this, an operator of tenant A could pass tenant B's audit_id
+        and write A's control statuses onto B's audit rows below — a
+        cross-tenant write that silently corrupts another customer's audit
+        evidence.
+        """
+        a = self.db.get(Audit, audit_id)
+        if not a or a.tenant_id != tenant_id:
+            return None
         latest: dict[str, str] = {}
         try:
             from app.middleware_models import StoredEvent
@@ -139,7 +160,12 @@ class AuditService:
                 latest.setdefault(e.control_id, e.status)
         except Exception:
             pass
-        ctrls = self.db.execute(select(AuditControl).where(AuditControl.audit_id == audit_id)).scalars().all()
+        # tenant_id is redundant given the ownership check above, and stays as
+        # defence in depth: this statement mutates rows, so it should not be
+        # one refactor away from crossing a tenant boundary again.
+        ctrls = self.db.execute(select(AuditControl).where(
+            AuditControl.audit_id == audit_id,
+            AuditControl.tenant_id == tenant_id)).scalars().all()
         updated = 0
         for c in ctrls:
             st = latest.get(c.control_id)

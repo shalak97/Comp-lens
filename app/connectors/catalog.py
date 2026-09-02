@@ -208,13 +208,57 @@ CONNECTOR_CATALOG: list[dict[str, Any]] = [
 _BY_KEY = {c["key"]: c for c in CONNECTOR_CATALOG}
 
 
+def _live_registry_keys() -> set[str] | None:
+    """Registry keys with a connector class actually behind them.
+
+    None means we could not determine it, which is deliberately distinct from
+    "nothing is implemented" — the same tri-state discipline the control
+    evaluators follow. Guessing "not implemented" from a failed import would
+    understate the product just as badly as the reverse overstates it.
+    """
+    try:
+        from app.connectors.registry import registry
+        return set(registry.supported())
+    except Exception:  # noqa: BLE001 — an unavailable registry is "unknown"
+        return None
+
+
+def _annotate(row: dict[str, Any], live: set[str] | None) -> dict[str, Any]:
+    """Attach an honest implementation status to a catalog entry.
+
+    The catalog is partly a roadmap: over half of its entries name a vendor and
+    the evidence it could supply, but have no connector behind them. They took
+    maturity="production" from the default argument of _c(), so the API
+    presented an aspiration and a shipped integration identically — a buyer or
+    auditor reading /connectors/catalog saw 44 production integrations where
+    21 exist.
+
+    maturity is therefore derived here rather than asserted in the table: it
+    cannot drift from what is actually registered, because it is computed from
+    the registry every time it is read.
+    """
+    out = dict(row)
+    key = out.get("registry_key")
+    if live is None:
+        out["implemented"] = None
+        return out
+    out["implemented"] = bool(key) and key in live
+    if not out["implemented"]:
+        # Not shipped: say so rather than inheriting the "production" default.
+        out["maturity"] = "planned"
+    return out
+
+
 def get(key: str) -> dict[str, Any] | None:
-    return _BY_KEY.get((key or "").upper())
+    row = _BY_KEY.get((key or "").upper())
+    return _annotate(row, _live_registry_keys()) if row else None
 
 
 def all_connectors() -> list[dict[str, Any]]:
-    return CONNECTOR_CATALOG
+    live = _live_registry_keys()
+    return [_annotate(c, live) for c in CONNECTOR_CATALOG]
 
 
 def by_category(cat: str) -> list[dict[str, Any]]:
-    return [c for c in CONNECTOR_CATALOG if c["category"] == cat]
+    live = _live_registry_keys()
+    return [_annotate(c, live) for c in CONNECTOR_CATALOG if c["category"] == cat]

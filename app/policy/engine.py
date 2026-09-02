@@ -26,12 +26,47 @@ Evaluator = Callable[[dict[str, Any]], tuple[ControlStatus, str]]
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _eval_mfa_enforced(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("mfa_enforced") is True:
-        return ControlStatus.PASS, "MFA is enforced for the principal."
-    if t.get("mfa_enforced") is False:
-        return ControlStatus.FAIL, "MFA is NOT enforced for the principal."
-    return ControlStatus.NOT_APPLICABLE, "MFA status unavailable in telemetry."
+def _boolean_signal(
+    field: str, pass_reason: str, fail_reason: str, unavailable_reason: str
+) -> Evaluator:
+    """Build an evaluator for a boolean control signal, tri-state on purpose.
+
+    A boolean signal has three outcomes, not two: observed true, observed
+    false, and *not observed at all* — the connector lacked permission for
+    that API call, the resource type doesn't expose the setting, or an
+    upstream error was swallowed and left the field None.
+
+    Reporting that third case as FAIL invents a finding no evidence supports.
+    "Secret scanning is disabled" and "our token could not read whether secret
+    scanning is enabled" are different claims, and only one of them is
+    something an auditor can act on. This mirrors the rule the declarative
+    check path already follows in app/services/control_checks.evaluate(),
+    which returns NOT_APPLICABLE for any absent required signal.
+
+    Only a missing signal is reclassified. An explicitly observed False still
+    fails exactly as before, and so does any other non-None value, so a
+    connector that reports a real violation is unaffected.
+    """
+
+    def _evaluate(t: dict[str, Any]) -> tuple[ControlStatus, str]:
+        value = t.get(field)
+        if value is None:
+            return ControlStatus.NOT_APPLICABLE, unavailable_reason
+        if value is True:
+            return ControlStatus.PASS, pass_reason
+        return ControlStatus.FAIL, fail_reason
+
+    _evaluate.__name__ = f"_eval_{field}"
+    _evaluate.__qualname__ = _evaluate.__name__
+    return _evaluate
+
+
+_eval_mfa_enforced = _boolean_signal(
+    "mfa_enforced",
+    "MFA is enforced for the principal.",
+    "MFA is NOT enforced for the principal.",
+    "MFA status unavailable in telemetry.",
+)
 
 
 def _eval_no_stale_accounts(t: dict[str, Any]) -> tuple[ControlStatus, str]:
@@ -43,34 +78,40 @@ def _eval_no_stale_accounts(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     return ControlStatus.PASS, f"Account active within {days} days."
 
 
-def _eval_branch_protection(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("branch_protection_enabled") is True:
-        return ControlStatus.PASS, "Default branch is protected."
-    return ControlStatus.FAIL, "Default branch protection is disabled."
+_eval_branch_protection = _boolean_signal(
+    "branch_protection_enabled",
+    "Default branch is protected.",
+    "Default branch protection is disabled.",
+    "Branch protection status unavailable in telemetry.",
+)
 
+_eval_secret_scanning = _boolean_signal(
+    "secret_scanning_enabled",
+    "Secret scanning is enabled.",
+    "Secret scanning is disabled.",
+    "Secret scanning status unavailable in telemetry.",
+)
 
-def _eval_secret_scanning(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("secret_scanning_enabled") is True:
-        return ControlStatus.PASS, "Secret scanning is enabled."
-    return ControlStatus.FAIL, "Secret scanning is disabled."
+_eval_encryption_at_rest = _boolean_signal(
+    "encryption_at_rest",
+    "Encryption at rest is enabled.",
+    "Encryption at rest is NOT enabled.",
+    "Encryption-at-rest status unavailable in telemetry.",
+)
 
+_eval_public_access_blocked = _boolean_signal(
+    "public_access_blocked",
+    "Public access is blocked.",
+    "Resource is publicly accessible.",
+    "Public-access status unavailable in telemetry.",
+)
 
-def _eval_encryption_at_rest(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("encryption_at_rest") is True:
-        return ControlStatus.PASS, "Encryption at rest is enabled."
-    return ControlStatus.FAIL, "Encryption at rest is NOT enabled."
-
-
-def _eval_public_access_blocked(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("public_access_blocked") is True:
-        return ControlStatus.PASS, "Public access is blocked."
-    return ControlStatus.FAIL, "Resource is publicly accessible."
-
-
-def _eval_logging_enabled(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("logging_enabled") is True:
-        return ControlStatus.PASS, "Audit logging is enabled."
-    return ControlStatus.FAIL, "Audit logging is disabled."
+_eval_logging_enabled = _boolean_signal(
+    "logging_enabled",
+    "Audit logging is enabled.",
+    "Audit logging is disabled.",
+    "Audit-logging status unavailable in telemetry.",
+)
 
 
 def _eval_patch_level(t: dict[str, Any]) -> tuple[ControlStatus, str]:
@@ -82,16 +123,19 @@ def _eval_patch_level(t: dict[str, Any]) -> tuple[ControlStatus, str]:
     return ControlStatus.PASS, "No critical vulnerabilities open."
 
 
-def _eval_change_approval(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("change_has_approval") is True:
-        return ControlStatus.PASS, "Change record has documented approval."
-    return ControlStatus.FAIL, "Change record lacks documented approval."
+_eval_change_approval = _boolean_signal(
+    "change_has_approval",
+    "Change record has documented approval.",
+    "Change record lacks documented approval.",
+    "Change-approval status unavailable in telemetry.",
+)
 
-
-def _eval_disk_encryption_host(t: dict[str, Any]) -> tuple[ControlStatus, str]:
-    if t.get("disk_encrypted") is True:
-        return ControlStatus.PASS, "Host disk encryption active."
-    return ControlStatus.FAIL, "Host disk is not encrypted."
+_eval_disk_encryption_host = _boolean_signal(
+    "disk_encrypted",
+    "Host disk encryption active.",
+    "Host disk is not encrypted.",
+    "Disk-encryption status unavailable in telemetry.",
+)
 
 
 CONTROL_CATALOG: dict[str, dict[str, Any]] = {
