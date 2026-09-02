@@ -45,6 +45,36 @@ class GitHubConnector(BaseConnector):
             raise ConnectorError(f"GitHub API {r.status_code}: {r.text[:200]}")
         return r.json()
 
+    def _get_all_pages(self, path: str, max_pages: int = 200) -> list[Any]:
+        """Follow GitHub's `Link: …; rel="next"` to the end of a collection.
+
+        Reaching max_pages raises instead of returning what it has: a short
+        inventory that does not announce itself is worse than an error, because
+        everything downstream treats it as the whole estate.
+        """
+        from app.connectors.http_client import _next_link
+
+        url: str | None = f"{_API}{path}"
+        out: list[Any] = []
+        seen: set[str] = set()
+        for _ in range(max_pages):
+            if url is None:
+                return out
+            if url in seen:
+                raise ConnectorError(f"GitHub pagination loop at {url}")
+            seen.add(url)
+            r = requests.get(url, headers=self._headers, timeout=self._timeout)
+            if r.status_code >= 400:
+                raise ConnectorError(f"GitHub API {r.status_code}: {r.text[:200]}")
+            page = r.json()
+            if not isinstance(page, list):
+                raise ConnectorError(f"GitHub paged endpoint returned {type(page).__name__}")
+            out += page
+            url = _next_link(r.headers.get("Link"))
+        raise ConnectorError(
+            f"GitHub collection exceeded {max_pages} pages; refusing to return a "
+            "partial inventory")
+
     def healthcheck(self) -> bool:
         try:
             self._get("/user")
@@ -88,17 +118,18 @@ class GitHubConnector(BaseConnector):
         org = params.get("org") or settings.github_org
         if not org:
             return []
-        out: list[Asset] = []
-        try:
-            for r in self._get(f"/orgs/{org}/repos?per_page=50") or []:
-                out.append(
-                    Asset(
-                        asset_id=r["full_name"],
-                        asset_type="github_repo",
-                        source_system="GITHUB",
-                        owner=org,
-                    )
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("GitHub discovery failed: %s", exc)
-        return out
+        # Every repo in the org, or an error. Fetching one page of 50 and
+        # swallowing failures into an empty list meant a 400-repo org was
+        # assessed on 50 of them, and an API outage reported an org with no
+        # repositories — both presented as a complete inventory. GitHub pages
+        # with a Link header; discovery follows it.
+        repos = self._get_all_pages(f"/orgs/{org}/repos?per_page=100")
+        return [
+            Asset(
+                asset_id=r["full_name"],
+                asset_type="github_repo",
+                source_system="GITHUB",
+                owner=org,
+            )
+            for r in repos
+        ]

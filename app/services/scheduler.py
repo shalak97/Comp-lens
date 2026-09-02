@@ -129,9 +129,26 @@ class ScheduleService:
     def _execute(self, s: Schedule) -> dict:
         svc = AssessmentService(self.db)
         ran, failed = 0, 0
-        for c in s.controls:
+        # Each execution assesses under its own idempotency namespace.
+        #
+        # A schedule stores the assessment requests verbatim, so whatever
+        # idempotency key they carried at creation was replayed on every run —
+        # and a key that never changes means an assessment that never re-runs.
+        # A schedule whose requests carried no key was no better off: the
+        # derived key is the same for every evaluation of that control on that
+        # asset. Either way the second run onwards returned the first run's
+        # finding, and "continuous compliance" measured each control once.
+        #
+        # Scoping the key to this execution makes each run a real assessment,
+        # while keeping the within-run dedupe that a repeated entry in one
+        # schedule should still get.
+        run_token = uuid.uuid4().hex
+        for idx, c in enumerate(s.controls):
             try:
-                req = AssessmentRequest(**{**c, "tenant_id": s.tenant_id})
+                item = {**c, "tenant_id": s.tenant_id}
+                within_run = c.get("idempotency_key") or idx
+                item["idempotency_key"] = f"sched:{s.schedule_id}:{run_token}:{within_run}"
+                req = AssessmentRequest(**item)
                 svc.run_single(req)
                 ran += 1
             except Exception as exc:  # noqa: BLE001
