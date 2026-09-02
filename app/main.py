@@ -139,7 +139,7 @@ app.add_middleware(RequestContextMiddleware)
 async def _record_metrics(request, call_next):
     """Count and time every request.
 
-    Path labels are normalised (ids collapsed to {id}) so a metric series is
+    The path label is the matched route template, so a metric series is
     per-route rather than per-resource — otherwise every finding id ever
     requested becomes its own time series.
     """
@@ -147,7 +147,6 @@ async def _record_metrics(request, call_next):
 
     from app.observability import REQUEST_SECONDS, REQUESTS, normalize_path
 
-    route = normalize_path(request.url.path)
     started = _time.monotonic()
     status = "500"
     try:
@@ -155,6 +154,16 @@ async def _record_metrics(request, call_next):
         status = str(response.status_code)
         return response
     finally:
+        # Prefer the matched route template ("/findings/{finding_id}") over the
+        # requested path. Starlette records the matched route on the scope
+        # during routing, so it is available once call_next has returned. It is
+        # the ground truth for "which endpoint was this", where
+        # normalize_path() can only guess from the shape of each segment — and
+        # it guesses wrong for any id that isn't numeric or long-and-hex-ish
+        # (a hostname, a short slug), which would then get its own metric
+        # series per value and grow the series count without bound.
+        matched = request.scope.get("route")
+        route = getattr(matched, "path", None) or normalize_path(request.url.path)
         REQUEST_SECONDS.labels(request.method, route).observe(_time.monotonic() - started)
         REQUESTS.labels(request.method, route, status).inc()
 install_exception_handlers(app)
@@ -809,12 +818,27 @@ def grc_trust_unified(tenant_id: str = "default", db: Session = Depends(get_db),
 
 @app.post("/v1/integrate/ai-systems/{system_id}/to-risk", tags=["integration"])
 def integrate_ai_system_to_risk(system_id: str, req: dict | None = None,
+                                tenant_id: str | None = None,
                                 db: Session = Depends(get_db),
                                 p: Principal = Depends(require(Permission.WRITE))) -> dict:
-    tenant_id = (req or {}).get("tenant_id", "default")
-    authorize_tenant(p, tenant_id)
+    """Create a risk-register entry from an AI system's computed privacy risk.
+
+    tenant_id is accepted as a query parameter — what the dashboard sends and
+    what every sibling /v1/integrate route uses — and still honoured in the
+    JSON body, which is where this route used to read it from exclusively.
+    Query wins if both are supplied.
+
+    This route was registered twice with two different tenant sources. FastAPI
+    serves the first registration, so the body-only version won and the
+    query-parameter one was unreachable: the dashboard's ?tenant_id=... was
+    silently discarded, every risk landed in the "default" tenant, and
+    authorize_tenant() checked "default" rather than the tenant the caller
+    named.
+    """
+    resolved = tenant_id or (req or {}).get("tenant_id") or "default"
+    authorize_tenant(p, resolved)
     from app.services import integration
-    return integration.ai_system_to_risk(db, tenant_id, system_id)
+    return integration.ai_system_to_risk(db, resolved, system_id)
 
 
 # ── enforcement control plane (read views + mode toggle) ──
@@ -1339,6 +1363,21 @@ def evidence_graph(tenant_id: str = "default", framework: str | None = None,
 @app.post("/evidence/hits/{hit_id}/confirm", tags=["evidence-graph"])
 def confirm_evidence_hit(hit_id: str, req: _ConfirmRequest, db: Session = Depends(get_db),
                          p: Principal = Depends(require(Permission.WRITE))) -> dict:
+    from app.models import EvidenceConceptHit
+
+    # The hit id alone decides which tenant's data is touched, so it must be
+    # checked against the principal — Permission.WRITE only says this caller
+    # may write *something*, not that they may write this. Without it any
+    # authenticated operator could confirm another tenant's evidence hit, and
+    # with auto_attest could mint attestations in that tenant marking its
+    # controls compliant, under an approver name of their choosing.
+    #
+    # 404 for both "missing" and "not yours" so the response can't be used as a
+    # cross-tenant existence oracle for hit ids — same posture as the document
+    # delete route below.
+    hit = db.get(EvidenceConceptHit, hit_id)
+    if not hit or not p.can_access(hit.tenant_id):
+        raise HTTPException(status_code=404, detail="hit not found")
     try:
         return _EvidenceService(db).confirm_hit(hit_id, req.confirmed, req.auto_attest, req.approver)
     except ValueError as e:
@@ -1579,7 +1618,10 @@ def audit_delete(audit_id: str, tenant_id: str = "default", db: Session = Depend
 def audit_refresh(audit_id: str, tenant_id: str = "default", db: Session = Depends(get_db),
                   p: Principal = Depends(require(Permission.WRITE))) -> dict:
     authorize_tenant(p, tenant_id)
-    return _AuditSvc(db).refresh_posture(tenant_id, audit_id)
+    out = _AuditSvc(db).refresh_posture(tenant_id, audit_id)
+    if out is None:
+        raise HTTPException(404, "audit not found")
+    return out
 
 
 @app.get("/audits/{audit_id}/controls", tags=["audit"])
@@ -1901,15 +1943,6 @@ def integrate_policy_findings(payload: dict, tenant_id: str = "default",
     authorize_tenant(p, tenant_id)
     return _integ.evaluate_policies_to_findings(
         db, tenant_id, payload.get("evidence", {}), payload.get("framework", "ALL"))
-
-
-@app.post("/v1/integrate/ai-systems/{system_id}/to-risk", tags=["integration"])
-def integrate_ai_to_risk(system_id: str, tenant_id: str = "default",
-                         db: Session = Depends(get_db),
-                         p: Principal = Depends(require(Permission.WRITE))) -> dict:
-    """Create a risk-register entry from an AI system's computed privacy risk."""
-    authorize_tenant(p, tenant_id)
-    return _integ.ai_system_to_risk(db, tenant_id, system_id)
 
 
 @app.post("/v1/integrate/ai-to-risk", tags=["integration"])
