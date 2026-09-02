@@ -1220,6 +1220,10 @@ RENDER.connectors = async function(){
     vendor:c.vendor||"",
     category:c.category||"other",
     maturity:c.maturity||"beta",
+    /* implemented: true = a connector class is registered behind this entry;
+       false = catalogued as a roadmap item only; null/undefined = the server
+       couldn't tell (older build, or the registry wasn't importable). */
+    implemented:c.implemented,
     auth:(c.auth_method||c.auth||"").replace(/_/g," "),
     mode:c.mode||(c.healthy===true?"connected":c.healthy===false?"error":"not_configured"),
     controls:(c.controls_covered!=null?c.controls_covered:null),
@@ -1243,6 +1247,11 @@ RENDER.connectors = async function(){
   const connectedN=norm.filter(c=>c.mode==="connected").length;
   const liveN=norm.filter(c=>c.mode==="connected"||c.mode==="demo").length;
   const prodN=norm.filter(c=>c.maturity==="production").length;
+  /* Over half the catalog names a vendor and the evidence it could supply but
+     has no connector behind it. Those entries used to report maturity
+     "production" like the shipped ones, so the catalog read as far larger than
+     the product is. Count them so the readout can say so plainly. */
+  const plannedN=norm.filter(c=>c.implemented===false||c.maturity==="planned").length;
   const evidenceN=norm.reduce((a,c)=>a+(c.evidence||0),0);
 
   function draw(){
@@ -1256,7 +1265,7 @@ RENDER.connectors = async function(){
       <div class="ro"><div class="k">Catalogued${liveBadge(live)}</div><div class="v num">${norm.length}</div><div class="s">${cats.length} categories</div></div>
       <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Connected</div><div class="v num">${connectedN}</div><div class="s">${liveN} active incl. demo</div></div>
       <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Evidence collected</div><div class="v num">${evidenceN}</div></div>
-      <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Production-grade</div><div class="v num">${prodN}</div></div>
+      <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Shipped</div><div class="v num">${prodN}</div><div class="s">${plannedN?`${plannedN} catalogued, not built yet`:"all catalogued entries are built"}</div></div>
     </div>
     <div class="panel">
       <div class="panel-h">
