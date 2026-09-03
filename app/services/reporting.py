@@ -16,20 +16,36 @@ from app.frameworks import crosswalk_for
 from app.models import Finding
 from app.services.assessment import AssessmentService
 
+#: Rows in the PDF's detail table. The PDF is a readable summary; the CSV and
+#: OSCAL exports are the complete record. When the cap bites, the PDF says so.
+PDF_TABLE_ROWS = 200
+
 
 class ReportService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
     def _findings(self, tenant_id: str) -> list[Finding]:
-        return AssessmentService(self.db).list_findings(tenant_id, limit=500)
+        """Every finding, not the first page of them.
+
+        This used to call list_findings(limit=500), which is the paged API read
+        and clamps at MAX_PAGE. Every report built on it — the CSV, OSCAL
+        assessment results, the POA&M, the component definition — therefore
+        stopped at 500 findings and said nothing about it. A POA&M is a formal
+        deliverable; one that quietly omits three quarters of a tenant's
+        findings is a false statement to an auditor, which is the exact failure
+        this platform exists to prevent.
+        """
+        return list(AssessmentService(self.db).iter_findings(tenant_id))
 
     def csv_bytes(self, tenant_id: str) -> bytes:
         buf = io.StringIO()
         w = csv.writer(buf)
         w.writerow(["finding_id", "control_id", "source_system", "asset_id", "status",
                     "severity", "lifecycle", "owner", "created_at", "frameworks"])
-        for f in self._findings(tenant_id):
+        # Streamed rather than materialised: the CSV is written row by row, so
+        # it never needs the whole finding set resident at once.
+        for f in AssessmentService(self.db).iter_findings(tenant_id):
             cw = crosswalk_for(f.control_id)
             fw = "; ".join(f"{k}:{','.join(v)}" for k, v in cw.items())
             w.writerow([f.finding_id, f.control_id, f.source_system, f.asset_id or "",
@@ -127,8 +143,19 @@ class ReportService:
             f"/ {summary['total']} total)", styles["Heading2"]))
         story.append(Spacer(1, 12))
 
+        # The PDF is a human-readable summary, not a data interchange format, so
+        # the detail table is capped — a 4000-row table is not a document anyone
+        # reads. But a capped table that does not say it is capped reads as the
+        # complete list, so say so, and point at the exports that are complete.
+        if len(findings) > PDF_TABLE_ROWS:
+            story.append(Paragraph(
+                f"Showing the first {PDF_TABLE_ROWS} of {len(findings)} findings. "
+                "The CSV and OSCAL exports contain the complete set.",
+                styles["Italic"]))
+            story.append(Spacer(1, 8))
+
         data = [["Control", "Source", "Asset", "Status", "Severity", "Lifecycle"]]
-        for f in findings[:200]:
+        for f in findings[:PDF_TABLE_ROWS]:
             data.append([f.control_id, f.source_system, (f.asset_id or "")[:28],
                          f.status.value, f.severity.value, f.lifecycle.value])
         table = Table(data, repeatRows=1)
@@ -140,7 +167,7 @@ class ReportService:
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f4f6")]),
         ]
         # color the status cells
-        for i, f in enumerate(findings[:200], start=1):
+        for i, f in enumerate(findings[:PDF_TABLE_ROWS], start=1):
             col = {"pass": "#0a7d3a", "fail": "#b91c1c"}.get(f.status.value)
             if col:
                 style.append(("TEXTCOLOR", (3, i), (3, i), colors.HexColor(col)))

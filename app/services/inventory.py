@@ -83,21 +83,38 @@ class InventoryService:
         """
         from app.services import control_checks
 
+        # Resolve the connector once, before assessing anything. An unknown
+        # source system or one whose credentials are unset fails every asset
+        # identically — that is a bad request or a deployment gap, not a
+        # statement about the estate, and it should fail the call loudly rather
+        # than write one "could not verify" finding per asset for it. Doing it
+        # here also means every failure in the loop below is a genuine
+        # per-asset collection failure.
+        registry.get(source_system)
+
         check = control_checks.get(control_id)
         asset_type = check.asset_type if check else None
         assets = self.list(tenant_id, source_system, asset_type=asset_type)
         svc = AssessmentService(self.db)
-        results: dict[str, Any] = {"assessed": 0, "failed": 0, "findings": [],
-                                   "asset_type": asset_type, "eligible_assets": len(assets)}
+        results: dict[str, Any] = {"assessed": 0, "failed": 0, "unverifiable": 0,
+                                   "findings": [], "asset_type": asset_type,
+                                   "eligible_assets": len(assets)}
         for a in assets:
+            req = AssessmentRequest(
+                tenant_id=tenant_id, framework=framework, control_id=control_id,
+                source_system=source_system, asset_id=a.asset_id, params=params,
+            )
             try:
-                f = svc.run_single(AssessmentRequest(
-                    tenant_id=tenant_id, framework=framework, control_id=control_id,
-                    source_system=source_system, asset_id=a.asset_id, params=params,
-                ))
+                f = svc.run_single(req)
                 results["assessed"] += 1
                 results["findings"].append(f.finding_id)
             except Exception as exc:  # noqa: BLE001
+                # An asset we could not read is not an asset that passed. It is
+                # recorded as ERROR so it stays in posture and in the score;
+                # dropping it here is what let a control that failed on most of
+                # an estate report a healthy figure for the remainder.
                 results["failed"] += 1
+                if svc.record_unverifiable(req, error=exc) is not None:
+                    results["unverifiable"] += 1
                 logger.warning("bulk assess failed asset=%s: %s", a.asset_id, exc)
         return results

@@ -16,6 +16,7 @@ import logging
 import random
 import time
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -56,6 +57,29 @@ _WRITE_BACKOFF_BASE = 0.05
 def _is_locked_error(exc: OperationalError) -> bool:
     msg = str(getattr(exc, "orig", None) or exc).lower()
     return "database is locked" in msg or "database is busy" in msg
+
+
+#: How long an *implicit* idempotency key suppresses re-assessment.
+#:
+#: A caller that supplies `idempotency_key` is naming one logical request, and
+#: that key dedupes forever — that is the contract of the field. A caller that
+#: supplies nothing gets a key derived from what is being assessed
+#: (tenant/framework/control/source/asset), which is a different thing
+#: entirely: it is the same identity every time that control is evaluated on
+#: that asset, today and next month.
+#:
+#: Treating the derived key as permanent made every re-assessment a no-op. The
+#: first evaluation of a control on an asset was returned unchanged forever
+#: after: posture never moved, drift never fired, and trend snapshots recorded
+#: the same figures indefinitely — a flat line that reads as a stable estate
+#: rather than as an estate nobody is looking at. Continuous monitoring was, in
+#: the strict sense, a single measurement.
+#:
+#: A window keeps what the derived key is actually good for — collapsing a
+#: double-clicked button or a client retry into one finding — without pinning
+#: the verdict. Five minutes is far longer than any retry and far shorter than
+#: any monitoring interval.
+IMPLICIT_IDEMPOTENCY_WINDOW = timedelta(minutes=5)
 
 
 def _idem_key(req: AssessmentRequest) -> str:
@@ -124,10 +148,26 @@ class AssessmentService:
     def _commit_finding(self, *, tenant_id, framework, control_id, source_system, asset_id,
                         status: ControlStatus, severity: Severity, reason: str | None,
                         idem_key: str, telemetry: dict[str, Any] | None = None,
-                        owner: str | None = None) -> Finding:
-        existing = self._existing(idem_key)
-        if existing:
-            return existing
+                        owner: str | None = None,
+                        renew: IdempotencyRecord | None = None) -> Finding:
+        # `renew` is the caller saying "this key exists but has aged out of its
+        # dedupe window; this is a genuine re-assessment". Re-checking the key
+        # here would hand back the stale finding, and inserting a fresh row for
+        # a key that already exists would collide with the primary key and be
+        # swallowed by the race handler below as a lost race. So the record is
+        # repointed at the new finding instead.
+        #
+        # Known narrow race: two workers that both find the same key stale will
+        # both re-assess and both repoint it, leaving two findings in the log
+        # for one control. Posture is upserted, so current state and every
+        # score derived from it stay correct; the cost is a duplicated row in
+        # the audit log. Within the window — where retries and double-clicks
+        # actually land — deduplication is still absolute, as is deduplication
+        # of any caller-supplied key.
+        if renew is None:
+            existing = self._existing(idem_key)
+            if existing:
+                return existing
 
         run_id = str(uuid.uuid4())
         evidence_id = str(uuid.uuid4())
@@ -196,7 +236,12 @@ class AssessmentService:
                     )
                     self.db.add(ev_meta)
                 self.db.add(finding)
-                self.db.add(IdempotencyRecord(key=idem_key, tenant_id=tenant_id, finding_id=finding.finding_id))
+                if renew is not None:
+                    renew.finding_id = finding.finding_id
+                    renew.created_at = datetime.now(UTC)
+                else:
+                    self.db.add(IdempotencyRecord(key=idem_key, tenant_id=tenant_id,
+                                                  finding_id=finding.finding_id))
                 self._upsert_posture(tenant_id=tenant_id, framework=framework, control_id=control_id,
                                      source_system=source_system, asset_id=asset_id,
                                      status=status, severity=severity, finding_id=finding.finding_id)
@@ -242,11 +287,29 @@ class AssessmentService:
     def run_single(self, req: AssessmentRequest) -> Finding:
         return self._retry_on_locked(lambda: self._run_single_once(req))
 
+    def _stale_implicit_record(self, key: str, explicit: bool) -> IdempotencyRecord | None:
+        """The record for `key` if it exists but no longer suppresses a re-run.
+
+        Returns None both when there is no record and when the record is still
+        binding — the caller distinguishes those by having already looked the
+        finding up. See IMPLICIT_IDEMPOTENCY_WINDOW for why explicit and
+        derived keys are treated differently.
+        """
+        rec = self.db.get(IdempotencyRecord, key)
+        if rec is None or explicit:
+            return None
+        created = rec.created_at
+        if created.tzinfo is None:      # SQLite hands back naive datetimes
+            created = created.replace(tzinfo=UTC)
+        return rec if datetime.now(UTC) - created > IMPLICIT_IDEMPOTENCY_WINDOW else None
+
     def _run_single_once(self, req: AssessmentRequest) -> Finding:
         key = _idem_key(req)
-        existing = self._existing(key)
-        if existing:
-            return existing
+        renew = self._stale_implicit_record(key, explicit=bool(req.idempotency_key))
+        if renew is None:
+            existing = self._existing(key)
+            if existing:
+                return existing
         connector = registry.get(req.source_system)
         # pass tenant to connectors that scope reads by it (e.g. AIGOV); others ignore it
         telemetry = connector.collect_telemetry(
@@ -256,7 +319,53 @@ class AssessmentService:
         return self._commit_finding(
             tenant_id=req.tenant_id, framework=req.framework, control_id=req.control_id,
             source_system=req.source_system, asset_id=req.asset_id, status=status, severity=sev,
-            reason=reason, idem_key=key, telemetry=telemetry, owner=telemetry.get("owner"))
+            reason=reason, idem_key=key, telemetry=telemetry, owner=telemetry.get("owner"),
+            renew=renew)
+
+    def record_unverifiable(self, req: AssessmentRequest, *, error: Exception) -> Finding | None:
+        """Record that a control could not be evaluated on an asset.
+
+        A fan-out that loses an asset to a connector failure used to increment a
+        counter and write nothing. The asset then had no posture row at all, so
+        it left the denominator entirely: a control that errored on 400 of 500
+        assets produced a compliance score computed over the 100 that worked,
+        presented as the tenant's score with nothing marking the hole. The
+        estate looked smaller and healthier than the evidence supported.
+
+        ERROR is the honest status for it, and the one the summary already
+        handles: error rows count as applicable but not as passes, so a control
+        nobody could verify lowers the score instead of vanishing from it. That
+        is the same tri-state discipline the evaluator applies to a missing
+        signal — "we could not observe this" is its own answer, distinct from
+        both "it is fine" and "it is wrong".
+
+        No telemetry is passed, so no evidence artifact and no EvidenceMeta row
+        are written: there is no evidence, and inventing a record of one is the
+        failure this whole platform exists to prevent. The finding carries the
+        error text as its description instead.
+
+        Returns None if a finding already answers for this control and asset, or
+        if the write itself fails — recording the hole must never mask the
+        original failure, which the caller is already reporting.
+        """
+        try:
+            return self._retry_on_locked(lambda: self._record_unverifiable_once(req, error))
+        except Exception:  # noqa: BLE001
+            logger.exception("could not record unverifiable control=%s asset=%s",
+                             req.control_id, req.asset_id)
+            return None
+
+    def _record_unverifiable_once(self, req: AssessmentRequest, error: Exception) -> Finding | None:
+        key = _idem_key(req)
+        renew = self._stale_implicit_record(key, explicit=bool(req.idempotency_key))
+        if renew is None and self._existing(key) is not None:
+            return None
+        return self._commit_finding(
+            tenant_id=req.tenant_id, framework=req.framework, control_id=req.control_id,
+            source_system=req.source_system, asset_id=req.asset_id,
+            status=ControlStatus.ERROR, severity=Severity.MEDIUM,
+            reason=f"Could not verify: {type(error).__name__}: {error}",
+            idem_key=key, telemetry=None, owner=None, renew=renew)
 
     def record_external_finding(self, *, tenant_id: str, framework: str, control_id: str,
                                 source_system: str, asset_id: str | None, status: ControlStatus,
@@ -278,17 +387,47 @@ class AssessmentService:
             telemetry=raw or {"ingested": True}, owner=None)
 
     def run_batch(self, tenant_id: str, requests: list[AssessmentRequest]) -> dict[str, Any]:
-        results: dict[str, Any] = {"succeeded": 0, "failed": 0, "findings": [], "errors": []}
+        """Assess many controls, recording the ones that could not be assessed.
+
+        A failure here splits two ways, and the split decides whether anything
+        is written:
+
+        Resolving the connector fails — an unknown source system, or one whose
+        credentials are not configured. That is a bad request or a deployment
+        gap, not a statement about the estate, so it is reported and nothing is
+        persisted; writing a finding per malformed request would fill the log
+        with junk from a typo.
+
+        Collection or evaluation fails once the connector exists. Then the
+        target was real and we genuinely could not verify it, which is a fact
+        about the estate and belongs in posture as ERROR. See
+        record_unverifiable().
+        """
+        results: dict[str, Any] = {"succeeded": 0, "failed": 0, "unverifiable": 0,
+                                   "findings": [], "errors": []}
         for r in requests:
             r.tenant_id = tenant_id
+            try:
+                registry.get(r.source_system)
+            except Exception as exc:  # noqa: BLE001
+                results["failed"] += 1
+                results["errors"].append({"control_id": r.control_id, "source_system": r.source_system,
+                                          "error_type": type(exc).__name__, "recorded": False})
+                logger.warning("batch item unroutable control=%s: %s", r.control_id, exc)
+                continue
             try:
                 f = self.run_single(r)
                 results["succeeded"] += 1
                 results["findings"].append(f.finding_id)
             except Exception as exc:  # noqa: BLE001
                 results["failed"] += 1
+                recorded = self.record_unverifiable(r, error=exc)
+                if recorded is not None:
+                    results["unverifiable"] += 1
+                    results["findings"].append(recorded.finding_id)
                 results["errors"].append({"control_id": r.control_id, "source_system": r.source_system,
-                                          "error_type": type(exc).__name__})
+                                          "error_type": type(exc).__name__,
+                                          "recorded": recorded is not None})
                 logger.warning("batch item failed control=%s: %s", r.control_id, exc)
         return results
 
@@ -310,8 +449,41 @@ class AssessmentService:
         stmt = select(Finding).where(Finding.tenant_id == tenant_id)
         if control_id:
             stmt = stmt.where(Finding.control_id == control_id)
-        stmt = stmt.order_by(Finding.created_at.desc()).limit(limit).offset(offset)
+        # finding_id breaks ties: created_at is not unique, and without a total
+        # order LIMIT/OFFSET may return a row on one page and omit it from the
+        # next — which iter_findings() below would then silently drop from a
+        # report.
+        stmt = (stmt.order_by(Finding.created_at.desc(), Finding.finding_id)
+                .limit(limit).offset(offset))
         return list(self.db.execute(stmt).scalars().all())
+
+    def iter_findings(self, tenant_id: str, control_id: str | None = None,
+                      batch: int = MAX_PAGE) -> Iterator[Finding]:
+        """Every finding for a tenant, fetched a page at a time.
+
+        list_findings() is a paged API read and clamps to MAX_PAGE, which is
+        right for an endpoint and wrong for a report: an OSCAL POA&M that stops
+        at 500 findings is a document that tells an auditor a tenant has 500
+        problems when it has two thousand. Reports need completeness.
+
+        Loading the whole table into one list would fix the truthfulness and
+        break the memory bound, so this walks it in pages instead — complete
+        output, bounded working set.
+        """
+        # list_findings clamps its limit to MAX_PAGE. A larger batch would
+        # therefore fetch 500 rows while offset advanced by `batch` — skipping
+        # everything in between, which is the very failure this method exists
+        # to remove. Clamp here so the stride and the page always agree.
+        batch = max(1, min(batch, MAX_PAGE))
+        offset = 0
+        while True:
+            page = self.list_findings(tenant_id, control_id, limit=batch, offset=offset)
+            if not page:
+                return
+            yield from page
+            if len(page) < batch:
+                return
+            offset += batch
 
     def compliance_summary(self, tenant_id: str, framework: str | None = None) -> dict[str, Any]:
         # Read current state from posture (bounded by distinct assets*controls,

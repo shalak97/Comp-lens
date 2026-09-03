@@ -10,6 +10,7 @@ import json as _json
 import logging
 import os as _os
 import os as _os_evm
+import re
 from contextlib import asynccontextmanager
 from dataclasses import asdict as _asdict
 
@@ -1014,10 +1015,19 @@ def posture_as_of(at: str = Query(..., description="ISO 8601 timestamp, e.g. 202
     """Reconstruct compliance posture as it stood at a point in time."""
     from datetime import datetime
     authorize_tenant(p, tenant_id)
+    # `+` is a space in a query string, so an unencoded UTC offset arrives as
+    # "…T12:00:00 00:00". That is what datetime.isoformat() produces and what
+    # any Python or curl caller sends without escaping it — and the endpoint
+    # answered a correct timestamp with "invalid; use ISO 8601", which is both
+    # a rejection and a wrong explanation. A space in the offset position can
+    # only have come from that decoding, so it is unambiguous to put back.
+    raw = re.sub(r"(?<=[\d]) (?=\d{2}:\d{2}$)", "+", at.strip()).replace("Z", "+00:00")
     try:
-        t = datetime.fromisoformat(at.replace("Z", "+00:00"))
+        t = datetime.fromisoformat(raw)
     except ValueError:
-        raise HTTPException(400, "invalid 'at' timestamp; use ISO 8601") from None
+        raise HTTPException(
+            400, f"invalid 'at' timestamp {at!r}; use ISO 8601, e.g. 2026-02-01T00:00:00Z"
+        ) from None
     from app.services.posture_history import as_of
     return {"as_of": t.isoformat(), "controls": as_of(db, tenant_id, t)}
 

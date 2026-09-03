@@ -54,6 +54,8 @@ _POLICY_LANE_STALE_DAYS = 30  # policy verdict decays to floor by this age
 _POLICY_LANE_FLOOR = 0.3
 _ENF_MIN_REQUESTS = 5  # below this, runtime signal is too thin to score
 _DRIFT_WINDOW_DAYS = 14
+_DRIFT_PAGE = 200        # rows per read while counting drift; not a cap on the count
+_DRIFT_SAMPLE = 10       # how many changes are described in the response
 
 # The control-id namespace every lane must share for the fusion join to line up.
 # Policies declare `control: AC-2`, enforcement parses the same, and inherited
@@ -226,26 +228,63 @@ def _drift_signal(db: Session, tenant_id: str) -> dict[str, Any]:
     "no drift" instead of failing the composite.
     """
     try:
-        from app.crawler_models import CrawlResult, CrawlTarget
+        from app.crawler_models import CrawlTarget
         cutoff = _now() - timedelta(days=_DRIFT_WINDOW_DAYS)
-        rows = db.execute(select(CrawlResult).where(
-            CrawlResult.tenant_id == tenant_id,
-            CrawlResult.status == "changed").order_by(desc(CrawlResult.fetched_at)).limit(50)
-        ).scalars().all()
+        total, sample = _changes_since(db, tenant_id, cutoff)
         targets = {t.id: t for t in db.execute(select(CrawlTarget).where(
             CrawlTarget.tenant_id == tenant_id)).scalars().all()}
     except Exception:  # noqa: BLE001 — crawler plane optional (module or table absent)
         db.rollback()
         return {"recent_changes": 0}
-    recent = [r for r in rows if _aware(r.fetched_at) and _aware(r.fetched_at) >= cutoff]
     detail = []
-    for r in recent[:10]:
+    for r in sample:
         t = targets.get(r.target_id)
         detail.append({"target": t.name if t else r.target_id,
                         "kind": t.kind if t else "?",
                         "fetched_at": r.fetched_at.isoformat() if r.fetched_at else None})
-    return {"recent_changes": len(recent), "window_days": _DRIFT_WINDOW_DAYS,
+    return {"recent_changes": total, "window_days": _DRIFT_WINDOW_DAYS,
             "changes": detail}
+
+
+def _changes_since(db: Session, tenant_id: str, cutoff) -> tuple[int, list]:
+    """Count every 'changed' crawl result inside the window, plus a sample.
+
+    This used to take the 50 most recent rows and filter them to the window in
+    Python, so a tenant with more than 50 detections reported exactly 50 —
+    capped, with nothing saying so. Drift is the signal that external ground
+    truth is moving underneath the estate; understating it understates it in
+    the reassuring direction, which is the one direction that matters.
+
+    The count stays exact without an unbounded read. Rows come back newest
+    first, so the first row older than the cutoff ends the walk: everything
+    after it is older still. The window comparison is done in Python rather
+    than in SQL because SQLite returns these timestamps naive, and comparing
+    them against an aware cutoff in the query is how that bites.
+    """
+    from app.crawler_models import CrawlResult
+
+    total, offset = 0, 0
+    sample: list = []
+    while True:
+        page = db.execute(
+            select(CrawlResult)
+            .where(CrawlResult.tenant_id == tenant_id, CrawlResult.status == "changed")
+            # id breaks ties: fetched_at is not unique across a batch run, and
+            # without a total order a row can appear on two pages or neither.
+            .order_by(desc(CrawlResult.fetched_at), desc(CrawlResult.id))
+            .limit(_DRIFT_PAGE).offset(offset)).scalars().all()
+        if not page:
+            return total, sample
+        for r in page:
+            fetched = _aware(r.fetched_at)
+            if fetched is None or fetched < cutoff:
+                return total, sample
+            total += 1
+            if len(sample) < _DRIFT_SAMPLE:
+                sample.append(r)
+        if len(page) < _DRIFT_PAGE:
+            return total, sample
+        offset += _DRIFT_PAGE
 
 
 # ─────────────────────────── fusion ───────────────────────────

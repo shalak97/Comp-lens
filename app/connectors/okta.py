@@ -83,18 +83,27 @@ class OktaConnector(BaseConnector):
         raise ConnectorError(f"Okta connector does not support control {control_id}")
 
     def discover_assets(self, params: dict[str, Any]) -> list[Asset]:
-        out: list[Asset] = []
-        try:
-            for u in self._get("/api/v1/users?limit=50"):
-                out.append(
-                    Asset(
-                        asset_id=u["id"],
-                        asset_type="okta_user",
-                        source_system="OKTA",
-                        owner="identity-team",
-                        raw={"login": u.get("profile", {}).get("login")},
-                    )
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Okta discovery failed: %s", exc)
-        return out
+        """Every Okta user, or an error — never a quiet subset.
+
+        This used to fetch `?limit=50` and swallow any failure into an empty
+        list. Both halves said the same untrue thing: that the org has however
+        many users came back. Fifty of five thousand became the assessed
+        population, and an outage became "you have no users" — an inventory
+        that shrinks to nothing without complaining, and a compliance score
+        computed over whatever survived.
+
+        Okta pages with a Link header, so discovery follows it, and a failure
+        now reaches the caller as a ConnectorError.
+        """
+        users = self._client.get_all_pages(
+            f"{self._base}/api/v1/users?limit=200", headers=self._headers)
+        return [
+            Asset(
+                asset_id=u["id"],
+                asset_type="okta_user",
+                source_system="OKTA",
+                owner="identity-team",
+                raw={"login": u.get("profile", {}).get("login")},
+            )
+            for u in users
+        ]
