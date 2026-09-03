@@ -26,26 +26,57 @@ class InventoryService:
         self.db = db
 
     def discover(self, tenant_id: str, source_system: str, params: dict[str, Any]) -> int:
+        """Upsert everything a connector can enumerate, in two queries.
+
+        This used to issue one SELECT per discovered asset to ask whether it was
+        already known. That was tolerable while connectors returned a single
+        page: Okta and GitHub fetched fifty and the loop ran fifty times. Fixing
+        those connectors to enumerate the whole estate turned the same loop into
+        one round trip per user — three thousand queries for a three thousand
+        seat org, on an endpoint a customer calls to get started. The correct
+        shape was always to ask once.
+
+        Loading the known keys up front also fixes a real bug in the old
+        version: pending inserts are not visible to a later SELECT in the same
+        flush, so a connector returning the same asset twice in one payload
+        inserted it twice and violated nothing that would have caught it. The
+        seen-set below is updated as rows are added, so a duplicate in the
+        payload updates the row the first occurrence created.
+        """
         connector = registry.get(source_system)
         assets = connector.discover_assets(params or {})
-        count = 0
-        for a in assets:
-            exists = self.db.execute(
+        if not assets:
+            logger.info("discovered tenant=%s source=%s new=0 total=0", tenant_id, source_system)
+            return 0
+
+        # One read for everything already on file. Keyed the way the inventory
+        # identifies an asset: an Asset carries its own source_system, which is
+        # not always the connector that produced it.
+        known: dict[tuple[str, str], AssetRecord] = {
+            (r.source_system, r.asset_id): r
+            for r in self.db.execute(
                 select(AssetRecord).where(
                     AssetRecord.tenant_id == tenant_id,
-                    AssetRecord.source_system == a.source_system,
-                    AssetRecord.asset_id == a.asset_id,
+                    AssetRecord.source_system.in_({a.source_system for a in assets}),
                 )
-            ).scalar_one_or_none()
-            if exists:
-                exists.asset_type = a.asset_type
-                exists.owner = a.owner
-            else:
-                self.db.add(AssetRecord(
-                    tenant_id=tenant_id, asset_id=a.asset_id, asset_type=a.asset_type,
-                    source_system=a.source_system, owner=a.owner, criticality=a.criticality,
-                ))
-                count += 1
+            ).scalars().all()
+        }
+
+        count = 0
+        for a in assets:
+            key = (a.source_system, a.asset_id)
+            existing = known.get(key)
+            if existing is not None:
+                existing.asset_type = a.asset_type
+                existing.owner = a.owner
+                continue
+            record = AssetRecord(
+                tenant_id=tenant_id, asset_id=a.asset_id, asset_type=a.asset_type,
+                source_system=a.source_system, owner=a.owner, criticality=a.criticality,
+            )
+            self.db.add(record)
+            known[key] = record
+            count += 1
         self.db.flush()
         logger.info("discovered tenant=%s source=%s new=%d total=%d", tenant_id, source_system, count, len(assets))
         return count

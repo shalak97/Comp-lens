@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import builtins
+import collections
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.audit_models import (
@@ -63,26 +65,70 @@ class AuditService:
         return d
 
     def _progress(self, audit_id: str, tenant_id: str) -> dict[str, Any]:
-        # tenant_id was accepted here but not applied, which was safe only
-        # because every current caller verifies audit ownership first. That is
-        # an invariant held by convention at a distance; scoping the queries
-        # makes it hold locally instead.
-        ctrls = self.db.execute(select(AuditControl).where(
-            AuditControl.audit_id == audit_id,
-            AuditControl.tenant_id == tenant_id)).scalars().all()
-        reqs = self.db.execute(select(EvidenceRequest).where(
-            EvidenceRequest.audit_id == audit_id,
-            EvidenceRequest.tenant_id == tenant_id)).scalars().all()
-        total = len(ctrls)
-        approved = sum(1 for c in ctrls if c.review_state == "approved")
-        rejected = sum(1 for c in ctrls if c.review_state == "rejected")
-        reviewed = sum(1 for c in ctrls if c.review_state in ("approved", "rejected", "exception"))
-        open_reqs = sum(1 for r in reqs if r.state == "open")
-        return {"controls_total": total, "controls_approved": approved,
+        return self._progress_many(tenant_id, [audit_id])[audit_id]
+
+    def _progress_many(self, tenant_id: str, audit_ids: builtins.list[str],
+                       ) -> dict[str, dict[str, Any]]:
+        """Progress for several audits at once, counted in the database.
+
+        Two things were wrong with doing this one audit at a time. It loaded
+        every control row and every request row in full and then counted them in
+        Python — an audit seeds one row per catalogue control, so a summary that
+        reports six integers was reading a few hundred ORM objects to produce
+        them. And list() calls _ser() per audit, which called this per audit, so
+        listing fifty audits was a hundred queries and tens of thousands of rows
+        for one page of a screen.
+
+        The counts are now GROUP BYs, and they cover the whole page in two
+        queries no matter how many audits are on it.
+
+        tenant_id is applied to both queries. It was accepted and ignored here
+        before, which was safe only because every caller verifies audit
+        ownership first — an invariant held by convention at a distance.
+        """
+        ids = list(audit_ids)
+        empty = {"controls_total": 0, "controls_approved": 0, "controls_rejected": 0,
+                 "readiness_pct": 0, "approval_pct": 0,
+                 "evidence_requests_total": 0, "evidence_requests_open": 0}
+        if not ids:
+            return {}
+
+        ctrl_counts: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+        for audit_id, state, n in self.db.execute(
+                select(AuditControl.audit_id, AuditControl.review_state, func.count())
+                .where(AuditControl.audit_id.in_(ids),
+                       AuditControl.tenant_id == tenant_id)
+                .group_by(AuditControl.audit_id, AuditControl.review_state)).all():
+            ctrl_counts[audit_id][state] = n
+
+        req_counts: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+        for audit_id, state, n in self.db.execute(
+                select(EvidenceRequest.audit_id, EvidenceRequest.state, func.count())
+                .where(EvidenceRequest.audit_id.in_(ids),
+                       EvidenceRequest.tenant_id == tenant_id)
+                .group_by(EvidenceRequest.audit_id, EvidenceRequest.state)).all():
+            req_counts[audit_id][state] = n
+
+        out: dict[str, dict[str, Any]] = {}
+        for audit_id in ids:
+            c, r = ctrl_counts.get(audit_id), req_counts.get(audit_id)
+            if not c and not r:
+                out[audit_id] = dict(empty)
+                continue
+            c = c or collections.Counter()
+            r = r or collections.Counter()
+            total = sum(c.values())
+            approved, rejected = c["approved"], c["rejected"]
+            reviewed = approved + rejected + c["exception"]
+            out[audit_id] = {
+                "controls_total": total, "controls_approved": approved,
                 "controls_rejected": rejected,
                 "readiness_pct": round(100 * reviewed / total) if total else 0,
                 "approval_pct": round(100 * approved / total) if total else 0,
-                "evidence_requests_total": len(reqs), "evidence_requests_open": open_reqs}
+                "evidence_requests_total": sum(r.values()),
+                "evidence_requests_open": r["open"],
+            }
+        return out
 
     def list(self, tenant_id: str, limit: int | None = None,
              offset: int = 0) -> builtins.list[dict[str, Any]]:
@@ -92,7 +138,10 @@ class AuditService:
             select(Audit).where(Audit.tenant_id == tenant_id)
             .order_by(Audit.created_at.desc(), Audit.id),
             limit, offset)
-        return [self._ser(a) for a in self.db.execute(stmt).scalars().all()]
+        rows = self.db.execute(stmt).scalars().all()
+        # One progress lookup for the whole page rather than one per audit.
+        progress = self._progress_many(tenant_id, [a.id for a in rows])
+        return [{**self._ser(a, with_progress=False), **progress[a.id]} for a in rows]
 
     def get(self, tenant_id: str, audit_id: str) -> dict[str, Any] | None:
         a = self.db.get(Audit, audit_id)
@@ -136,9 +185,14 @@ class AuditService:
         a = self.db.get(Audit, audit_id)
         if not a or a.tenant_id != tenant_id:
             return False
+        # One statement per child table. Loading every row into the session to
+        # delete it individually meant an audit with a full control checklist
+        # issued a few hundred DELETEs to remove one record. Scoped by tenant
+        # as well as audit for the same defence-in-depth reason as elsewhere in
+        # this file: these statements mutate rows.
         for model in (AuditControl, EvidenceRequest):
-            for row in self.db.execute(select(model).where(model.audit_id == audit_id)).scalars().all():
-                self.db.delete(row)
+            self.db.execute(sa_delete(model).where(
+                model.audit_id == audit_id, model.tenant_id == tenant_id))
         self.db.delete(a)
         self.db.commit()
         return True
