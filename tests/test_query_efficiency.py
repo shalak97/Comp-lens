@@ -38,11 +38,20 @@ from app.services.inventory import InventoryService
 
 @contextmanager
 def counted(session):
-    """Count SQL statements issued on this session's connection."""
+    """Count the data statements issued on this session's connection.
+
+    Transaction control is excluded. Whether a BEGIN lands inside the measured
+    block depends on what ran before it, not on the operation being measured,
+    so counting it made an identical three-query operation look like four in
+    the first block and three in the second — noise that reads as exactly the
+    regression these tests exist to catch.
+    """
     stmts: list[str] = []
+    _control = ("BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE", "PRAGMA")
 
     def before(conn, cursor, statement, params, context, executemany):
-        stmts.append(statement)
+        if not statement.lstrip().upper().startswith(_control):
+            stmts.append(statement)
 
     engine = session.get_bind()
     event.listen(engine, "before_cursor_execute", before)
