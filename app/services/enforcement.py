@@ -17,6 +17,7 @@ import os
 import time
 from collections import defaultdict, deque
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 
 POLICY_DIR = Path(os.environ.get("COMPLENS_POLICY_DIR", Path(__file__).resolve().parent.parent / "policy"))
@@ -96,12 +97,33 @@ def _ingest_entry(e: dict) -> dict | None:
     return rec
 
 
-def _systems_config() -> dict:
-    """Per-system config from the policy bundle's data.json (empty if absent)."""
+@lru_cache(maxsize=4)
+def _systems_config_at(_stamp: tuple[int, int]) -> dict:
+    """The parsed bundle config for one version of data.json.
+
+    Keyed on the file's identity rather than cached outright, because set_mode()
+    rewrites this file: an unconditional cache would keep serving shadow after
+    an operator switched a system to enforce. A changed mtime or size is a
+    different key, so the next read reparses. maxsize bounds the few versions a
+    process sees.
+    """
     try:
         return json.loads((POLICY_DIR / "data.json").read_text()).get("systems", {})
     except (OSError, ValueError):
         return {}
+
+
+def _systems_config() -> dict:
+    """Per-system config from the policy bundle's data.json (empty if absent).
+
+    Read on every enforcement status call and on every unified-trust request,
+    so it is parsed once per version of the file rather than once per call.
+    """
+    try:
+        st = (POLICY_DIR / "data.json").stat()
+    except OSError:
+        return {}
+    return _systems_config_at((st.st_mtime_ns, st.st_size))
 
 
 def bundle_revision() -> str:
