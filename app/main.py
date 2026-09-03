@@ -90,6 +90,24 @@ from app.services.trends import TrendService
 from app.services.trust_graph import TrustGraphService as _TrustGraph
 from app.services.waivers import WaiverService
 
+#: What the document endpoints report about persistence.
+#:
+#: They used to try a "middleware" pipeline and, when the import failed, say
+#: "middleware not available; events not stored" — which reads as a missing
+#: dependency somebody should install. The module never existed in this
+#: repository, and wiring it up would have been the wrong fix anyway: every
+#: extracted event is status "pass", so persisting them would let a policy
+#: document that merely mentions a control raise the compliance score with
+#: nothing verified. Not storing them is the design, so it says so.
+_DOC_NOT_PERSISTED = {
+    "stored": False,
+    "reason": ("A document asserts that a control is described, not that it works, "
+               "so extracted events are returned for review rather than written to "
+               "posture. Use POST /evidence/documents and confirm its concept hits "
+               "to record reviewed evidence under a named approver."),
+}
+
+
 # LOG_FORMAT=json switches to one JSON object per line for log aggregation;
 # the default stays human-readable so local development is unchanged.
 _configure_logging(settings.log_level)
@@ -1795,26 +1813,25 @@ def doc_extract(payload: dict, tenant_id: str = "default",
 def doc_ingest_endpoint(payload: dict, tenant_id: str = "default",
                         db: Session = Depends(get_db),
                         p: Principal = Depends(require(Permission.WRITE))) -> dict:
-    """Extract controls from a document AND persist the resulting events into
-    telemetry (so they flow into the policy / posture layer).
+    """Extract the controls a document asserts, and return them for review.
 
     Body: {"text": "<document content>", "source": "soc2_report"}
+
+    The extracted events are deliberately NOT written into posture. A document
+    asserting a control is evidence the control is *described*, not evidence it
+    *works* — and every extracted event carries status "pass", so persisting
+    them would let a policy PDF that merely mentions AC-2 raise the compliance
+    score with nothing verified. That is the failure this platform exists to
+    prevent, so the reviewed path is the one to use: POST the document to
+    /evidence/documents, then confirm the concept hits it produces, which mints
+    attestations under a named approver.
     """
     authorize_tenant(p, tenant_id)
     text = payload.get("text", "")
     if not text:
         raise HTTPException(400, "provide 'text': document content")
     result = _doc_ingest.ingest_document(text, tenant_id, payload.get("source", "document"))
-    # persist via the middleware pipeline if available; else return events to caller
-    persisted = None
-    try:
-        from app.middleware_core import normalize as _norm
-        from app.services.middleware_service import MiddlewareService as _MW
-        events = _norm(result["events"], "canonical", tenant_id)
-        persisted = _MW(db).ingest(events)
-    except Exception:
-        persisted = {"note": "middleware not available; events returned but not stored"}
-    result["persisted"] = persisted
+    result["persisted"] = _DOC_NOT_PERSISTED
     return result
 
 
@@ -1822,10 +1839,13 @@ def doc_ingest_endpoint(payload: dict, tenant_id: str = "default",
 def doc_upload(payload: dict, tenant_id: str = "default",
                db: Session = Depends(get_db),
                p: Principal = Depends(require(Permission.WRITE))) -> dict:
-    """Ingest a base64-encoded file (PDF/text/markdown) → extract → telemetry.
+    """Extract the controls a base64-encoded file (PDF/text/markdown) asserts.
 
     Body: {"filename": "policy.pdf", "content_base64": "<b64>"}  — base64 keeps
     this dependency-free (no python-multipart needed on the host).
+
+    As with /v1/documents/ingest, the extracted events are returned for review
+    rather than written into posture; see that endpoint for why.
     """
     authorize_tenant(p, tenant_id)
     import base64
@@ -1845,13 +1865,7 @@ def doc_upload(payload: dict, tenant_id: str = "default",
     if not text.strip():
         raise HTTPException(422, "could not extract text from document")
     result = _doc_ingest.ingest_document(text, tenant_id, source=payload.get("filename", "upload"))
-    try:
-        from app.middleware_core import normalize as _norm
-        from app.services.middleware_service import MiddlewareService as _MW
-        events = _norm(result["events"], "canonical", tenant_id)
-        result["persisted"] = _MW(db).ingest(events)
-    except Exception:
-        result["persisted"] = {"note": "middleware not available; events not stored"}
+    result["persisted"] = _DOC_NOT_PERSISTED
     return result
 
 

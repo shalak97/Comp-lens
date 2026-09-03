@@ -21,6 +21,11 @@ from app.audit_models import (
 from app.frameworks import crosswalk_for
 from app.policy.engine import CONTROL_CATALOG
 
+#: Worst-wins precedence when one control has posture on many assets.
+#: A control with one failing bucket is not a satisfied control, and a control
+#: nobody could evaluate is not a passing one either.
+_STATUS_RANK = {"fail": 4, "error": 3, "pass": 2, "not_applicable": 1}
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -140,7 +145,19 @@ class AuditService:
 
     # ── live posture: pull current pass/fail into each control's auto_status ──
     def refresh_posture(self, tenant_id: str, audit_id: str) -> dict[str, Any] | None:
-        """Best-effort: map current findings onto the audit's controls.
+        """Bring each control's auto_status in line with current posture.
+
+        This read the wrong place and reported success for doing nothing. It
+        pulled from `app.middleware_models.StoredEvent` — a module that has
+        never existed in this repository — inside a bare `except Exception:
+        pass`, so the import failed on every call, no status was ever written,
+        and the endpoint answered 200 with `updated: 0`, which is exactly what
+        an already-current audit looks like. Since auto_status is written
+        nowhere else, every audit control in every tenant has carried a blank
+        automated status since the feature shipped, while the export package
+        told auditors it "reflects live connector evidence".
+
+        Posture is the table that holds current state, so that is what it reads.
 
         Returns None when the audit does not belong to this tenant, so the
         route can 404 the same way get()/export_package() do.
@@ -156,15 +173,7 @@ class AuditService:
         a = self.db.get(Audit, audit_id)
         if not a or a.tenant_id != tenant_id:
             return None
-        latest: dict[str, str] = {}
-        try:
-            from app.middleware_models import StoredEvent
-            evs = self.db.execute(select(StoredEvent).where(StoredEvent.tenant_id == tenant_id)
-                                  .order_by(StoredEvent.received_at.desc())).scalars().all()
-            for e in evs:
-                latest.setdefault(e.control_id, e.status)
-        except Exception:
-            pass
+        latest = self._posture_by_control(tenant_id)
         # tenant_id is redundant given the ownership check above, and stays as
         # defence in depth: this statement mutates rows, so it should not be
         # one refactor away from crossing a tenant boundary again.
@@ -174,11 +183,43 @@ class AuditService:
         updated = 0
         for c in ctrls:
             st = latest.get(c.control_id)
-            if st and st != c.auto_status:
+            # Assigned even when it becomes None: evidence that has gone away
+            # must clear the status rather than leave a stale one standing next
+            # to a reviewer's decision.
+            if st != c.auto_status:
                 c.auto_status = st
                 updated += 1
         self.db.commit()
-        return {"controls": len(ctrls), "updated": updated}
+        evidenced = sum(1 for c in ctrls if c.auto_status)
+        return {"controls": len(ctrls), "updated": updated,
+                "controls_with_evidence": evidenced}
+
+    def _posture_by_control(self, tenant_id: str) -> dict[str, str]:
+        """Current status per control, worst-wins across assets and systems.
+
+        Posture holds one row per (control, source system, asset), so a control
+        covering fifty buckets has fifty rows. The audit checklist has one line
+        per control and needs a single word for it, and the only honest
+        reduction is the worst one: a control with one failing bucket is not a
+        satisfied control, however many pass.
+
+        Waivers are deliberately not applied. They suppress a failure from the
+        compliance *score*, which is a management view; the audit checklist is
+        what a reviewer works from, and hiding an accepted risk from the person
+        whose job is to examine it would be the wrong way round. The waiver is
+        visible in its own right.
+        """
+        from app.models import Posture
+
+        rows = self.db.execute(
+            select(Posture.control_id, Posture.status)
+            .where(Posture.tenant_id == tenant_id)).all()
+        out: dict[str, str] = {}
+        for control_id, status in rows:
+            value = str(getattr(status, "value", status))
+            if _STATUS_RANK.get(value, 0) > _STATUS_RANK.get(out.get(control_id, ""), 0):
+                out[control_id] = value
+        return out
 
     # ── checklist ──
     def list_controls(self, tenant_id: str, audit_id: str, limit: int | None = None,
@@ -277,7 +318,17 @@ class AuditService:
             "summary": progress,
             "controls": controls,
             "evidence_requests": requests,
-            "attestation": ("This package reflects the control review states and evidence "
-                            "requests recorded in Comp-Lens at generation time. Each control's "
-                            "auto_status reflects live connector evidence where available."),
+            # An attestation an auditor reads has to describe what was actually
+            # done. The previous wording promised that auto_status reflected
+            # live connector evidence; it reflected nothing, because the
+            # refresh read a module that does not exist. It now says where the
+            # status comes from, how it is reduced, and that a blank means no
+            # evidence rather than a pass.
+            "attestation": (
+                "This package reflects the control review states and evidence requests "
+                "recorded in Comp-Lens at generation time. Each control's auto_status is "
+                "the current assessed posture for that control across every system and "
+                "asset in scope, reduced worst-first (fail over error over pass), and "
+                "refreshed when this audit was last synced. A control with no auto_status "
+                "has no automated evidence — it is unevaluated, not passing."),
         }
