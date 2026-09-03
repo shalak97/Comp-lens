@@ -13,12 +13,12 @@ from __future__ import annotations
 import base64
 import logging
 from typing import Any
-
-import requests
+from urllib.parse import quote
 
 from app.config import settings
 from app.connectors.base import BaseConnector, ConnectorError
 from app.connectors.capabilities import Probe
+from app.connectors.http_client import ReadIntent, ResilientClient
 
 logger = logging.getLogger(__name__)
 
@@ -307,6 +307,8 @@ class AzureConnector(BaseConnector):
             raise ConnectorError("AZURE_TENANT_ID / CLIENT_ID / CLIENT_SECRET required.")
         # Graph and ARM are separate audiences, so tokens are cached per scope.
         self._tokens: dict[str, tuple[str, float]] = {}
+        self._client = ResilientClient(
+            service="AZURE", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _acquire_token(self, scope: str) -> str:
         import time
@@ -321,10 +323,7 @@ class AzureConnector(BaseConnector):
             "scope": scope,
             "grant_type": "client_credentials",
         }
-        r = requests.post(url, data=data, timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Azure token error {r.status_code}: {r.text[:200]}")
-        body = r.json()
+        body = self._client.post_read(url, intent=ReadIntent.TOKEN, data=data)
         token = body["access_token"]
         self._tokens[scope] = (token, time.time() + int(body.get("expires_in", 3600)))
         return token
@@ -333,14 +332,9 @@ class AzureConnector(BaseConnector):
         return self._acquire_token("https://graph.microsoft.com/.default")
 
     def _graph(self, path: str) -> Any:
-        r = requests.get(
+        return self._client.get(
             f"https://graph.microsoft.com/v1.0{path}",
-            headers={"Authorization": f"Bearer {self._acquire_graph_token()}"},
-            timeout=settings.request_timeout_seconds,
-        )
-        if r.status_code >= 400:
-            raise ConnectorError(f"Graph API {r.status_code}: {r.text[:200]}")
-        return r.json()
+            headers={"Authorization": f"Bearer {self._acquire_graph_token()}"})
 
     def _arm(self, resource_path: str, api_version: str | None = None) -> Any:
         """GET an Azure Resource Manager resource under the configured subscription."""
@@ -349,15 +343,10 @@ class AzureConnector(BaseConnector):
         token = self._acquire_token("https://management.azure.com/.default")
         url = (f"https://management.azure.com/subscriptions/"
                f"{settings.azure_subscription_id}{resource_path}")
-        r = requests.get(
+        return self._client.get(
             url,
             headers={"Authorization": f"Bearer {token}"},
-            params={"api-version": api_version or self._ARM_API},
-            timeout=settings.request_timeout_seconds,
-        )
-        if r.status_code >= 400:
-            raise ConnectorError(f"Azure ARM {r.status_code}: {r.text[:200]}")
-        return r.json()
+            params={"api-version": api_version or self._ARM_API})
 
     def healthcheck(self) -> bool:
         try:
@@ -770,16 +759,16 @@ class AzureConnector(BaseConnector):
         if not vault:
             raise ConnectorError("Azure key controls require a 'vault' param.")
         token = self._acquire_token("https://vault.azure.net/.default")
-        r = requests.get(
+        # A 404 here is the answer, not a failure: the key exists and has no
+        # rotation policy set. not_found_ok keeps that distinct from the vault
+        # being unreachable, which must stay an error.
+        body = self._client.get(
             f"https://{vault}.vault.azure.net/keys/{name}/rotationpolicy",
             headers={"Authorization": f"Bearer {token}"},
-            params={"api-version": "7.4"},
-            timeout=settings.request_timeout_seconds)
-        if r.status_code == 404:
+            params={"api-version": "7.4"}, not_found_ok=True)
+        if body is None:
             return {"key_rotation_enabled": False, "owner": "secops-team"}
-        if r.status_code >= 400:
-            raise ConnectorError(f"Key Vault {r.status_code}: {r.text[:200]}")
-        actions = (r.json().get("lifetimeActions") or [])
+        actions = (body.get("lifetimeActions") or [])
         rotates = any((a.get("action", {}) or {}).get("type", "").lower() == "rotate"
                       for a in actions)
         return {"key_rotation_enabled": rotates, "owner": "secops-team"}
@@ -925,6 +914,8 @@ class GCPConnector(BaseConnector):
         self._project = settings.gcp_project_id
         # Credentials resolved from GOOGLE_APPLICATION_CREDENTIALS or
         # GCP_CREDENTIALS_JSON. On GCP, the attached service account is used.
+        self._client = ResilientClient(
+            service="GCP", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def healthcheck(self) -> bool:
         try:
@@ -969,12 +960,8 @@ class GCPConnector(BaseConnector):
         creds, _ = google.auth.default(
             scopes=["https://www.googleapis.com/auth/cloud-platform"])
         creds.refresh(google.auth.transport.requests.Request())
-        r = requests.get(url, params=params or {},
-                         headers={"Authorization": f"Bearer {creds.token}"},
-                         timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"GCP API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(url, params=params or {},
+                                headers={"Authorization": f"Bearer {creds.token}"})
 
     def _project_telemetry(self) -> dict[str, Any]:
         sinks = self._rest(
@@ -1189,13 +1176,11 @@ class GitLabConnector(BaseConnector):
             raise ConnectorError("GITLAB_TOKEN required.")
         self._base = settings.gitlab_url.rstrip("/")
         self._headers = {"PRIVATE-TOKEN": settings.gitlab_token}
+        self._client = ResilientClient(
+            service="GITLAB", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str) -> Any:
-        r = requests.get(f"{self._base}/api/v4{path}", headers=self._headers,
-                         timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"GitLab API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}/api/v4{path}", headers=self._headers)
 
     def healthcheck(self) -> bool:
         try:
@@ -1211,7 +1196,7 @@ class GitLabConnector(BaseConnector):
             if not project_id:
                 raise ConnectorError("GitLab SA-15-BRANCH requires asset_id (project id/path).")
             # URL-encode project path if needed
-            pid = requests.utils.quote(str(project_id), safe="")
+            pid = quote(str(project_id), safe="")
             protected = self._get(f"/projects/{pid}/protected_branches")
             return {
                 "branch_protection_enabled": len(protected) > 0,
@@ -1231,11 +1216,12 @@ class SlackConnector(BaseConnector):
         if not settings.slack_bot_token:
             raise ConnectorError("SLACK_BOT_TOKEN required.")
         self._headers = {"Authorization": f"Bearer {settings.slack_bot_token}"}
+        self._client = ResilientClient(
+            service="SLACK", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, method: str, params: dict[str, Any] | None = None) -> Any:
-        r = requests.get(f"https://slack.com/api/{method}", headers=self._headers,
-                         params=params or {}, timeout=settings.request_timeout_seconds)
-        data = r.json()
+        data = self._client.get(f"https://slack.com/api/{method}",
+                                headers=self._headers, params=params or {})
         if not data.get("ok"):
             raise ConnectorError(f"Slack API error: {data.get('error')}")
         return data
@@ -1279,13 +1265,11 @@ class ServiceNowConnector(BaseConnector):
             "Authorization": f"Basic {base64.b64encode(token).decode()}",
             "Accept": "application/json",
         }
+        self._client = ResilientClient(
+            service="SERVICENOW", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str) -> Any:
-        r = requests.get(f"{self._base}{path}", headers=self._headers,
-                         timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"ServiceNow API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}{path}", headers=self._headers)
 
     def healthcheck(self) -> bool:
         try:
@@ -1323,12 +1307,14 @@ class QualysConnector(BaseConnector):
         self._base = settings.qualys_api_url.rstrip("/")
         self._auth = (settings.qualys_user, settings.qualys_password)
         self._headers = {"X-Requested-With": "comp-lens"}
+        self._client = ResilientClient(
+            service="QUALYS", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def healthcheck(self) -> bool:
         try:
-            r = requests.get(f"{self._base}/api/2.0/fo/about/", auth=self._auth,
-                            headers=self._headers, timeout=settings.request_timeout_seconds)
-            return r.status_code < 400
+            self._client.get(f"{self._base}/api/2.0/fo/about/", auth=self._auth,
+                             headers=self._headers)
+            return True
         except Exception as exc:  # noqa: BLE001
             logger.warning("Qualys healthcheck failed: %s", exc)
             return False
@@ -1339,15 +1325,13 @@ class QualysConnector(BaseConnector):
             if not ip:
                 raise ConnectorError("Qualys RA-5 requires asset_id (host IP).")
             # Qualys returns XML; count severity-5 (critical) detections.
-            r = requests.post(
+            # Qualys expresses this read as a POST and answers with XML, so it
+            # goes through post_read (ReadIntent.QUERY) and comes back as text.
+            body = self._client.post_read(
                 f"{self._base}/api/2.0/fo/asset/host/vm/detection/",
-                auth=self._auth, headers=self._headers,
-                data={"action": "list", "ips": ip, "severities": "5"},
-                timeout=settings.request_timeout_seconds,
-            )
-            if r.status_code >= 400:
-                raise ConnectorError(f"Qualys API {r.status_code}")
-            critical = r.text.count("<DETECTION>")
+                intent=ReadIntent.QUERY, auth=self._auth, headers=self._headers,
+                data={"action": "list", "ips": ip, "severities": "5"})
+            critical = str(body).count("<DETECTION>")
             return {"critical_vulnerabilities": critical, "asset": ip, "owner": "secops-team"}
         raise ConnectorError(f"Qualys connector does not support control {control_id}")
 
@@ -1364,33 +1348,27 @@ class CrowdStrikeConnector(BaseConnector):
         self._base = settings.crowdstrike_base_url.rstrip("/")
         self._token: str | None = None
         self._token_exp: float = 0.0
+        self._client = ResilientClient(
+            service="CROWDSTRIKE", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _auth_token(self) -> str:
         import time
         if self._token and time.time() < self._token_exp - 60:
             return self._token
-        r = requests.post(
-            f"{self._base}/oauth2/token",
+        body = self._client.post_read(
+            f"{self._base}/oauth2/token", intent=ReadIntent.TOKEN,
             data={
                 "client_id": settings.crowdstrike_client_id,
                 "client_secret": settings.crowdstrike_client_secret,
-            },
-            timeout=settings.request_timeout_seconds,
-        )
-        if r.status_code >= 400:
-            raise ConnectorError(f"CrowdStrike auth {r.status_code}: {r.text[:200]}")
-        body = r.json()
+            })
         self._token = body["access_token"]
         self._token_exp = time.time() + int(body.get("expires_in", 1800))
         return self._token
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        r = requests.get(f"{self._base}{path}",
-                        headers={"Authorization": f"Bearer {self._auth_token()}"},
-                        params=params or {}, timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"CrowdStrike API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}{path}",
+                                headers={"Authorization": f"Bearer {self._auth_token()}"},
+                                params=params or {})
 
     def healthcheck(self) -> bool:
         try:

@@ -17,10 +17,9 @@ import base64
 import logging
 from typing import Any
 
-import requests
-
 from app.config import settings
 from app.connectors.base import BaseConnector, ConnectorError
+from app.connectors.http_client import ResilientClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +36,11 @@ class JiraConnector(BaseConnector):
             "Authorization": f"Basic {base64.b64encode(token).decode()}",
             "Accept": "application/json",
         }
-        self._timeout = settings.request_timeout_seconds
+        self._client = ResilientClient(
+            service="JIRA", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str) -> Any:
-        r = requests.get(f"{self._base}{path}", headers=self._headers, timeout=self._timeout)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Jira API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}{path}", headers=self._headers)
 
     def healthcheck(self) -> bool:
         try:

@@ -1,7 +1,7 @@
 """Enterprise-grade HTTP client for connectors.
 
-Connectors that route through ResilientClient rather than calling requests.get
-directly get all of the following, uniformly:
+Every connector that talks to an external API routes through ResilientClient
+instead of calling requests directly. This gives all of them, uniformly:
 
   - timeouts                 never hang on a slow upstream
   - retries w/ backoff       transient 5xx / network errors retried with jitter
@@ -16,14 +16,17 @@ directly get all of the following, uniformly:
 
 This is the difference between "makes an API call" and "production connector".
 
-Not every connector is on it yet: github.py, jira.py, security_tools.py and
-parts of secondary.py still call requests directly, so they have timeouts but
-none of the retry, breaker, SSRF or redaction behaviour above. That is a real
-gap rather than a design choice, and this docstring says so rather than
-claiming a uniformity the package does not have.
+Read-only enforcement blocks POST, because a connector must never change a
+customer's estate. Two reads are POSTs by protocol and cannot be anything else
+— an OAuth2 token exchange, and a query too large for a URL — so they go
+through post_read() with a declared ReadIntent. That exception exists because
+the absolute rule was worse in practice: it made this client unusable for any
+connector needing a token, so those connectors used raw requests for
+everything and lost the guarantees above on their ordinary GETs as well.
 """
 from __future__ import annotations
 
+import enum
 import ipaddress
 import logging
 import random
@@ -40,6 +43,22 @@ from app.connectors.base import ConnectorError
 logger = logging.getLogger(__name__)
 
 _READ_ONLY_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+class ReadIntent(enum.Enum):
+    """Why a POST is a read. See ResilientClient.post_read.
+
+    Deliberately only two members. Anything a connector wants to do that is
+    neither obtaining a credential nor asking a question is a write, and there
+    is no member for it.
+    """
+
+    #: OAuth2 client-credentials exchange — obtains a bearer token, changes
+    #: nothing in the customer's estate.
+    TOKEN = "token"
+    #: A query whose body will not fit in a URL: GraphQL, a search DSL, an
+    #: XML report request.
+    QUERY = "query"
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 _BLOCKED_NETS = [
     ipaddress.ip_network("127.0.0.0/8"), ipaddress.ip_network("10.0.0.0/8"),
@@ -113,8 +132,46 @@ class ResilientClient:
     session: requests.Session = field(default_factory=requests.Session)
 
     def get(self, url: str, headers: dict[str, str] | None = None,
-            params: dict[str, Any] | None = None) -> Any:
-        return self._request("GET", url, headers=headers, params=params)
+            params: dict[str, Any] | None = None,
+            auth: tuple[str, str] | None = None,
+            *, not_found_ok: bool = False) -> Any:
+        """A read. `not_found_ok` turns 404 into None instead of an error.
+
+        Some APIs answer "this feature is not configured here" with a 404 —
+        GitHub's secret-scanning settings, for one. That is an observation
+        about the asset, not a failure of the call, and the caller needs to
+        tell the two apart to report the control honestly.
+        """
+        return self._request("GET", url, headers=headers, params=params, auth=auth,
+                             not_found_ok=not_found_ok)
+
+    def post_read(self, url: str, *, intent: ReadIntent,
+                  headers: dict[str, str] | None = None,
+                  data: Any | None = None, json: Any | None = None,
+                  auth: tuple[str, str] | None = None) -> Any:
+        """A POST that reads rather than writes, with the reason named.
+
+        Read-only enforcement blocks POST because a connector must never change
+        a customer's estate. But two read operations are POSTs by protocol and
+        cannot be anything else: an OAuth2 client-credentials exchange, and a
+        query whose body is too big for a URL (GraphQL, a search DSL, a report
+        request). Refusing them outright did not make anything safer — it made
+        `ResilientClient` unusable for any connector that needs one, so those
+        connectors called requests directly for *everything* and lost the
+        retries, circuit breaker, SSRF guard and redaction on their ordinary
+        GETs too. The rule was strong enough to be routed around, which is the
+        weakest kind of rule.
+
+        So the exception is narrow and declared. `intent` is not verifiable —
+        the client cannot know what a server does with a body — but it makes
+        every read-shaped POST in the codebase greppable and reviewable, and
+        `request()`/`get()` still refuse POST outright, so a mutating call
+        cannot be made by reaching for the general path.
+        """
+        if not isinstance(intent, ReadIntent):
+            raise ConnectorError(f"{self.service}: post_read needs a declared ReadIntent")
+        return self._request("POST", url, headers=headers, data=data, json=json,
+                             auth=auth, _read_intent=intent)
 
     def request(self, method: str, url: str, **kwargs) -> Any:
         return self._request(method, url, **kwargs)
@@ -169,18 +226,30 @@ class ResilientClient:
 
     def _request(self, method: str, url: str, headers: dict[str, str] | None = None,
                  params: dict[str, Any] | None = None,
-                 json: Any | None = None) -> Any:
-        resp = self._send(method, url, headers=headers, params=params, json=json)
+                 json: Any | None = None, data: Any | None = None,
+                 auth: tuple[str, str] | None = None,
+                 *, not_found_ok: bool = False,
+                 _read_intent: ReadIntent | None = None) -> Any:
+        resp = self._send(method, url, headers=headers, params=params, json=json,
+                          data=data, auth=auth, not_found_ok=not_found_ok,
+                          _read_intent=_read_intent)
+        if resp is None:                      # 404 the caller said to expect
+            return None
         try:
             return resp.json()
         except ValueError:
+            # Not every read is JSON — Qualys answers with XML — so the body is
+            # handed back as text rather than being called a failure.
             return resp.text
 
     def _send(self, method: str, url: str, headers: dict[str, str] | None = None,
               params: dict[str, Any] | None = None,
-              json: Any | None = None) -> requests.Response:
+              json: Any | None = None, data: Any | None = None,
+              auth: tuple[str, str] | None = None,
+              *, not_found_ok: bool = False,
+              _read_intent: ReadIntent | None = None) -> requests.Response | None:
         method = method.upper()
-        if method not in _READ_ONLY_METHODS:
+        if method not in _READ_ONLY_METHODS and _read_intent is None:
             raise ConnectorError(
                 f"{self.service}: method {method} blocked — connectors are read-only")
         if self.allow_ssrf_check:
@@ -199,7 +268,7 @@ class ResilientClient:
             try:
                 resp = self.session.request(
                     method, url, headers=headers, params=params, json=json,
-                    timeout=self.timeout)
+                    data=data, auth=auth, timeout=self.timeout)
             except requests.RequestException as exc:
                 last_err = f"network: {type(exc).__name__}"
                 breaker.record_failure()
@@ -218,6 +287,12 @@ class ResilientClient:
                         wait = float(ra)
                 self._sleep(attempt, override=wait)
                 continue
+
+            if resp.status_code == 404 and not_found_ok:
+                # An expected absence, so the service is answering correctly:
+                # it counts as a success for the breaker, not a failure.
+                breaker.record_success()
+                return None
 
             if resp.status_code >= 400:
                 breaker.record_failure()
