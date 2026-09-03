@@ -880,3 +880,151 @@ def test_70_an_untouched_tenant_scores_no_trust(client):
     assert body["controls_scored"] == 0
     assert body["unified_trust_score"] is None, (
         f"a tenant with no evidence was given a trust score: {body['unified_trust_score']}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Act 12 — The audit engagement: where a customer meets their auditor
+#
+# An audit in this product is a checklist of controls, a set of evidence
+# requests, and an export package handed to a third party. The package carries
+# an attestation paragraph, which makes it the most consequential text the
+# platform emits: an auditor reads it as a description of how the numbers next
+# to it were produced.
+# ══════════════════════════════════════════════════════════════════════════
+def _audit(client, t, framework="NIST"):
+    r = client.post(f"/audits?tenant_id={t}",
+                    json={"name": "SOC 2 Type II", "framework": framework, "auditor": "Big Four LLP"})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_71_creating_an_audit_seeds_a_control_checklist(client):
+    t = tenant("audit-seed")
+    a = _audit(client, t)
+    assert a["controls_total"] > 0, "an audit was created with nothing to review"
+    rows = client.get(f"/audits/{a['id']}/controls?tenant_id={t}&limit=1000").json()
+    assert len(rows) == a["controls_total"]
+    assert all(r["review_state"] == "not_started" for r in rows)
+
+
+def test_72_an_audit_checklist_picks_up_evidence_the_platform_already_has(client):
+    """The join that makes an audit worth running inside the platform.
+
+    A reviewer should not be asked to manually assess a control the product has
+    already verified. This refresh silently did nothing at all: it read a
+    module that does not exist, inside a bare except, and reported success — so
+    auto_status was blank on every audit control in every tenant.
+    """
+    t = tenant("audit-refresh")
+    assess(client, t, "SC-7", "host-1", fail=True)
+    assess(client, t, "AU-2", "host-2")
+    a = _audit(client, t)
+
+    r = client.post(f"/audits/{a['id']}/refresh-posture?tenant_id={t}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["controls_with_evidence"] >= 2, (
+        f"the refresh reported success but attached no evidence: {body}")
+
+    rows = {c["control_id"]: c for c in
+            client.get(f"/audits/{a['id']}/controls?tenant_id={t}&limit=1000").json()}
+    assert rows["SC-7"]["auto_status"] == "fail"
+    assert rows["AU-2"]["auto_status"] == "pass"
+
+
+def test_73_a_control_with_no_evidence_is_blank_rather_than_passing(client):
+    """The distinction the attestation now spells out. An unevaluated control
+    must not read as a satisfied one."""
+    t = tenant("audit-blank")
+    assess(client, t, "SC-7", "host-1")
+    a = _audit(client, t)
+    client.post(f"/audits/{a['id']}/refresh-posture?tenant_id={t}")
+
+    rows = client.get(f"/audits/{a['id']}/controls?tenant_id={t}&limit=1000").json()
+    unevaluated = [c for c in rows if c["control_id"] != "SC-7"]
+    assert unevaluated, "fixture no longer exercises the unevaluated case"
+    assert all(c["auto_status"] is None for c in unevaluated), (
+        "a control with no evidence was given a status")
+
+
+def test_74_one_failing_asset_makes_the_control_fail(client):
+    """Posture holds a row per asset; the checklist holds one line per control.
+    The only honest reduction is the worst one."""
+    t = tenant("audit-worst")
+    for i in range(4):
+        assess(client, t, "SC-7", f"ok-{i}")
+    assess(client, t, "SC-7", "bad-1", fail=True)
+
+    a = _audit(client, t)
+    client.post(f"/audits/{a['id']}/refresh-posture?tenant_id={t}")
+    rows = {c["control_id"]: c for c in
+            client.get(f"/audits/{a['id']}/controls?tenant_id={t}&limit=1000").json()}
+    assert rows["SC-7"]["auto_status"] == "fail", (
+        "four passing assets outvoted a failing one")
+
+
+def test_75_the_refresh_reflects_a_control_that_has_since_been_fixed(client):
+    t = tenant("audit-fixed")
+    assess(client, t, "SC-7", "host-1", fail=True)
+    a = _audit(client, t)
+    client.post(f"/audits/{a['id']}/refresh-posture?tenant_id={t}")
+
+    assess(client, t, "SC-7", "host-1")          # remediated
+    client.post(f"/audits/{a['id']}/refresh-posture?tenant_id={t}")
+
+    rows = {c["control_id"]: c for c in
+            client.get(f"/audits/{a['id']}/controls?tenant_id={t}&limit=1000").json()}
+    assert rows["SC-7"]["auto_status"] == "pass", "the checklist kept a stale failure"
+
+
+def test_76_the_export_package_is_complete_and_describes_itself_truthfully(client):
+    """The document that leaves the building."""
+    t = tenant("audit-export")
+    assess(client, t, "SC-7", "host-1", fail=True)
+    a = _audit(client, t)
+    client.post(f"/audits/{a['id']}/refresh-posture?tenant_id={t}")
+
+    pkg = client.get(f"/audits/{a['id']}/export?tenant_id={t}").json()
+    assert len(pkg["controls"]) == a["controls_total"], (
+        "the export omits controls the checklist contains")
+    assert pkg["audit"]["auditor"] == "Big Four LLP"
+
+    attestation = pkg["attestation"].lower()
+    assert "unevaluated, not passing" in attestation, (
+        "the package does not tell the auditor what a blank status means")
+    assert "live connector evidence" not in attestation, (
+        "the package still claims evidence it does not gather that way")
+
+
+def test_77_an_audit_belongs_to_exactly_one_tenant(client):
+    a_t, b_t = tenant("audit-iso-a"), tenant("audit-iso-b")
+    a = _audit(client, a_t)
+    for path in (f"/audits/{a['id']}?tenant_id={b_t}",
+                 f"/audits/{a['id']}/export?tenant_id={b_t}"):
+        assert client.get(path).status_code == 404, f"{path} leaked across tenants"
+    assert client.post(
+        f"/audits/{a['id']}/refresh-posture?tenant_id={b_t}").status_code == 404, (
+        "another tenant could write control statuses onto this audit")
+
+
+def test_78_evidence_requests_track_what_the_auditor_asked_for(client):
+    t = tenant("audit-pbc")
+    a = _audit(client, t)
+    r = client.post(f"/audits/{a['id']}/requests?tenant_id={t}",
+                    json={"title": "Provide Q3 access review", "control_id": "AC-2"})
+    assert r.status_code == 200, r.text
+    req = r.json()
+
+    listed = client.get(f"/audits/{a['id']}/requests?tenant_id={t}").json()
+    assert len(listed) == 1
+    assert client.get(f"/audits/{a['id']}?tenant_id={t}").json()["evidence_requests_open"] == 1
+
+    # "fulfilled" is the state the enum actually defines; an invented one is a
+    # 422 and would leave the request open, which is the right refusal.
+    assert client.patch(f"/audits/requests/{req['id']}?tenant_id={t}",
+                        json={"state": "invented"}).status_code == 422
+    assert client.get(f"/audits/{a['id']}?tenant_id={t}").json()["evidence_requests_open"] == 1
+
+    r = client.patch(f"/audits/requests/{req['id']}?tenant_id={t}", json={"state": "fulfilled"})
+    assert r.status_code == 200, r.text
+    assert client.get(f"/audits/{a['id']}?tenant_id={t}").json()["evidence_requests_open"] == 0
