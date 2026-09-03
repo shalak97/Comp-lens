@@ -1019,5 +1019,12 @@ def test_78_evidence_requests_track_what_the_auditor_asked_for(client):
     assert len(listed) == 1
     assert client.get(f"/audits/{a['id']}?tenant_id={t}").json()["evidence_requests_open"] == 1
 
-    client.patch(f"/audits/requests/{req['id']}?tenant_id={t}", json={"state": "received"})
+    # "fulfilled" is the state the enum actually defines; an invented one is a
+    # 422 and would leave the request open, which is the right refusal.
+    assert client.patch(f"/audits/requests/{req['id']}?tenant_id={t}",
+                        json={"state": "invented"}).status_code == 422
+    assert client.get(f"/audits/{a['id']}?tenant_id={t}").json()["evidence_requests_open"] == 1
+
+    r = client.patch(f"/audits/requests/{req['id']}?tenant_id={t}", json={"state": "fulfilled"})
+    assert r.status_code == 200, r.text
     assert client.get(f"/audits/{a['id']}?tenant_id={t}").json()["evidence_requests_open"] == 0
