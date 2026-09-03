@@ -15,10 +15,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import requests
-
 from app.config import settings
 from app.connectors.base import Asset, BaseConnector, ConnectorError
+from app.connectors.http_client import ResilientClient
 
 logger = logging.getLogger(__name__)
 _API = "https://api.github.com"
@@ -35,45 +34,22 @@ class GitHubConnector(BaseConnector):
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        self._timeout = settings.request_timeout_seconds
+        self._client = ResilientClient(
+            service="GITHUB", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str, ok_404: bool = False) -> Any:
-        r = requests.get(f"{_API}{path}", headers=self._headers, timeout=self._timeout)
-        if r.status_code == 404 and ok_404:
-            return None
-        if r.status_code >= 400:
-            raise ConnectorError(f"GitHub API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{_API}{path}", headers=self._headers,
+                                not_found_ok=ok_404)
 
-    def _get_all_pages(self, path: str, max_pages: int = 200) -> list[Any]:
-        """Follow GitHub's `Link: …; rel="next"` to the end of a collection.
+    def _get_all_pages(self, path: str) -> list[Any]:
+        """Every page of a collection, following GitHub's Link cursor.
 
-        Reaching max_pages raises instead of returning what it has: a short
-        inventory that does not announce itself is worse than an error, because
-        everything downstream treats it as the whole estate.
+        The loop, the cycle detection and the refusal to return a truncated
+        inventory all live in ResilientClient now, shared with Okta — GitHub
+        and Okta page the same RFC 5988 way, so there is no reason for two
+        implementations to drift apart.
         """
-        from app.connectors.http_client import _next_link
-
-        url: str | None = f"{_API}{path}"
-        out: list[Any] = []
-        seen: set[str] = set()
-        for _ in range(max_pages):
-            if url is None:
-                return out
-            if url in seen:
-                raise ConnectorError(f"GitHub pagination loop at {url}")
-            seen.add(url)
-            r = requests.get(url, headers=self._headers, timeout=self._timeout)
-            if r.status_code >= 400:
-                raise ConnectorError(f"GitHub API {r.status_code}: {r.text[:200]}")
-            page = r.json()
-            if not isinstance(page, list):
-                raise ConnectorError(f"GitHub paged endpoint returned {type(page).__name__}")
-            out += page
-            url = _next_link(r.headers.get("Link"))
-        raise ConnectorError(
-            f"GitHub collection exceeded {max_pages} pages; refusing to return a "
-            "partial inventory")
+        return self._client.get_all_pages(f"{_API}{path}", headers=self._headers)
 
     def healthcheck(self) -> bool:
         try:

@@ -23,11 +23,10 @@ import logging
 import time
 from typing import Any
 
-import requests
-
 from app.config import settings
 from app.connectors.base import BaseConnector, ConnectorError
 from app.connectors.capabilities import Probe
+from app.connectors.http_client import ReadIntent, ResilientClient
 
 logger = logging.getLogger(__name__)
 
@@ -66,15 +65,12 @@ class SnykConnector(BaseConnector):
         self._base = settings.snyk_api_url.rstrip("/")
         self._headers = {"Authorization": f"token {settings.snyk_token}",
                          "Accept": "application/vnd.api+json"}
+        self._client = ResilientClient(
+            service="SNYK", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        r = requests.get(f"{self._base}{path}",
-                         headers=self._headers,
-                         params={"version": self._VERSION, **(params or {})},
-                         timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Snyk API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}{path}", headers=self._headers,
+                                params={"version": self._VERSION, **(params or {})})
 
     def healthcheck(self) -> bool:
         try:
@@ -141,14 +137,12 @@ class TenableConnector(BaseConnector):
                           f"secretKey={settings.tenable_secret_key}"),
             "Accept": "application/json",
         }
+        self._client = ResilientClient(
+            service="TENABLE", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        r = requests.get(f"{self._base}{path}", headers=self._headers,
-                         params=params or {},
-                         timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Tenable API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}{path}", headers=self._headers,
+                                params=params or {})
 
     def healthcheck(self) -> bool:
         try:
@@ -216,32 +210,26 @@ class WizConnector(BaseConnector):
                 "WIZ_CLIENT_ID / WIZ_CLIENT_SECRET / WIZ_API_URL required "
                 "(the API endpoint is tenant-specific).")
         self._token: tuple[str, float] | None = None
+        self._client = ResilientClient(
+            service="WIZ", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _access_token(self) -> str:
         if self._token and time.time() < self._token[1] - 60:
             return self._token[0]
-        r = requests.post(
-            settings.wiz_auth_url,
+        body = self._client.post_read(
+            settings.wiz_auth_url, intent=ReadIntent.TOKEN,
             data={"grant_type": "client_credentials",
                   "client_id": settings.wiz_client_id,
                   "client_secret": settings.wiz_client_secret,
-                  "audience": "wiz-api"},
-            timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Wiz auth {r.status_code}: {r.text[:200]}")
-        body = r.json()
+                  "audience": "wiz-api"})
         self._token = (body["access_token"], time.time() + int(body.get("expires_in", 3600)))
         return self._token[0]
 
     def _graphql(self, query: str, variables: dict[str, Any]) -> Any:
-        r = requests.post(
-            str(settings.wiz_api_url).rstrip("/") + "/graphql",
+        body = self._client.post_read(
+            str(settings.wiz_api_url).rstrip("/") + "/graphql", intent=ReadIntent.QUERY,
             headers={"Authorization": f"Bearer {self._access_token()}"},
-            json={"query": query, "variables": variables},
-            timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Wiz API {r.status_code}: {r.text[:200]}")
-        body = r.json()
+            json={"query": query, "variables": variables})
         if body.get("errors"):
             raise ConnectorError(f"Wiz GraphQL error: {str(body['errors'])[:200]}")
         return body.get("data", {})
@@ -304,14 +292,12 @@ class SplunkConnector(BaseConnector):
             raise ConnectorError("SPLUNK_URL and SPLUNK_TOKEN required.")
         self._base = settings.splunk_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {settings.splunk_token}"}
+        self._client = ResilientClient(
+            service="SPLUNK", timeout=settings.request_timeout_seconds, max_retries=3)
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        r = requests.get(f"{self._base}{path}", headers=self._headers,
-                         params={"output_mode": "json", **(params or {})},
-                         timeout=settings.request_timeout_seconds)
-        if r.status_code >= 400:
-            raise ConnectorError(f"Splunk API {r.status_code}: {r.text[:200]}")
-        return r.json()
+        return self._client.get(f"{self._base}{path}", headers=self._headers,
+                                params={"output_mode": "json", **(params or {})})
 
     def healthcheck(self) -> bool:
         try:
