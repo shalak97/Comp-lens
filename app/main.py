@@ -47,6 +47,7 @@ from app.grc_tprm_models import RiskPatch as _RiskPatch
 from app.grc_tprm_models import VendorIn as _VendorIn
 from app.grc_tprm_models import VendorPatch as _VendorPatch
 from app.hardening import (
+    CompressibleGZipMiddleware,
     RateLimitMiddleware,
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
@@ -147,6 +148,19 @@ app = FastAPI(title=settings.app_name, version="1.2.0", lifespan=lifespan,
 # ── production hardening stack (outermost first) ──
 
 app.add_middleware(SecurityHeadersMiddleware, hsts=getattr(settings, "enable_hsts", True))
+# Nothing compressed anything before this. The dashboard is a single 262 KB
+# HTML file that gzips to 74 KB — 188 KB saved on every cold load — and the
+# JSON list endpoints compress comparably, since a page of findings is highly
+# repetitive.
+#
+# Position matters: add_middleware prepends, so the response travels
+# app -> SecurityHeaders -> here -> RateLimit -> RequestContext -> CORS. That
+# puts compression outside SecurityHeaders (so its headers are already on the
+# response and get carried through) and inside CORS (so CORS still decorates
+# the compressed response). `minimum_size` leaves small responses alone: below
+# roughly a packet there is nothing to win, and gzip's header can make the
+# response larger than it started.
+app.add_middleware(CompressibleGZipMiddleware, minimum_size=800)
 app.add_middleware(RateLimitMiddleware,
                    max_requests=(1_000_000 if getattr(settings, "app_env", "production") == "test"
                                  else getattr(settings, "rate_limit_per_minute", 120)),
@@ -1146,7 +1160,16 @@ if _os.path.isdir(_STATIC_DIR):
 
     @app.get("/dashboard", include_in_schema=False)
     def _serve_dashboard():
-        return _FileResponse(_os.path.join(_STATIC_DIR, "dashboard.html"))
+        # `no-cache` means "revalidate", not "don't store". With no
+        # Cache-Control at all a browser applies heuristic freshness — commonly
+        # a fraction of the file's age — so after a deploy some users keep
+        # running the previous dashboard against the new API for an interval
+        # nobody chose. FileResponse still sends ETag and Last-Modified, so the
+        # revalidation is a 304 with no body: correctness without the bytes.
+        # /evidence/map already did exactly this; the dashboard was the
+        # oversight.
+        return _FileResponse(_os.path.join(_STATIC_DIR, "dashboard.html"),
+                             headers={"Cache-Control": "no-cache"})
 
 
 # ── framework catalog + attestation (full coverage) ──

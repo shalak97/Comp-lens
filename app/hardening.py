@@ -7,6 +7,7 @@ including free tiers with no Redis.
 """
 from __future__ import annotations
 
+import gzip
 import hashlib
 import logging
 import time
@@ -148,6 +149,102 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         logger.info("%s %s -> %s rid=%s dur_ms=%.1f",
                     request.method, request.url.path, response.status_code, rid, dur)
         return response
+
+
+# ════════════════════════════════════════════════════════════════════
+# Response compression
+# ════════════════════════════════════════════════════════════════════
+#: Media types that are already compressed. Gzipping these spends CPU to make
+#: the body very slightly larger. `application/gzip` is the one that matters
+#: here — /enforcement/bundle serves a .tar.gz.
+_INCOMPRESSIBLE = (
+    "application/gzip", "application/zip", "application/x-tar",
+    "application/pdf", "image/", "video/", "audio/", "font/",
+)
+
+
+class CompressibleGZipMiddleware:
+    """gzip responses that benefit from it, and only those.
+
+    Written as plain ASGI rather than using Starlette's GZipMiddleware because
+    the decision that matters — whether a body is already compressed — depends
+    on library behaviour this codebase cannot check from its build environment.
+    Being explicit makes it testable here instead of at a customer.
+
+    Two deliberate limits:
+
+    * A streaming response (one that arrives in more than one chunk) is passed
+      through untouched. Buffering it to compress it would defeat the reason it
+      was streamed. Nothing in this app streams today; this keeps that true if
+      something starts.
+    * Bodies below ``minimum_size`` are left alone. Below roughly one packet
+      there is nothing to win, and gzip's own header can make the response
+      bigger than it started.
+    """
+
+    def __init__(self, app, minimum_size: int = 800, compress_level: int = 6):
+        self.app = app
+        self.minimum_size = minimum_size
+        self.compress_level = compress_level
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1")
+                   for k, v in scope.get("headers", [])}
+        if "gzip" not in headers.get("accept-encoding", ""):
+            return await self.app(scope, receive, send)
+
+        start: dict | None = None
+        sent_through = False
+
+        async def _send(message):
+            nonlocal start, sent_through
+            if sent_through:
+                return await send(message)
+
+            if message["type"] == "http.response.start":
+                start = message
+                return  # hold it: the body decides whether we compress
+
+            if message["type"] != "http.response.body":
+                return await send(message)
+
+            body = message.get("body", b"")
+            raw = [(k.decode("latin-1").lower(), v.decode("latin-1"))
+                   for k, v in start["headers"]]
+            ctype = next((v for k, v in raw if k == "content-type"), "")
+            already = any(k == "content-encoding" for k, _ in raw)
+
+            too_small = len(body) < self.minimum_size
+            streaming = message.get("more_body", False)
+            skip = (already or streaming or too_small
+                    or ctype.startswith(_INCOMPRESSIBLE))
+
+            if skip:
+                sent_through = True
+                await send(start)
+                return await send(message)
+
+            packed = gzip.compress(body, self.compress_level)
+            out = [(k, v) for k, v in start["headers"]
+                   if k.decode("latin-1").lower() != b"content-length".decode()]
+            out.append((b"content-encoding", b"gzip"))
+            out.append((b"content-length", str(len(packed)).encode("latin-1")))
+            # Caches must not serve a gzipped body to a client that did not ask
+            # for one.
+            if not any(k == "vary" for k, _ in raw):
+                out.append((b"vary", b"Accept-Encoding"))
+            sent_through = True
+            await send({**start, "headers": out})
+            await send({"type": "http.response.body", "body": packed,
+                        "more_body": False})
+
+        await self.app(scope, receive, _send)
+        # A response that produced a start but no body (rare, but legal) must
+        # still be delivered rather than swallowed by the buffer above.
+        if start is not None and not sent_through:
+            await send(start)
 
 
 # ════════════════════════════════════════════════════════════════════
