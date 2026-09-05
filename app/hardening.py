@@ -7,9 +7,11 @@ including free tiers with no Redis.
 """
 from __future__ import annotations
 
+import base64
 import gzip
 import hashlib
 import logging
+import re
 import time
 import uuid
 from collections import defaultdict, deque
@@ -149,6 +151,62 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         logger.info("%s %s -> %s rid=%s dur_ms=%.1f",
                     request.method, request.url.path, response.status_code, rid, dur)
         return response
+
+
+# ════════════════════════════════════════════════════════════════════
+# Content-Security-Policy for the served HTML consoles
+# ════════════════════════════════════════════════════════════════════
+_INLINE_SCRIPT = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S)
+
+
+def _script_hashes(html: bytes) -> list[str]:
+    """A `'sha256-...'` source for every inline <script> in the document.
+
+    Computed from the file that is actually served, so the policy cannot drift
+    from the page: edit the HTML and the hash follows on the next read. Written
+    by hand rather than pulled from a library because getting this wrong fails
+    open — a stale hash means the browser refuses the script and the console is
+    blank, which is at least loud.
+    """
+    out = []
+    for body in _INLINE_SCRIPT.findall(html):
+        digest = hashlib.sha256(body).digest()
+        out.append("'sha256-" + base64.b64encode(digest).decode("ascii") + "'")
+    return out
+
+
+def csp_for(html: bytes, *, connect_extra: str = "") -> str:
+    """The policy for one HTML console.
+
+    `script-src` names each inline block by hash and nothing else — no
+    'unsafe-inline', no 'unsafe-eval'. That is what makes an injected
+    <script> or an injected event attribute inert rather than merely
+    discouraged, and it is why every on* attribute had to go first: a hash
+    covers a <script> element, never an attribute.
+
+    `style-src` keeps 'unsafe-inline', and that is a real limitation rather
+    than an oversight. The dashboard carries 283 style="" attributes; removing
+    them is a CSS refactor with no security benefit against the threat that
+    matters here, which is script execution. Style injection can deface, not
+    execute.
+
+    `connect-src` includes the configured API origins because the dashboard's
+    base URL is user-configurable — pinning it to 'self' would break exactly
+    the deployments that point a hosted console at their own API.
+    """
+    parts = [
+        "default-src 'none'",
+        "script-src " + " ".join(_script_hashes(html)),
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com data:",
+        "img-src 'self' data:",
+        "connect-src 'self'" + (" " + connect_extra if connect_extra else ""),
+        "base-uri 'none'",          # an injected <base> would re-point every URL
+        "form-action 'none'",       # nothing here posts a form
+        "frame-ancestors 'none'",   # clickjacking; also covered by X-Frame-Options
+        "object-src 'none'",
+    ]
+    return "; ".join(parts)
 
 
 # ════════════════════════════════════════════════════════════════════
