@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.config import settings
+from app.connectors import urls as _urls
 from app.connectors.base import BaseConnector, ConnectorError
 from app.connectors.capabilities import Probe
 from app.connectors.http_client import ReadIntent, ResilientClient
@@ -393,8 +394,9 @@ class AzureConnector(BaseConnector):
         if not user_ref:
             raise ConnectorError("Azure identity control requires asset_id (user id/UPN).")
         # Per-user MFA registration via reports API (needs AuditLog.Read.All)
+        ref = _urls.segment(user_ref)
         data = self._graph(
-            f"/reports/authenticationMethods/userRegistrationDetails/{user_ref}"
+            f"/reports/authenticationMethods/userRegistrationDetails/{ref}"
         )
         registered = bool(data.get("isMfaRegistered"))
 
@@ -405,11 +407,11 @@ class AzureConnector(BaseConnector):
         admin = direct = False
         try:
             transitive = self._graph(
-                f"/users/{user_ref}/transitiveMemberOf/microsoft.graph.directoryRole")
+                f"/users/{ref}/transitiveMemberOf/microsoft.graph.directoryRole")
             roles = transitive.get("value", []) or []
             admin = any(_is_privileged_role(r) for r in roles)
             direct_roles = self._graph(
-                f"/users/{user_ref}/memberOf/microsoft.graph.directoryRole").get("value", []) or []
+                f"/users/{ref}/memberOf/microsoft.graph.directoryRole").get("value", []) or []
             direct = bool(direct_roles)
         except ConnectorError as exc:
             # Role reads need Directory.Read.All. Without it the privilege
@@ -423,7 +425,7 @@ class AzureConnector(BaseConnector):
         # question an AWS login profile answers.
         enabled = None
         try:
-            enabled = bool(self._graph(f"/users/{user_ref}").get("accountEnabled"))
+            enabled = bool(self._graph(f"/users/{ref}").get("accountEnabled"))
         except ConnectorError as exc:
             logger.warning("Azure user read failed for %s: %s", user_ref, exc)
 
@@ -432,7 +434,7 @@ class AzureConnector(BaseConnector):
         # defaulted — a principal we cannot date is not a dormant one.
         last_login_days = None
         try:
-            act = self._graph(f"/users/{user_ref}?$select=signInActivity")
+            act = self._graph(f"/users/{ref}?$select=signInActivity")
             last_login_days = _days_since(_parse_graph_time(
                 (act.get("signInActivity") or {}).get("lastSignInDateTime")))
         except ConnectorError as exc:
@@ -457,7 +459,7 @@ class AzureConnector(BaseConnector):
         if not app_ref:
             raise ConnectorError(
                 "Azure service-principal control requires asset_id (object id or appId).")
-        doc = self._graph(f"/servicePrincipals/{app_ref}")
+        doc = self._graph(f"/servicePrincipals/{_urls.segment(app_ref)}")
         creds = list(doc.get("passwordCredentials") or []) + list(doc.get("keyCredentials") or [])
         newest = None
         for c in creds:
@@ -476,15 +478,21 @@ class AzureConnector(BaseConnector):
 
     @staticmethod
     def _resource_group(params: dict[str, Any]) -> str:
+        """The resource group, escaped for a URL path.
+
+        Caller-supplied and interpolated into every ARM path below, so it is
+        escaped here at the single point it is derived rather than at each of
+        the dozen f-strings that consume it."""
         rg = params.get("resource_group")
         if not rg:
             raise ConnectorError(
                 "Azure resource controls require a 'resource_group' param.")
-        return rg
+        return _urls.segment(rg)
 
     def _storage_account_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
         if not name:
             raise ConnectorError("Azure storage control requires asset_id (account name).")
+        name = _urls.segment(name)
         rg = self._resource_group(params)
         doc = self._arm(
             f"/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}")
@@ -536,6 +544,7 @@ class AzureConnector(BaseConnector):
     def _sql_server_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
         if not name:
             raise ConnectorError("Azure SQL control requires asset_id (server name).")
+        name = _urls.segment(name)
         rg = self._resource_group(params)
         doc = self._arm(
             f"/resourceGroups/{rg}/providers/Microsoft.Sql/servers/{name}",
@@ -660,6 +669,7 @@ class AzureConnector(BaseConnector):
                                    params: dict[str, Any]) -> dict[str, Any]:
         if not name:
             raise ConnectorError("Azure compute control requires asset_id (VM name).")
+        name = _urls.segment(name)
         rg = self._resource_group(params)
         base = f"/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}"
         doc = self._arm(base, api_version="2023-03-01")
@@ -699,6 +709,7 @@ class AzureConnector(BaseConnector):
     def _nsg_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
         if not name:
             raise ConnectorError("Azure network control requires asset_id (NSG name).")
+        name = _urls.segment(name)
         rg = self._resource_group(params)
         doc = self._arm(
             f"/resourceGroups/{rg}/providers/Microsoft.Network/networkSecurityGroups/{name}",
@@ -734,6 +745,7 @@ class AzureConnector(BaseConnector):
         """
         if not name:
             raise ConnectorError("Azure network control requires asset_id (vnet name).")
+        name = _urls.segment(name)
         watcher_rg = params.get("network_watcher_resource_group", "NetworkWatcherRG")
         watcher = params.get("network_watcher", f"NetworkWatcher_{params.get('location', '')}")
         try:
@@ -755,6 +767,7 @@ class AzureConnector(BaseConnector):
     def _key_rotation_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
         if not name:
             raise ConnectorError("Azure key control requires asset_id (key name).")
+        name = _urls.segment(name)
         vault = params.get("vault")
         if not vault:
             raise ConnectorError("Azure key controls require a 'vault' param.")
@@ -776,6 +789,7 @@ class AzureConnector(BaseConnector):
     def _managed_disk_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
         if not name:
             raise ConnectorError("Azure storage control requires asset_id (disk name).")
+        name = _urls.segment(name)
         rg = self._resource_group(params)
         doc = self._arm(
             f"/resourceGroups/{rg}/providers/Microsoft.Compute/disks/{name}",
@@ -1002,7 +1016,7 @@ class GCPConnector(BaseConnector):
             raise ConnectorError("GCP compute controls require a 'zone' param.")
         doc = self._rest(
             f"https://compute.googleapis.com/compute/v1/projects/{self._project}"
-            f"/zones/{zone}/instances/{name}")
+            f"/zones/{_urls.segment(zone)}/instances/{_urls.segment(name)}")
         public = any(cfg.get("natIP") or cfg.get("name")
                      for nic in doc.get("networkInterfaces", []) or []
                      for cfg in nic.get("accessConfigs", []) or [])
@@ -1025,7 +1039,7 @@ class GCPConnector(BaseConnector):
             raise ConnectorError("GCP network control requires asset_id (firewall rule).")
         doc = self._rest(
             f"https://compute.googleapis.com/compute/v1/projects/{self._project}"
-            f"/global/firewalls/{name}")
+            f"/global/firewalls/{_urls.segment(name)}")
         rules = []
         if doc.get("direction", "INGRESS") == "INGRESS" and not doc.get("disabled"):
             for allowed in doc.get("allowed", []) or []:
@@ -1118,7 +1132,7 @@ class GCPConnector(BaseConnector):
             raise ConnectorError("GCP network controls require a 'region' param.")
         doc = self._rest(
             f"https://compute.googleapis.com/compute/v1/projects/{self._project}"
-            f"/regions/{region}/subnetworks")
+            f"/regions/{_urls.segment(region)}/subnetworks")
         subnets = [s for s in doc.get("items", []) or []
                    if str(s.get("network", "")).rsplit("/", 1)[-1] == name]
         if not subnets:
@@ -1137,7 +1151,8 @@ class GCPConnector(BaseConnector):
             raise ConnectorError("GCP key controls require 'location' and 'keyring' params.")
         doc = self._rest(
             f"https://cloudkms.googleapis.com/v1/projects/{self._project}"
-            f"/locations/{location}/keyRings/{keyring}/cryptoKeys/{name}")
+            f"/locations/{_urls.segment(location)}/keyRings/{_urls.segment(keyring)}"
+            f"/cryptoKeys/{_urls.segment(name)}")
         # A rotationPeriod is what makes rotation automatic; without one the
         # key only ever rotates if somebody remembers.
         return {
@@ -1154,7 +1169,7 @@ class GCPConnector(BaseConnector):
             raise ConnectorError("GCP disk controls require a 'zone' param.")
         doc = self._rest(
             f"https://compute.googleapis.com/compute/v1/projects/{self._project}"
-            f"/zones/{zone}/disks/{name}")
+            f"/zones/{_urls.segment(zone)}/disks/{_urls.segment(name)}")
         key = doc.get("diskEncryptionKey") or {}
         # Persistent disks are encrypted at rest unconditionally; a
         # customer-supplied or KMS key changes custody, not whether it is on.

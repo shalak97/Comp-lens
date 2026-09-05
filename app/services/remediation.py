@@ -53,11 +53,16 @@ class RemediationService:
 
         items.sort(key=lambda x: x["priority"], reverse=True)
 
-        current = round(100 * (1 - fail_weight / applicable_weight), 2) if applicable_weight else 100.0
+        # None, not 100.0, when there is no weight to reason about — the same
+        # no-evidence convention compliance_summary uses. Nothing weighed is not
+        # a perfect risk posture; it is an unmeasured one.
+        current = (round(100 * (1 - fail_weight / applicable_weight), 2)
+                   if applicable_weight else None)
         # what-if: fix the top N -> remove their weight from exposure
         topn = items[:top]
         recovered = sum(i["_w"] for i in topn)
-        projected = round(100 * (1 - max(fail_weight - recovered, 0) / applicable_weight), 2) if applicable_weight else 100.0
+        projected = (round(100 * (1 - max(fail_weight - recovered, 0) / applicable_weight), 2)
+                     if applicable_weight else None)
         for i in items:
             i.pop("_w", None)
 

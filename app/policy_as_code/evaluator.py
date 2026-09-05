@@ -226,19 +226,58 @@ _MATCH_MAX_PATTERN = 1_000
 # from evidence data / imported policies, so such a pattern is a ReDoS DoS. The
 # subject-length cap alone does NOT prevent it: `(a+)+$` blows up on a ~30-char
 # string. Reject these pattern shapes outright instead of running them.
-_QUANTIFIED_GROUP = re.compile(r"\(([^()]*)\)\s*(?:[*+]|\{\d*,?\d*\}|[*+]\?)")
+#
+# The body must be matched at ARBITRARY nesting depth, not just at depth one.
+# A first version matched `\(([^()]*)\)` — a group with no parentheses inside —
+# which `((a+))+` walks straight past by adding one layer: undetected, and 24.8
+# SECONDS on a 29-character subject. Balanced groups are therefore collapsed
+# innermost-first, carrying a marker outward, so nesting cannot hide the shape.
+_QUANT_SUFFIX = r"(?:[*+]|\{\d*,?\d*\})\??"
+_INNERMOST_GROUP = re.compile(r"\(([^()]*)\)")
+_DANGEROUS = "\x00"          # marker for "this group repeats something"
 
 
 def _has_nested_quantifier(pat: str) -> bool:
-    """True if `pat` has a quantified group whose body itself contains a
-    quantifier or alternation (the catastrophic-backtracking shape)."""
-    for m in _QUANTIFIED_GROUP.finditer(pat):
+    """True if `pat` contains a quantified group whose body can itself match a
+    variable number of characters — the catastrophic-backtracking shape.
+
+    Works at any nesting depth: innermost groups are replaced by a placeholder
+    that remembers whether their body was repeatable, so `((a+))+` reduces to
+    `(<repeatable>)+` and is caught exactly like `(a+)+`.
+    """
+    # A backreference makes a pattern's cost depend on captured text and is its
+    # own exponential family; `re` cannot bound it either. Rare enough in a
+    # compliance predicate to refuse outright.
+    if re.search(r"\\[1-9]", pat):
+        return True
+    # Drop escaped metacharacters so `\(`, `\+` and `\|` are never read as
+    # structure. A placeholder keeps positions meaningful.
+    work = re.sub(r"\\.", "x", pat)
+    for _ in range(64):                      # bounded: each pass removes a level
+        m = _INNERMOST_GROUP.search(work)
+        if not m:
+            break
         body = m.group(1)
-        # strip escaped metacharacters so `\+` / `\|` don't count as quantifiers
-        stripped = re.sub(r"\\.", "", body)
-        if any(c in stripped for c in "*+|") or re.search(r"\{\d", stripped):
+        repeatable = (_DANGEROUS in body
+                      or "|" in body
+                      or re.search(_QUANT_SUFFIX, body) is not None)
+        tail = work[m.end():]
+        quantified = re.match(_QUANT_SUFFIX, tail) is not None
+        if repeatable and quantified:
             return True
+        # Collapse this group to a single token, remembering repeatability so an
+        # enclosing quantifier still sees it.
+        work = work[:m.start()] + (_DANGEROUS if repeatable else "x") + tail
     return False
+
+
+# Residual risk, stated rather than papered over: `re` has no timeout and this
+# codebase has no dependency that provides one, so a pattern that slips past the
+# structural test above cannot be interrupted once it starts. The test is
+# therefore deliberately conservative — it rejects on suspicion, including
+# backreferences — and the subject cap keeps the polynomial cases cheap. Moving
+# to the `regex` module (which takes a timeout=) is the way to make this
+# enforced rather than heuristic.
 
 
 def _matches(s: Any, pattern: Any) -> bool:
@@ -271,6 +310,39 @@ _FUNCTIONS: dict[str, Callable] = {
     "all": lambda *a: None, "any": lambda *a: None, "count": lambda *a: None,
 }
 _QUANTIFIERS = {"all", "any", "count"}
+
+
+def free_names(expr: str) -> set[str]:
+    """The context fields an expression reads.
+
+    Used to decide whether a policy has the evidence it needs before its result
+    is believed. Names that are literals (`true`/`null`), function names from
+    the registry, and the string bodies of quantifier predicates are excluded;
+    a dotted path contributes its base name, since that is the key the evidence
+    dict is looked up by. Returns an empty set for an unparseable expression —
+    the caller will get a PolicyExpressionError from eval() anyway.
+    """
+    try:
+        tree = _parse_cached(expr)
+    except PolicyExpressionError:
+        return set()
+    literals = {"True", "true", "False", "false", "None", "null"}
+    called: set[str] = set()
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            called.add(node.func.id)
+        if isinstance(node, ast.Attribute):
+            cur: ast.AST = node
+            while isinstance(cur, ast.Attribute):
+                cur = cur.value
+            if isinstance(cur, ast.Name):
+                names.add(cur.id)
+        elif isinstance(node, ast.Name):
+            names.add(node.id)
+    # A quantifier's predicate is a string evaluated against each ITEM, not
+    # against the top-level evidence, so its names are not signals here.
+    return {n for n in names if n not in literals and n not in called}
 
 
 def evaluate_expression(expr: str, context: dict[str, Any],

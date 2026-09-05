@@ -199,6 +199,70 @@ def test_no_connector_calls_requests_directly():
         f"the retry, breaker, SSRF or redaction behaviour: {offenders}")
 
 
+# Outbound HTTP outside the connector package. These are NOT connectors: they
+# talk to infrastructure the operator configured, not to a customer's estate,
+# and several of them legitimately POST — so ResilientClient (GET-only, and
+# SSRF-blocking, which would refuse the localhost OPA sidecar that is the normal
+# deployment) is the wrong tool. What they must not do is drift into
+# unbounded, unreviewed calls.
+#
+# Every entry is a deliberate decision with a reason. A NEW raw `requests` call
+# anywhere under app/ fails this test until it is added here, which is the
+# point: the old test only walked app/connectors/, so "all HTTP is uniform"
+# read as true while seven call sites elsewhere had never been considered.
+_NON_CONNECTOR_HTTP = {
+    "services/llm_client.py": "Anthropic / HuggingFace inference — public hosts, own retry",
+    "services/evidence_policy.py": "OPA decision endpoint — normally a localhost sidecar",
+    "policy/engine.py": "OPA decision endpoint — normally a localhost sidecar",
+    "legacy/transports.py": "legacy envelope POST to an operator-configured endpoint",
+    "notifications.py": "Slack / generic webhook — a POST is the whole point",
+}
+
+APP_DIR = pathlib.Path(__file__).resolve().parent.parent / "app"
+
+
+def test_http_outside_the_connectors_is_declared_and_bounded():
+    """Two claims, both checked: no undeclared raw HTTP anywhere under app/, and
+    every declared site passes a timeout.
+
+    A call with no timeout hangs a worker until the upstream decides otherwise,
+    which for a notification webhook or a policy sidecar is indefinitely."""
+    undeclared, untimed = {}, []
+    for path in sorted(APP_DIR.rglob("*.py")):
+        rel = path.relative_to(APP_DIR).as_posix()
+        if rel.startswith("connectors/"):
+            continue                       # covered by the test above
+        source = path.read_text()
+        tree = ast.parse(source)
+        calls = [n for n in ast.walk(tree)
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                 and n.func.attr in {"get", "post", "put", "patch", "delete",
+                                     "head", "options", "request"}
+                 and isinstance(n.func.value, ast.Name) and n.func.value.id == "requests"]
+        if not calls:
+            continue
+        if rel not in _NON_CONNECTOR_HTTP:
+            undeclared[rel] = [f"requests.{c.func.attr} at line {c.lineno}" for c in calls]
+        for c in calls:
+            if not any(k.arg == "timeout" for k in c.keywords):
+                untimed.append(f"{rel}:{c.lineno}")
+
+    assert not undeclared, (
+        "raw HTTP outside app/connectors/ that nothing has signed off on. Route it "
+        "through ResilientClient, or add it to _NON_CONNECTOR_HTTP with the reason "
+        f"it cannot be: {undeclared}")
+    assert not untimed, f"outbound HTTP with no timeout — these can hang a worker: {untimed}"
+
+
+def test_the_non_connector_http_register_has_no_stale_entries():
+    """An exemption that no longer names a real call site is a comment
+    pretending to be a control."""
+    stale = [rel for rel in _NON_CONNECTOR_HTTP
+             if not (APP_DIR / rel).exists()
+             or "requests." not in (APP_DIR / rel).read_text()]
+    assert not stale, f"_NON_CONNECTOR_HTTP names sites that no longer use requests: {stale}"
+
+
 def test_every_http_connector_builds_a_resilient_client():
     """The other half: not importing `requests` is not the same as using the
     client. A connector that talks HTTP must hold one."""

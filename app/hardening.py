@@ -7,6 +7,7 @@ including free tiers with no Redis.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 import uuid
@@ -94,7 +95,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _key(self, request: Request) -> str:
         api_key = request.headers.get("x-api-key")
         if api_key:
-            return "k:" + api_key[:12]
+            # Hash the WHOLE key, not a prefix. This middleware runs before
+            # authentication, so the bucket is chosen from an unverified header:
+            # keying on `api_key[:12]` meant any request sharing a victim's
+            # first 12 characters consumed the victim's budget, even though the
+            # request itself would go on to fail auth. A digest also keeps the
+            # secret out of the in-memory bucket map.
+            return "k:" + hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:32]
         return "ip:" + self._client_ip(request)
 
     async def dispatch(self, request: Request, call_next: Callable):

@@ -135,7 +135,24 @@ def test_notification_dispatch(monkeypatch):
     import app.notifications as nt
     importlib.reload(nt)
     sent = {}
-    monkeypatch.setattr(nt.requests, "post", lambda url, **kw: sent.update({"url": url, "json": kw.get("json")}) or type("R", (), {"status_code": 200})())
+
+    class _Resp:
+        """A response double that behaves like a real one.
+
+        `requests.post` does not raise on 4xx/5xx, so notifications now call
+        raise_for_status() — a webhook answering `404 invalid_token` was
+        previously recorded as delivered. A stub with only `status_code` no
+        longer stands in for a response.
+        """
+        status_code = 200
+        text = "ok"
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(nt.requests, "post",
+                        lambda url, **kw: sent.update({"url": url, "json": kw.get("json")})
+                        or _Resp())
     class F:
         status = type("S", (), {"value": "fail"})()
         control_id = "SC-7"

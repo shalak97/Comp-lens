@@ -26,9 +26,21 @@ def _slsa_stmt():
         predicate={"runDetails": {"builder": {"id": "https://github.com/actions/runner"}}})
 
 
+def _signed_slsa_env():
+    """A DSSE envelope carrying a signature.
+
+    `build_provenance` now means "provenance exists AND is signed", so the
+    positive assertions below need a signed envelope. A bare statement is a
+    claim the payload makes about itself.
+    """
+    env = dsse_encode(_slsa_stmt())
+    env["signatures"] = [{"sig": "MEUCIQDx", "keyid": "k1"}]
+    return env
+
+
 class Ingest(unittest.TestCase):
     def test_statement_maps_to_provenance_evidence(self):
-        ev = from_intoto(_slsa_stmt())
+        ev = from_intoto(_signed_slsa_env())
         self.assertTrue(ev.telemetry["build_provenance"])
         self.assertTrue(ev.telemetry["slsa_provenance"])
         self.assertEqual(ev.telemetry["builder_id"], "https://github.com/actions/runner")
@@ -36,11 +48,27 @@ class Ingest(unittest.TestCase):
         self.assertIn("supply_chain_security", ev.concepts)
         self.assertEqual(ev.plane, "change_delivery")
 
+    def test_an_unsigned_statement_is_extracted_but_not_trusted(self):
+        """This assertion used to read the other way round, which is the bug:
+        an unsigned statement set build_provenance and became a PASS finding
+        against SR-3, attributed to whatever builder id it named."""
+        ev = from_intoto(_slsa_stmt())
+        self.assertFalse(ev.telemetry["build_provenance"])
+        self.assertTrue(ev.telemetry["build_provenance_unverified"])
+        # still extracted, so the missing signature is visible rather than silent
+        self.assertEqual(ev.asset_id, "pkg:app@1.0")
+        self.assertEqual(ev.telemetry["builder_id"], "https://github.com/actions/runner")
+
+    def test_signature_presence_is_not_signature_verification(self):
+        """This module does no cryptography and must not imply that it does."""
+        self.assertFalse(from_intoto(_signed_slsa_env()).provenance["signature_verified"])
+
     def test_accepts_dsse_wrapped_statement(self):
-        env = dsse_encode(_slsa_stmt())
-        ev = from_intoto(env)
+        ev = from_intoto(_signed_slsa_env())
         self.assertIsNotNone(ev)
         self.assertTrue(ev.telemetry["slsa_provenance"])
+        # and an unsigned envelope is still decoded, just not trusted
+        self.assertIsNotNone(from_intoto(dsse_encode(_slsa_stmt())))
 
     def test_non_provenance_predicate_still_ingested(self):
         stmt = to_intoto_statement(subject_name="x", sha256=_SHA,

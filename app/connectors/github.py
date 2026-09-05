@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from app.config import settings
+from app.connectors import urls as _urls
 from app.connectors.base import Asset, BaseConnector, ConnectorError
 from app.connectors.http_client import ResilientClient
 
@@ -67,10 +68,12 @@ class GitHubConnector(BaseConnector):
             raise ConnectorError("GitHub control requires asset_id as 'owner/repo'.")
 
         if control_id == "SA-15-BRANCH":
-            meta = self._get(f"/repos/{repo}")
+            ref = _urls.multi_segment(repo, expected_parts=2)
+            meta = self._get(f"/repos/{ref}")
             default_branch = meta.get("default_branch", "main")
             prot = self._get(
-                f"/repos/{repo}/branches/{default_branch}/protection", ok_404=True
+                f"/repos/{ref}/branches/{_urls.segment(default_branch)}/protection",
+                ok_404=True,
             )
             return {
                 "branch_protection_enabled": prot is not None,
@@ -79,7 +82,7 @@ class GitHubConnector(BaseConnector):
             }
 
         if control_id == "SA-15-SECRETS":
-            meta = self._get(f"/repos/{repo}")
+            meta = self._get(f"/repos/{_urls.multi_segment(repo, expected_parts=2)}")
             sec = meta.get("security_and_analysis", {}) or {}
             scanning = sec.get("secret_scanning", {}).get("status") == "enabled"
             return {
@@ -99,7 +102,7 @@ class GitHubConnector(BaseConnector):
         # assessed on 50 of them, and an API outage reported an org with no
         # repositories — both presented as a complete inventory. GitHub pages
         # with a Link header; discovery follows it.
-        repos = self._get_all_pages(f"/orgs/{org}/repos?per_page=100")
+        repos = self._get_all_pages(f"/orgs/{_urls.segment(org)}/repos?per_page=100")
         return [
             Asset(
                 asset_id=r["full_name"],

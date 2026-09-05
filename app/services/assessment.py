@@ -514,8 +514,15 @@ class AssessmentService:
         total = sum(by_status.values())
         applicable = total - by_status["not_applicable"]
         score = round(by_status["pass"] / applicable * 100, 2) if applicable else 0.0
-        # higher is better: 100 means no risk-weighted exposure
-        risk_weighted = round(100 * (1 - risk_exposure / max_exposure), 2) if max_exposure else 100.0
+        # Higher is better: 100 means weighed exposure was measured and found to
+        # be zero. No weighed rows at all is NOT that — it is "no evidence", and
+        # returning 100 for it made a never-assessed tenant, an all-ERROR estate
+        # and ten failing INFO controls each report a perfect risk score beside a
+        # compliance_score of 0.00. None is the same no-evidence convention
+        # /v1/grc-trust/unified uses for unified_trust_score.
+        risk_weighted = (round(100 * (1 - risk_exposure / max_exposure), 2)
+                         if max_exposure else None)
         return {"total": total, "by_status": by_status, "waived": waived,
                 "compliance_score": score, "risk_weighted_score": risk_weighted,
+                "risk_weighted_basis": round(max_exposure, 1),
                 "risk_exposure": round(risk_exposure, 1), "framework": framework or "ALL"}

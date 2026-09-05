@@ -859,9 +859,13 @@ def create_remediation_ticket(req: dict, db: Session = Depends(get_db),
     tenant_id = (req or {}).get("tenant_id", "default")
     authorize_tenant(p, tenant_id)
     from app.policy_models import ObligationDispatch
+    # `recorded`, not `queued`: nothing in this system consumes a dispatch row —
+    # there is no worker and every connector is read-only — so calling it queued
+    # named a queue that does not exist, and the follow-through trust lane read
+    # it as remediation that had happened.
     row = ObligationDispatch(
         tenant_id=tenant_id, control_id=(req or {}).get("control_id", ""),
-        procedure="open_ticket", status="queued",
+        procedure="open_ticket", status="recorded",
         severity=(req or {}).get("severity", "medium"),
         detail=(req or {}).get("detail", "") or "Remediation ticket",
         meta={"source": "dashboard"})

@@ -58,6 +58,23 @@ def _infer_procedure(name: str) -> tuple[str, dict]:
     return name.replace(" ", "_"), {}
 
 
+def unroutable_obligations(obligations: list[Any]) -> list[str]:
+    """Obligation names that no procedure will fulfil.
+
+    A policy naming an obligation this module cannot route — `escalate_to_ciso`,
+    say — used to be discovered only at dispatch time, as a `skipped` row in the
+    ledger nobody reads. Surfacing them at load time turns a silent no-op into
+    something the policy author sees. Returns the raw names, not the inferred
+    procedure, since the name is what the author wrote.
+    """
+    out = []
+    for raw in obligations or []:
+        ob = normalize_obligation(raw)
+        if ob["procedure"] not in _REGISTRY:
+            out.append(str(ob["raw"]))
+    return out
+
+
 def normalize_obligation(o: Any) -> dict[str, Any]:
     """Return {procedure, params, raw} for a string or dict obligation."""
     if isinstance(o, str):
@@ -104,11 +121,15 @@ def _annotate_finding(finding, key: str, value: Any) -> None:
 def _open_ticket(ctx: _Ctx):
     pr = ctx.params.get("priority") or _SEV_PRIORITY.get(ctx.severity, "P3")
     assignee = ctx.params.get("assignee")
-    detail = f"Remediation ticket ({pr}) for {ctx.control_id}"
+    detail = f"Remediation ticket ({pr}) recorded for {ctx.control_id}"
     meta = {"priority": pr, "assignee": assignee, "reason": ctx.reason}
     if not ctx.dry_run:
         _annotate_finding(ctx.finding, "ticket", {"priority": pr, "status": "open", "assignee": assignee})
-    return ("queued", detail, meta)
+    # `recorded`, not `queued`: nothing dequeues this. There is no worker and
+    # every connector is read-only, so no ticket is created anywhere. Calling it
+    # queued named a queue that does not exist, and the follow-through trust
+    # lane read that as remediation which had happened.
+    return ("recorded", detail, meta)
 
 
 def _audit_event(ctx: _Ctx):
@@ -157,9 +178,11 @@ def _open_dsar(ctx: _Ctx):
 def _resync_connector(ctx: _Ctx):
     target = (ctx.params.get("connector") or ctx.params.get("instance_id")
               or ctx.evidence.get("connector") or ctx.evidence.get("source") or "connector")
-    detail = f"Re-sync queued for {target}"
-    # Queued rather than synchronous: re-collection runs in the normal sync path.
-    return ("queued", detail, {"target": target})
+    detail = f"Re-sync requested for {target}; it will run on the next scheduled sync"
+    # `recorded`, not `queued`: this enqueues nothing. The next scheduled sync
+    # re-collects whether or not this obligation fired, so claiming a queue
+    # overstated what happened.
+    return ("recorded", detail, {"target": target})
 
 
 def _waiver(ctx: _Ctx):

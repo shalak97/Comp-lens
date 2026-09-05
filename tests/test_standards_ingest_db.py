@@ -85,14 +85,28 @@ def test_sarif_security_finding_persisted_as_ra5(db_session):
 
 
 def test_provenance_persists_as_pass_attestation(db_session):
-    from app.services.intoto import SLSA_PROVENANCE_V1, to_intoto_statement
-    stmt = to_intoto_statement(subject_name="pkg:app@1", sha256="a" * 64,
-                               predicate_type=SLSA_PROVENANCE_V1)
-    out = _ingest(db_session, "t_prov", "intoto", stmt)
+    from app.services.intoto import SLSA_PROVENANCE_V1, dsse_encode, to_intoto_statement
+    # Signed, because that is what makes it evidence rather than a claim the
+    # payload makes about itself. This used to pass a bare statement and expect
+    # a PASS finding, which is how an unsigned blob minted supply-chain
+    # evidence attributed to whatever builder id it named.
+    env = dsse_encode(to_intoto_statement(subject_name="pkg:app@1", sha256="a" * 64,
+                                          predicate_type=SLSA_PROVENANCE_V1))
+    env["signatures"] = [{"sig": "MEUCIQDx", "keyid": "k1"}]
+    out = _ingest(db_session, "t_prov", "intoto", env)
     assert out["ingested"] == 1
     rows = _findings(db_session, "t_prov")
     assert rows[0].control_id == "SR-3"          # supply_chain_security attested
     assert rows[0].status.value == "pass"
+
+
+def test_unsigned_provenance_persists_nothing(db_session):
+    from app.services.intoto import SLSA_PROVENANCE_V1, to_intoto_statement
+    stmt = to_intoto_statement(subject_name="pkg:app@2", sha256="b" * 64,
+                               predicate_type=SLSA_PROVENANCE_V1)
+    out = _ingest(db_session, "t_prov_unsigned", "intoto", stmt)
+    assert out["ingested"] == 0
+    assert _findings(db_session, "t_prov_unsigned") == []
 
 
 def test_threat_context_is_observed_not_persisted(db_session):

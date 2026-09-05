@@ -85,6 +85,20 @@ def _is_blocked_host(host: str) -> bool:
     return False
 
 
+def _reject_traversal(service: str, url: str) -> None:
+    """Refuse a URL whose path carries a dot-segment.
+
+    `.` and `..` are the only path segments that change which endpoint a URL
+    names rather than which object it names, so a connector never has a
+    legitimate reason to emit one — every real path here is a literal template
+    plus escaped references.
+    """
+    path = urlparse(url).path
+    if any(seg in (".", "..") for seg in path.split("/")):
+        raise ConnectorError(
+            f"{service}: refusing request with a path traversal segment")
+
+
 @dataclass
 class CircuitBreaker:
     """Per-service breaker: opens after N consecutive failures, half-opens after cooldown."""
@@ -252,6 +266,15 @@ class ResilientClient:
         if method not in _READ_ONLY_METHODS and _read_intent is None:
             raise ConnectorError(
                 f"{self.service}: method {method} blocked — connectors are read-only")
+        # A caller-supplied asset_id ends up inside an upstream path in every
+        # connector. `requests` resolves dot-segments before sending, so an
+        # asset_id of "../../api/v1/apps" silently retargets the request to a
+        # different endpoint on the same host, with the customer's token — the
+        # finding then cites evidence fetched from somewhere it never named.
+        # app.connectors.urls escapes at the call sites; this is the backstop
+        # that holds for every connector, including ones added later.
+        _reject_traversal(self.service, url)
+
         if self.allow_ssrf_check:
             host = urlparse(url).hostname or ""
             if _is_blocked_host(host):
