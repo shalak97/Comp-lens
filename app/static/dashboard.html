@@ -480,7 +480,69 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
 const $=s=>document.querySelector(s);
 function el(t,c,h){const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;}
 const main=()=>$("#main");
-function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+/* Escapes for an HTML text node or a quoted attribute value.
+   ' and ` are escaped as well as " — a value landing in a single-quoted
+   attribute was otherwise free to close it. */
+function esc(s){return String(s==null?"":s).replace(/[&<>"'`]/g,c=>(
+  {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","`":"&#96;"}[c]));}
+
+/* ── delegated actions ───────────────────────────────────────────────────
+   Data reaches a handler as DATA, never as code.
+
+   What was here instead: a click attribute whose value was built as
+   setFindingLifecycle(<quote>ID<quote>, <quote>resolved<quote>) — server data
+   inside a single-quoted JS string inside a double-quoted attribute, where
+   the browser parses the whole thing as JavaScript.
+
+   esc() cannot make that safe, and the obvious patch of escaping
+   the single quote too does NOT work: a browser HTML-decodes an event
+   attribute BEFORE parsing it as JavaScript, so &#39; becomes a real quote
+   and closes the string anyway. Verified in Chromium — a finding id of
+       x');alert(document.domain);//
+   ran as script either way. The only fix is to stop putting data in a code
+   position at all.
+
+   So: the element names an action and carries its arguments as JSON in a
+   data attribute. The router reads them with getAttribute and JSON.parse,
+   which cannot execute anything, and calls the function with them. A hostile
+   asset name is now just a string that arrives at the handler intact.
+
+   Values reach here from connectors — asset names, vendor names, control ids
+   — so anything able to name an object in the customer's own estate could
+   previously run script in an operator's browser. */
+const ACTION_NAMES = new Set([
+  "createTicket", "setFindingLifecycle", "runControlAssessment",
+  "openAddConnection", "syncAllOfType", "openTreatmentPicker",
+  "vendorRequestReport", "vendorMarkReviewed", "promoteAiToRisk",
+  "reverifyEvidence", "evaluatePolicyNow", "syncGrcPlatform",
+  "refreshAuditPosture", "enfSetMode", "submitTreatment", "instSync",
+  "instTestInline", "instDelete", "openAuditDetail", "openFindingByControl",
+  "openControlByIdFromDrawer", "graphNodeByIndex", "syncCloseThenSync",
+  "closeDrawerThenAddConnection", "__vpOk", "render",
+]);
+
+/* Build the attributes for a delegated action:  ${act("instSync", id, label)} */
+function act(name, ...args){
+  return `data-act="${esc(name)}"` +
+         (args.length ? ` data-args="${esc(JSON.stringify(args))}"` : "");
+}
+
+document.addEventListener("click", function(ev){
+  const el = ev.target && ev.target.closest ? ev.target.closest("[data-act]") : null;
+  if(!el) return;
+  const name = el.getAttribute("data-act");
+  if(!ACTION_NAMES.has(name)) return;      /* allowlist, not a global lookup */
+  const fn = window[name];
+  if(typeof fn !== "function") return;
+  if(el.hasAttribute("data-stop")) ev.stopPropagation();
+  let args = [];
+  const raw = el.getAttribute("data-args");
+  if(raw){
+    try{ const p = JSON.parse(raw); args = Array.isArray(p) ? p : [p]; }
+    catch(e){ args = []; }
+  }
+  fn.apply(el, args);
+});
 function fmtPct(n){return (n==null||isNaN(n))?"—":(+n).toFixed(1);}
 function fmtDate(s){if(!s)return"never";try{return new Date(s).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}catch(e){return s;}}
 function ago(s){if(!s)return"—";const d=(Date.now()-new Date(s))/1000;
@@ -784,7 +846,11 @@ function skelView(opts){opts=opts||{};return (opts.tiles!==false?skelTiles(opts.
 /* ---- error state: distinct from empty, offers retry (re-runs the current view) ---- */
 const RETRY_ICON='<svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
 function errorState(title,msg,onRetry){
-  const retry=onRetry===false?"":`<button class="retry" onclick="${onRetry||'render()'}">${RETRY_ICON}Retry</button>`;
+  /* `onRetry` is an ACTION NAME now, not a code string. No caller has ever
+     passed one — it always resolved to the literal "render()" — so nothing
+     changes in behaviour, but the parameter no longer invites a future caller
+     to interpolate data into a code position. */
+  const retry=onRetry===false?"":`<button class="retry" ${act(ACTION_NAMES.has(onRetry)?onRetry:"render")}>${RETRY_ICON}Retry</button>`;
   return `<div class="errstate"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg><h4>${esc(title||'Something went wrong')}</h4><p>${esc(msg||'')}</p>${retry}</div>`;
 }
 /* given a load() result, decide what to show. returns null when data is OK (caller draws). */
@@ -1574,7 +1640,9 @@ function openDrawer({eyebrow,title,sub,badges,body,actions}){
 }
 function dsec(t,html){return `<div class="dsec"><div class="t">${esc(t)}<span class="bar"></span></div>${html}</div>`;}
 function kvlist(pairs){return `<div class="dl">${pairs.filter(p=>p[1]!=null&&p[1]!=="").map(p=>`<dt>${esc(p[0])}</dt><dd>${p[2]?p[1]:esc(p[1])}</dd>`).join("")}</div>`;}
-function drow(html,onclick){return `<div class="drow${onclick?' link':''}"${onclick?` onclick="${onclick}"`:""}>${html}</div>`;}
+/* `action` is the output of act(...) — attributes, not code. It used to be a
+   JS string with user data interpolated into it, which is a code position. */
+function drow(html,action){return `<div class="drow${action?' link':''}"${action?" "+action:""}>${html}</div>`;}
 function relFindings(cid){return (CACHE.findings||(STATE.demo?D.findings:[])).filter(f=>f.control_id===cid);}
 
 /* delegated: any clickable table row → its detail */
@@ -1590,7 +1658,7 @@ function wireDelegation(){
   });
 }
 
-const tkt=id=>`<button class="btn sm" onclick="createTicket('${esc(id||"")}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Create ticket</button>`;
+const tkt=id=>`<button class="btn sm" ${act("createTicket", id||"")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Create ticket</button>`;
 const closeBtn=`<button class="btn sm ghost" onclick="closeDrawer()">Close</button>`;
 
 const DETAIL={};
@@ -1607,10 +1675,10 @@ DETAIL.findings=function(f){
     badges:sevChip(f.severity)+statusChip(f.status)+(f.lift?`<span class="chip c-pass"><span class="d"></span>+${f.lift} pts on fix</span>`:""),
     body:
       dsec("Detail",kvlist([["Finding ID",f.finding_id||f.id||"—"],["Control",f.control_id,false],["Source system",f.source_system||"—"],["Affected asset",f.asset||"—"],["Severity",titlecase(f.severity)],["Status",titlecase(f.status)]]))+
-      dsec("Linked control",drow(`<span class="id">${esc(f.control_id)}</span><span class="sp"></span><span class="go">open ›</span>`, `closeDrawer();(CACHE.controls||(STATE.demo?D.controls:[])).filter(c=>c.control_id==='${esc(f.control_id)}').forEach(DETAIL.controls)`))+
+      dsec("Linked control",drow(`<span class="id">${esc(f.control_id)}</span><span class="sp"></span><span class="go">open ›</span>`, act("openControlByIdFromDrawer", f.control_id)))+
       dsec("Suggested remediation",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${esc(rem)}</div>`)+
       dsec("Timeline",`<div class="timeline"><div class="tl"><div>Detected by automated assessment</div><div class="w">${esc(fmtDate(f.detected_at))} · ${esc(ago(f.detected_at))}</div></div><div class="tl"><div>Current status — ${esc(titlecase(f.status))}</div><div class="w">now</div></div></div>`),
-    actions:`<button class="btn sm primary" onclick="setFindingLifecycle('${esc(f.finding_id||f.id)}','resolved')">Mark resolved</button><button class="btn sm" onclick="setFindingLifecycle('${esc(f.finding_id||f.id)}','risk_accepted')">Accept risk</button>${tkt(f.control_id)}<div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("setFindingLifecycle", f.finding_id||f.id, "resolved")}>Mark resolved</button><button class="btn sm" ${act("setFindingLifecycle", f.finding_id||f.id, "risk_accepted")}>Accept risk</button>${tkt(f.control_id)}<div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.controls=function(c){
   const rel=relFindings(c.control_id);
@@ -1623,8 +1691,8 @@ DETAIL.controls=function(c){
         `<div style="font-size:11px;color:var(--steel);margin-top:6px">Lanes: ${Object.keys(tb.lanes||{}).map(l=>esc(LANE_LABEL[l]||l)).join(", ")||'none'}</div>`):"")((CACHE.trustBy||{})[c.control_id])+
       dsec("Framework crosswalk",`<div class="flex wrap">${Object.entries(c.frameworks||{}).map(([k,v])=>`<span class="chip c-out">${esc(k)} ${esc((v||[]).join(", "))}</span>`).join("")||'<span style="color:var(--faint)">No mappings</span>'}</div>`)+
       dsec("What this checks",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">The <b>${esc(c.title)}</b> control verifies the ${esc((c.domain||"relevant").toLowerCase())} requirement is enforced across every connected system that exposes it, and produces signed evidence on each evaluation.</div>`)+
-      dsec("Related findings ("+rel.length+")",rel.length?rel.map((f,i)=>drow(`${sevChip(f.severity)}<span style="flex:1">${esc(f.title)}</span><span class="go">open ›</span>`,`openFindingByControl('${esc(c.control_id)}',${i})`)).join(""):`<div style="font-size:12.5px;color:var(--steel)">No open findings — this control is clean.</div>`),
-    actions:`<button class="btn sm primary" onclick="runControlAssessment('${esc(c.control_id)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Run assessment</button><div style="flex:1"></div>${closeBtn}`});
+      dsec("Related findings ("+rel.length+")",rel.length?rel.map((f,i)=>drow(`${sevChip(f.severity)}<span style="flex:1">${esc(f.title)}</span><span class="go">open ›</span>`,act("openFindingByControl", c.control_id, i))).join(""):`<div style="font-size:12.5px;color:var(--steel)">No open findings — this control is clean.</div>`),
+    actions:`<button class="btn sm primary" ${act("runControlAssessment", c.control_id)}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Run assessment</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.connectors=function(c){
   const md={connected:["c-pass","Connected"],demo:["c-focus","Demo"],error:["c-fail","Error"],not_configured:["c-dim","Not configured"],not_connected:["c-dim","Not configured"]}[c.mode]||["c-dim","Not configured"];
@@ -1637,8 +1705,8 @@ DETAIL.connectors=function(c){
       (c.error?dsec("Last error",`<div class="note" style="margin:0;border-left-color:var(--fail)"><b>${esc(c.error)}</b></div>`):"")+
       dsec("Sync status",`<div class="timeline"><div class="tl"><div>${c.mode==='connected'?'Healthy — evidence flowing':c.mode==='error'?'Sync failing':c.mode==='demo'?'Running on synthetic data':'Awaiting credentials'}</div><div class="w">${c.last_sync?ago(c.last_sync):'—'}</div></div></div>`),
     actions:c.mode==='not_configured'
-      ?`<button class="btn sm primary" onclick="closeDrawer();openAddConnection('${esc(c.key||c.registry_key||"")}')">Configure</button><div style="flex:1"></div>${closeBtn}`
-      :`<button class="btn sm primary" onclick="syncAllOfType('${esc(c.key||c.registry_key||"")}','${esc(c.name)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button><div style="flex:1"></div>${closeBtn}`});
+      ?`<button class="btn sm primary" ${act("closeDrawerThenAddConnection", c.key||c.registry_key||"")}>Configure</button><div style="flex:1"></div>${closeBtn}`
+      :`<button class="btn sm primary" ${act("syncAllOfType", c.key||c.registry_key||"", c.name)}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.risks=function(r){
   const s=(r.likelihood||0)*(r.impact||0);const c=s>=15?'c-fail':s>=8?'c-warn':s>=4?'c-focus':'c-pass';
@@ -1647,7 +1715,7 @@ DETAIL.risks=function(r){
     body:
       dsec("Assessment",kvlist([["Owner",r.owner],["Category",r.category],["Likelihood",r.likelihood+" / 5"],["Impact",r.impact+" / 5"],["Inherent score",`<span class="num">${s}</span> (L×I)`,true],["Treatment",titlecase(r.treatment)]]))+
       dsec("Treatment plan",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${{mitigate:"Apply controls to reduce likelihood or impact, then re-score.",transfer:"Shift exposure via contract, insurance, or a third party.",accept:"Residual risk formally accepted and monitored.",avoid:"Eliminate the activity that produces this risk."}[r.treatment]||"Decide and document a treatment."}</div>`),
-    actions:`<button class="btn sm primary" onclick="openTreatmentPicker('${esc(r.id)}','${esc(r.treatment)}')">Update treatment</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("openTreatmentPicker", r.id, r.treatment)}>Update treatment</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.vendors=function(v){
   const sc=v.score||0;const col=sc>=80?'var(--pass)':sc>=60?'var(--warn)':'var(--fail)';
@@ -1658,7 +1726,7 @@ DETAIL.vendors=function(v){
       dsec("Trust score",`<div class="flex"><div class="scorebar"><i style="width:${sc}%;background:${col}"></i></div><span class="num" style="font-size:20px;font-weight:600">${sc}</span></div>`)+
       dsec("Assurance",kvlist([["Criticality tier",titlecase(v.tier)],["Status",titlecase(v.status)],["Certifications",(v.frameworks||[]).join(", ")||"none on file"],["Next review",(od?"overdue · ":"")+fmtDate(v.review_due)]]))+
       (od?dsec("Action needed",`<div class="note" style="margin:0;border-left-color:var(--fail)">This vendor's review is <b>past due</b>. Request a current assurance report before renewing.</div>`):""),
-    actions:`<button class="btn sm primary" onclick="vendorRequestReport('${esc(v.id||v.name)}','${esc(v.name)}')">Request report</button><button class="btn sm" onclick="vendorMarkReviewed('${esc(v.id||v.name)}','${esc(v.name)}')">Mark reviewed</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("vendorRequestReport", v.id||v.name, v.name)}>Request report</button><button class="btn sm" ${act("vendorMarkReviewed", v.id||v.name, v.name)}>Mark reviewed</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.inventory=function(r){
   const cov=r.coverage||{}, obls=r.obligations||[];
@@ -1672,7 +1740,7 @@ DETAIL.inventory=function(r){
         ?dsec("Residual privacy risk",kvlist([["Data sensitivity",r.data_sensitivity||"\u2014"],["Residual risk",r.residual_risk!=null?r.residual_risk+" / 100":"\u2014"],["Band",r.residual_band],["PETs applied",(r.pets||[]).join(", ")||"none"]])+(r.privacy_explanation?`<div class="note" style="margin-top:8px">${esc(r.privacy_explanation)}</div>`:""))
         :dsec("Residual privacy risk",`<div style="font-size:12.5px;color:var(--steel);line-height:1.5">No privacy-enhancing technologies registered. Attach PETs (differential privacy, k-anonymity, \u2026) to reduce inherent data risk.</div>`))+
       dsec("Governed under",(r.frameworks||[]).map(f=>`<span class="chip c-out" style="margin:2px">${esc(f)}</span>`).join(" ")||"\u2014"),
-    actions:`<button class="btn sm primary" onclick="promoteAiToRisk('${esc(r.id)}')">Promote to risk</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("promoteAiToRisk", r.id)}>Promote to risk</button><div style="flex:1"></div>${closeBtn}`});
 };
 /* compact demo catalog so the browser works offline; live fetches the full set */
 D.catalogControls={
@@ -1743,7 +1811,7 @@ DETAIL.evidence=function(e){
       dsec("Provenance",kvlist([["Control",e.control,false],["Source",e.source],["Sealed",fmtDate(e.collected_at)+" · "+ago(e.collected_at)]]))+
       dsec("Integrity seal",`<div class="codeblk">sha256: ${esc(e.hash)}\nstate:  ${e.verified?'verified — matches stored record':'pending re-verification'}</div>`)+
       dsec("Note",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">The hash is a sha256 digest of the stored record, recomputable on demand. It proves the record matches what\u2019s in the database now \u2014 it is not a cryptographic signature of authorship.</div>`),
-    actions:`<button class="btn sm primary" onclick="reverifyEvidence('${esc(e.id)}')">Re-verify</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("reverifyEvidence", e.id)}>Re-verify</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.kev=function(k){
   const od=k.due&&new Date(k.due)<Date.now();
@@ -1753,7 +1821,7 @@ DETAIL.kev=function(k){
     body:
       dsec("Exposure",kvlist([["Affected","this org · "+k.affected],["CVSS",cvssTxt],["Exploited in wild",k.exploited?"yes — on CISA KEV":"no"],[k.due?"Remediate by":"Added to KEV",(od?"overdue · ":"")+(k.due?fmtDate(k.due):(k.added?fmtDate(k.added):"—"))]]))+
       (od?dsec("Overdue",`<div class="note" style="margin:0;border-left-color:var(--fail)">Remediation deadline has <b>passed</b>. Prioritize patching the affected asset.</div>`):""),
-    actions:`<button class="btn sm primary" onclick="createTicket('${esc(k.cve)}','high','Remediate '+'${esc(k.cve)}')">Create remediation</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("createTicket", k.cve, "high", "Remediate "+k.cve)}>Create remediation</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.policies=function(p){
   // esc() the free-text fields BEFORE they enter the code block — this string is
@@ -1766,21 +1834,21 @@ DETAIL.policies=function(p){
     body:
       dsec("Definition",`<div class="codeblk">${code.replace(/\b(package|default|allow|if|import)\b/g,'<span class="kw">$1</span>').replace(/(== true)/g,'<span class="st">$1</span>')}</div>`)+
       dsec("Coverage & evaluation",kvlist([["Evaluated on",(p.coverage||[]).join(", ")||"—"],["Version",p.version],["Status",titlecase(p.status)],["Last evaluated",p.last_eval?ago(p.last_eval):"never"]])),
-    actions:`<button class="btn sm primary" onclick="evaluatePolicyNow('${esc(p.id)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Evaluate now</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("evaluatePolicyNow", p.id)}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M5 3l14 9-14 9z'/></svg>Evaluate now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.platforms=function(p){
   openDrawer({eyebrow:"integration · "+p.name,title:esc(p.name),sub:"GRC platform attestation sync",
     badges:`<span class="chip ${({connected:'c-pass',not_connected:'c-dim'})[p.status]}"><span class="d"></span>${p.status==='connected'?'Connected':'Not configured'}</span>`,
     body:dsec("Inherited attestations",kvlist([["Total ingested",p.total||0],["Passing",p.pass||0],["Failing",p.fail||0],["Mapped to controls",p.mapped||0]]))+
       (p.status==='not_connected'?dsec("Connect",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">This connector is read-only and credential-gated \u2014 it fails closed until the platform's API key is configured on the server.</div>`):""),
-    actions:`<button class="btn sm primary" onclick="syncGrcPlatform('${esc(p.key)}','${esc(p.name)}')">Sync now</button><div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("syncGrcPlatform", p.key, p.name)}>Sync now</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.audits=function(a){
   openDrawer({eyebrow:"audit · "+a.name,title:esc(a.name),sub:esc(a.auditor)+" · "+esc(a.window),
     badges:statusChip(a.status)+`<span class="chip c-out">${a.progress}% complete</span>`,
     body:dsec("Engagement",kvlist([["Auditor",a.auditor],["Window",a.window],["Evidence requests",a.requests],["Open requests",a.open],["Progress",a.progress+"%"]]))+
       dsec("Auditor access",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Access is read-only and scoped to the engagement window. Every document opened is written to the audit trail.</div>`),
-    actions:`<button class="btn sm primary" onclick="refreshAuditPosture('${esc(a.id)}')">Refresh posture for auditor</button>${STATE.demo?'':`<a class="btn sm" href="${esc(CFG.base.replace(/\/$/,""))}${esc(withTenant("/audits/"+encodeURIComponent(a.id)+"/export"))}" target="_blank" rel="noopener">Export package</a>`}<div style="flex:1"></div>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("refreshAuditPosture", a.id)}>Refresh posture for auditor</button>${STATE.demo?'':`<a class="btn sm" href="${esc(CFG.base.replace(/\/$/,""))}${esc(withTenant("/audits/"+encodeURIComponent(a.id)+"/export"))}" target="_blank" rel="noopener">Export package</a>`}<div style="flex:1"></div>${closeBtn}`});
 };
 function graphNodeDetail(model,n){
   const ins=model.edges.filter(e=>e[1]===n.id).map(e=>model.byId[e[0]]);
@@ -1792,6 +1860,13 @@ function graphNodeDetail(model,n){
       dsec("What this means",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">${n.type==='control'?'A control node. If it fails, every upstream requirement and framework that depends on it inherits the gap.':n.type==='framework'?'A framework node. Its readiness is the roll-up of all the controls reachable from here.':n.type==='vendor'?'A vendor node. Weakness here propagates into the systems and controls it touches.':'An intermediate node linking sources to the controls that satisfy them.'}</div>`),
     actions:closeBtn});
 }
+function openControlByIdFromDrawer(cid){
+  closeDrawer();
+  (CACHE.controls||(STATE.demo?D.controls:[])).filter(c=>c.control_id===cid).forEach(DETAIL.controls);
+}
+function closeDrawerThenAddConnection(key){closeDrawer();openAddConnection(key);}
+function syncCloseThenSync(key,name){syncClose();syncGrcPlatform(key,name);}
+function graphNodeByIndex(ni){graphNodeDetail(GMODEL,GMODEL.nodes[ni]);}
 function openFindingByControl(cid,i){const f=relFindings(cid)[i];if(f){closeDrawer();setTimeout(()=>DETAIL.findings(f),120);}}
 function openAuditDetail(i){const a=(CACHE.audits||[])[i];if(a)DETAIL.audits(a);}
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#scrim2")&&$("#scrim2").classList.contains("on")){syncClose();return;}if($("#drawer").classList.contains("on"))closeDrawer();});
@@ -1903,8 +1978,8 @@ RENDER.enforcement = async function(){
 
 DETAIL.enfsystems=function(s){
   const promote=s.mode==="enforce"
-    ? `<button class="btn sm" onclick="enfSetMode('${esc(s.system)}','shadow')">Return to shadow</button>`
-    : `<button class="btn sm primary" onclick="enfSetMode('${esc(s.system)}','enforce')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>Promote to enforce</button>`;
+    ? `<button class="btn sm" ${act("enfSetMode", s.system, "shadow")}>Return to shadow</button>`
+    : `<button class="btn sm primary" ${act("enfSetMode", s.system, "enforce")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>Promote to enforce</button>`;
   openDrawer({eyebrow:"enforcement · system",title:esc(s.system),sub:"Policy "+esc(s.policy_id),
     badges:`<span class="chip ${s.mode==='enforce'?'c-pass':'c-focus'}"><span class="d"></span>${titlecase(s.mode)}</span>`+(s.fail==='open'?'<span class="chip c-warn"><span class="d"></span>Fail-open</span>':'<span class="chip c-dim"><span class="d"></span>Fail-closed</span>'),
     body:
@@ -1993,7 +2068,7 @@ function askPassphrase(creating){
       <div class="fld"><label>Passphrase</label><input id="vpass" type="password" autocomplete="off" autofocus/></div>
       ${creating?'<div class="fld"><label>Confirm</label><input id="vpass2" type="password" autocomplete="off"/></div>':''}
     </div>
-    <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="__vp(null)">Cancel</button><button class="btn primary" onclick="__vpOk(${creating})">${creating?"Set passphrase":"Unlock"}</button></div></div>`;
+    <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="__vp(null)">Cancel</button><button class="btn primary" ${act("__vpOk", creating)}>${creating?"Set passphrase":"Unlock"}</button></div></div>`;
     s.classList.add("on");
     window.__vp=v=>{s.onclick=null;delete window.__vp;delete window.__vpOk;res(v);};
     window.__vpOk=isCreate=>{const p=($("#vpass")||{}).value||"";if(!p){toast("Enter a passphrase","warn");return;}if(isCreate){if(p!==(($("#vpass2")||{}).value||"")){toast("Passphrases don't match","warn");return;}if(p.length<6){toast("Use at least 6 characters","warn");return;}}window.__vp(p);};
@@ -2044,7 +2119,7 @@ function openTreatmentPicker(riskId,current){
   const opts=["mitigate","transfer","accept","avoid"];
   s.innerHTML=`<div class="dialog" style="max-width:380px"><div class="dialog-h"><h3>Update treatment</h3></div>
   <div class="dialog-b"><div class="fld"><label>Treatment</label><select id="trSel">${opts.map(o=>`<option value="${o}" ${o===current?'selected':''}>${o[0].toUpperCase()+o.slice(1)}</option>`).join("")}</select></div></div>
-  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="submitTreatment('${esc(riskId)}')">Save</button></div></div>`;
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" ${act("submitTreatment", riskId)}>Save</button></div></div>`;
   s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
 }
 async function submitTreatment(riskId){
@@ -2242,7 +2317,7 @@ DETAIL.instances=function(i){
       dsec("Credentials",`<div style="font-size:12.5px;color:var(--body);line-height:1.55">Configured: ${(i.config_keys_set||[]).map(k=>`<span class="chip c-dim" style="margin:2px"><span class="d"></span>${esc(k)}</span>`).join(" ")||"none"}</div>`+(missing.length?`<div class="note" style="margin-top:8px">Missing for live: ${missing.map(esc).join(", ")} — runs in demo until set.</div>`:"")+(i.local?`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored <b>encrypted in this browser</b> (AES-GCM, unlocked by your passphrase). Sent to the server only to run a sync \u2014 never saved there.</div>`:`<div style="font-size:11.5px;color:var(--steel);margin-top:8px">Stored encrypted (Fernet) on the server; values are never displayed.</div>`))+
       dsec("Evidence types",`<div style="font-size:12.5px;color:var(--body);line-height:1.55;margin-bottom:8px">${connDescribe(c)}</div><div class="flex wrap">${evTypeChips(c.evidence_types||evTypesFor(i.connector_key))}</div>`)+
       dsec("Coverage",kvlist([["Controls covered",(controlsFor(i.connector_key)!=null?String(controlsFor(i.connector_key)):"—")],["Category",c.category?titlecase(c.category):"—"],["Registry key",c.registry_key||i.connector_key]])+`<div style="font-size:11.5px;color:var(--steel);line-height:1.55;margin-top:8px">Feeds normalized evidence into shared control fields — so multiple accounts of one type each contribute independently.</div>`),
-    actions:`<button class="btn sm primary" onclick="instSync('${esc(i.id)}','${esc(i.label)}')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button> <button class="btn sm" onclick="instTestInline('${esc(i.id)}')">Test connection</button><div style="flex:1"></div><button class="btn sm" onclick="instDelete('${esc(i.id)}','${esc(i.label)}')">Remove</button>${closeBtn}`});
+    actions:`<button class="btn sm primary" ${act("instSync", i.id, i.label)}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10'/></svg>Sync now</button> <button class="btn sm" ${act("instTestInline", i.id)}>Test connection</button><div style="flex:1"></div><button class="btn sm" ${act("instDelete", i.id, i.label)}>Remove</button>${closeBtn}`});
 };
 </script>
 <script>
@@ -2619,7 +2694,7 @@ RENDER.response = async function(){
       <td class="mono" style="font-size:12px">${esc(f.source_system||"—")}</td>
       <td>${sevChip(f.severity)}</td>
       <td><span class="chip c-pass"><span class="d"></span>+${f.lift} pts</span></td>
-      <td class="right"><button class="btn sm ghost" onclick="createTicket('${esc(f.control_id)}','${f.severity||'medium'}')">Create ticket</button></td></tr>`).join("")||`<tr><td colspan="7">${emptyState("Queue empty","No open findings to remediate.")}</td></tr>`}</tbody>
+      <td class="right"><button class="btn sm ghost" ${act("createTicket", f.control_id, f.severity||"medium")}>Create ticket</button></td></tr>`).join("")||`<tr><td colspan="7">${emptyState("Queue empty","No open findings to remediate.")}</td></tr>`}</tbody>
   </table></div></div></div>`;
 };
 
@@ -2653,7 +2728,7 @@ RENDER.audits = async function(){
     <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Open requests</div><div class="v num">${audits.reduce((a,x)=>a+x.open,0)}</div></div>
     <div class="ro"><div class="k">Evidence requests</div><div class="v num">${audits.reduce((a,x)=>a+x.requests,0)}</div></div>
   </div>
-  <div class="grid g-3">${audits.map((a,i)=>`<div class="panel" style="cursor:pointer" onclick="openAuditDetail(${i})"><div class="panel-b">
+  <div class="grid g-3">${audits.map((a,i)=>`<div class="panel" style="cursor:pointer" ${act("openAuditDetail", i)}><div class="panel-b">
     <div class="flex" style="justify-content:space-between"><b style="font-size:14px">${esc(a.name)}</b>${statusChip(a.status)}</div>
     <div class="t2" style="margin:4px 0 12px">${esc(a.auditor)} · ${esc(a.window)}</div>
     <div class="calbar"><span class="tickmk" style="left:25%"></span><span class="tickmk" style="left:50%"></span><span class="tickmk" style="left:75%"></span><i style="width:${a.progress}%;background:${a.progress>=100?'var(--pass)':'var(--focus)'}"></i></div>
@@ -2695,7 +2770,7 @@ function grcPlatTable(plats){
       <td><span class="chip ${HM[p.status]}"><span class="d"></span>${p.status==='connected'?'Connected':'Not configured'}</span></td>
       <td class="num">${p.total||0}${p.total?` <span style="color:var(--steel);font-size:11px">(${p.pass} pass / ${p.fail} fail)</span>`:""}</td>
       <td class="num">${p.mapped||0}</td>
-      <td class="right"><button class="btn sm" onclick="event.stopPropagation();syncGrcPlatform('${esc(p.key)}','${esc(p.name)}')">Sync now</button></td></tr>`).join("")}</tbody>
+      <td class="right"><button class="btn sm" data-stop ${act("syncGrcPlatform", p.key, p.name)}>Sync now</button></td></tr>`).join("")}</tbody>
   </table></div></div></div>`;
 }
 /* ---------- Sync now: connecting dialog with per-step progress ----------
@@ -2770,7 +2845,7 @@ async function syncGrcPlatform(key,name){
   const started=Date.now();
   const dwell=fn=>setTimeout(fn,Math.max(0,900-(Date.now()-started)));
 
-  const finish=(retry)=>{ $("#sync-f").innerHTML=(retry?`<button class="btn sm ghost" onclick="syncClose();syncGrcPlatform('${esc(key)}','${esc(name)}')">Try again</button>`:"")
+  const finish=(retry)=>{ $("#sync-f").innerHTML=(retry?`<button class="btn sm ghost" ${act("syncCloseThenSync", key, name)}>Try again</button>`:"")
     +`<button class="btn sm primary" onclick="syncClose()">Close</button>`; };
 
   const fail=(e)=>{ settled=true; stop();
@@ -2986,7 +3061,7 @@ function drawGraph2D(host,model,vendor){
   const W=760,H=420,cx=W/2,cy=H/2,SX=150,SY=64;
   const px=n=>cx+n.x*SX, py=n=>cy+n.y*SY*1.15;
   const node=(n,ni)=>{const c=`var(${n.col})`;const r=n.tier===0?22:n.tier===1?16:13;const x=px(n),y=py(n);
-    return `<g class="gnode" onclick="graphNodeDetail(GMODEL,GMODEL.nodes[${ni}])"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r+10}" fill="transparent"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="var(--face)" stroke="${c}" stroke-width="2"/>
+    return `<g class="gnode" ${act("graphNodeByIndex", ni)}><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r+10}" fill="transparent"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="var(--face)" stroke="${c}" stroke-width="2"/>
       <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r-7}" fill="${c}" opacity="0.16"/>
       <text x="${x.toFixed(1)}" y="${(y-r-7).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono" font-size="11" fill="var(--ink)">${esc(n.label)}</text>
       <text x="${x.toFixed(1)}" y="${(y+r+15).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono" font-size="8.5" letter-spacing="1" fill="var(--faint)">${esc(n.type.toUpperCase())}</text></g>`;};
