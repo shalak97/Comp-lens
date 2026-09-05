@@ -31,11 +31,12 @@
 <link id="webfonts" rel="stylesheet" media="print"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
 <script>
-/* The media swap used to be an onload="" attribute. A CSP script hash covers a
-   <script> block and never an event attribute, so under script-src the
-   attribute would simply not run and the webfonts would never be promoted past
-   media="print" — the page would render in the fallback faces forever. Doing it
-   here keeps the stylesheet non-blocking AND lets it apply. */
+/* The media swap used to be a load handler written as an attribute on the link.
+   A CSP script hash covers a <script> block and never an event attribute, so
+   under script-src that attribute would simply not run and the webfonts would
+   never be promoted past media="print" — the page would render in the fallback
+   faces forever, silently, because a stylesheet that never applies is not a JS
+   error. Doing it here keeps the stylesheet non-blocking AND lets it apply. */
 (function(){
   var l=document.getElementById("webfonts");
   if(!l)return;

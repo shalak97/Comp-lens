@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import gzip
 import pathlib
+import re
 
 import pytest
 
@@ -158,9 +159,28 @@ def test_a_non_http_scope_is_passed_straight_through():
 
 # ── the dashboard's own delivery ──
 def test_the_font_stylesheet_does_not_block_the_first_paint():
+    """Two properties, asserted without naming how they are achieved.
+
+    An earlier version of this test looked for the literal `this.media='all'`,
+    which pinned the *mechanism* — an inline load handler on the link. When CSP
+    made that mechanism illegal and the swap moved into a script, the test
+    failed on a change that was strictly an improvement. A test that names an
+    implementation goes off the moment the implementation is corrected, which
+    is the opposite of what it is for.
+    """
     html = DASHBOARD.read_text()
-    assert 'media="print"' in html and "this.media='all'" in html, (
-        "the Google Fonts stylesheet is render-blocking again")
+    # Match the whole tag, not a line: the attributes are wrapped across two.
+    link = next((m.group(0) for m in re.finditer(r"<link\b[^>]*>", html)
+                 if "fonts.googleapis.com/css2" in m.group(0)
+                 and "stylesheet" in m.group(0)), None)
+    assert link is not None, "the webfont stylesheet link has gone"
+    # 1. it must not be a plain render-blocking stylesheet
+    assert 'media="print"' in link, (
+        f"the Google Fonts stylesheet is render-blocking again: {link.strip()[:120]}")
+    # 2. something must promote it, or the fonts never apply at all
+    assert 'media="all"' in html or "media='all'" in html or '.media = "all"' in html, (
+        "nothing promotes the stylesheet past media=print — the page would "
+        "render in fallback faces forever")
     assert "<noscript>" in html, "no fallback for a browser with JS disabled"
 
 
