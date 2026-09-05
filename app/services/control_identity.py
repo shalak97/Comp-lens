@@ -66,6 +66,39 @@ def crosswalk_key(catalog_key: str) -> str | None:
     return _CATALOG_TO_CROSSWALK.get(catalog_key)
 
 
+#: "AC-2.1" -> "AC-2(1)". Single-level only, which is every enhancement NIST
+#: publishes and every one present in this repository's data files.
+_DOTTED_ENHANCEMENT = re.compile(r"^([A-Z]{2,3}-\d+)\.(\d+)$")
+
+
+def canonical_control_id(control_id: str) -> str:
+    """One spelling for a control that the catalogues name two ways.
+
+    NIST writes an enhancement `AC-2(1)`. Four of this repository's knowledge
+    bases — control_baselines, control_guidance, cis_mappings and nist_related —
+    write the same control `AC-2.1`, and nothing translated between them. The
+    two forms are different dictionary keys and different graph nodes, so:
+
+      * every baseline-tier and guidance lookup missed all 182 enhancements,
+        which is why /remediation/plan reported `baseline: ["—"]` and empty
+        guidance for controls NIST does place in a baseline;
+      * `baseline_bonus` was therefore always zero for an enhancement, so the
+        remediation priority score ranked them systematically below base
+        controls regardless of their tier;
+      * the dependency graph built `AC-6(7)` from the concept lexicon and
+        `AC-6.7` from nist_related as two unconnected nodes, so a cascade
+        stopped at the namespace boundary.
+
+    Anything that is not a dotted NIST enhancement is returned unchanged, which
+    leaves ISO ids (`A.8.24`), SOC 2 ids (`CC6.1`) and this platform's internal
+    ids (`SC-28-OBJSTORE-KMS`) alone.
+    """
+    if not control_id:
+        return control_id
+    m = _DOTTED_ENHANCEMENT.match(control_id.strip().upper())
+    return f"{m.group(1)}({m.group(2)})" if m else control_id
+
+
 def _resolve_ref(ref: str, catalog_ids: frozenset[str]) -> str | None:
     """Map one crosswalk reference onto a real catalogue id.
 
