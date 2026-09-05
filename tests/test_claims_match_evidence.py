@@ -23,7 +23,6 @@ import pytest
 from app.connectors import urls as connector_urls
 from app.connectors.base import ConnectorError
 from app.connectors.http_client import ResilientClient
-from app.services.trends import _VERIFIED  # noqa: F401  (documents the intent)
 
 
 # ── #10 follow-through: only completion is completion ──
@@ -96,6 +95,31 @@ def test_a_single_lane_control_says_it_is_single_sourced():
 
 
 # ── #17 a rejected webhook is not a delivered notification ──
+class _Finding:
+    class status:
+        value = "fail"
+
+    class severity:
+        value = "high"
+    control_id, source_system, tenant_id = "AC-2", "OKTA", "t1"
+    asset_id, finding_id, description = "u1", "f1", ""
+
+
+def _fake_settings(**over):
+    """A stand-in for the settings object.
+
+    Replacing the whole object rather than setting attributes on the real
+    pydantic instance keeps this independent of that model's assignment rules.
+    """
+    from types import SimpleNamespace
+    base = {"notify_slack_webhook": "https://hooks.slack.test/x",
+            "notify_generic_webhook": "", "smtp_host": "",
+            "notify_email_to": "", "notify_email_from": "", "smtp_user": "",
+            "notify_on_status": "fail", "request_timeout_seconds": 5}
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
 def test_a_webhook_that_answers_4xx_is_not_reported_as_delivered(monkeypatch):
     """`requests.post` returns normally on 4xx/5xx, so "delivered" meant "the
     socket did not error". A revoked Slack webhook — 404 invalid_token, the
@@ -111,23 +135,27 @@ def test_a_webhook_that_answers_4xx_is_not_reported_as_delivered(monkeypatch):
         def raise_for_status(self):
             raise requests.HTTPError("404 Client Error")
 
-    monkeypatch.setattr(notifications.settings, "notify_slack_webhook",
-                        "https://hooks.slack.test/x", raising=False)
-    monkeypatch.setattr(notifications.settings, "notify_generic_webhook", "", raising=False)
-    monkeypatch.setattr(notifications.settings, "smtp_host", "", raising=False)
-    monkeypatch.setattr(notifications.settings, "notify_on_status", "fail", raising=False)
+    monkeypatch.setattr(notifications, "settings", _fake_settings())
     monkeypatch.setattr(requests, "post", lambda *a, **k: _Resp())
+    assert notifications.notify_finding(_Finding()) == {"slack": False}
 
-    class _F:
-        class status:
-            value = "fail"
 
-        class severity:
-            value = "high"
-        control_id, source_system, tenant_id = "AC-2", "OKTA", "t1"
-        asset_id, finding_id, description = "u1", "f1", ""
+def test_a_webhook_that_succeeds_is_still_reported_as_delivered(monkeypatch):
+    """The guard must not have turned every notification into a failure."""
+    import requests
 
-    assert notifications.notify_finding(_F()) == {"slack": False}
+    from app import notifications
+
+    class _Resp:
+        status_code = 200
+        text = "ok"
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(notifications, "settings", _fake_settings())
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _Resp())
+    assert notifications.notify_finding(_Finding()) == {"slack": True}
 
 
 def test_slack_rejecting_the_payload_with_a_200_is_not_delivery(monkeypatch):
@@ -143,8 +171,7 @@ def test_slack_rejecting_the_payload_with_a_200_is_not_delivery(monkeypatch):
         def raise_for_status(self):
             return None
 
-    monkeypatch.setattr(notifications.settings, "notify_slack_webhook",
-                        "https://hooks.slack.test/x", raising=False)
+    monkeypatch.setattr(notifications, "settings", _fake_settings())
     monkeypatch.setattr(requests, "post", lambda *a, **k: _Resp())
     with pytest.raises(RuntimeError):
         notifications._slack("hello")

@@ -81,12 +81,25 @@ class Planning(unittest.TestCase):
         self.assertEqual(plans[0].control_id, "RA-5")
 
     def test_provenance_persists_as_pass_sr3(self):
+        from app.services.intoto import dsse_encode
+
+        # Signed, because that is what makes it evidence. This test used to
+        # pass a bare statement, which is the payload asserting its own
+        # provenance — and it minted a PASS finding against SR-3 for it.
+        env = dsse_encode(to_intoto_statement(subject_name="pkg:app@1", sha256="a" * 64,
+                                              predicate_type=SLSA_PROVENANCE_V1))
+        env["signatures"] = [{"sig": "AA"}]
+        plans = plan_findings(normalize("intoto", env))
+        sr3 = [p for p in plans if p.control_id == "SR-3"]
+        self.assertEqual(len(sr3), 1)
+        self.assertEqual(sr3[0].status, "pass")
+
+    def test_unsigned_provenance_persists_nothing(self):
+        """The regression: anyone who can reach the ingest endpoint could mint
+        passing supply-chain evidence attributed to GitHub Actions."""
         stmt = to_intoto_statement(subject_name="pkg:app@1", sha256="a" * 64,
                                    predicate_type=SLSA_PROVENANCE_V1)
-        plans = plan_findings(normalize("intoto", stmt))
-        self.assertEqual(len(plans), 1)
-        self.assertEqual(plans[0].control_id, "SR-3")   # supply_chain_security
-        self.assertEqual(plans[0].status, "pass")
+        self.assertEqual(plan_findings(normalize("intoto", stmt)), [])
 
     def test_sigstore_signature_persists_as_pass_si7(self):
         from app.services.intoto import dsse_encode
