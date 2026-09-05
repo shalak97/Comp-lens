@@ -20,6 +20,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.services import evidence_graph as evg
+from app.services.control_identity import canonical_control_id
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
@@ -38,6 +39,11 @@ def _graph() -> dict[str, list[dict[str, Any]]]:
     adj: dict[str, dict[str, dict[str, Any]]] = {}
 
     def put(src, tgt, etype, weight, prov, rationale):
+        # Both spellings of an enhancement collapse to one node here. The
+        # concept lexicon supplies "AC-6(7)" and nist_related.json supplies
+        # "AC-6.7"; without this they were two unconnected nodes and a cascade
+        # stopped at the namespace boundary.
+        src, tgt = canonical_control_id(src), canonical_control_id(tgt)
         if src == tgt:
             return
         bucket = adj.setdefault(src, {})
@@ -81,11 +87,12 @@ def _graph() -> dict[str, list[dict[str, Any]]]:
 
 def out_edges(control_id: str) -> list[dict[str, Any]]:
     """Controls affected if `control_id` degrades (downstream dependents)."""
-    return _graph().get(control_id, [])
+    return _graph().get(canonical_control_id(control_id), [])
 
 
 def in_edges(control_id: str) -> list[dict[str, Any]]:
     """Controls that `control_id` depends on (upstream prerequisites)."""
+    control_id = canonical_control_id(control_id)
     out = []
     for src, edges in _graph().items():
         for e in edges:

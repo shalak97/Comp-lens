@@ -31,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.services import dependency_graph as dg
+from app.services.control_identity import canonical_control_id
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
@@ -42,9 +43,20 @@ def _kb():
             return json.load(open(os.path.join(_DATA, n), encoding="utf-8"))
         except FileNotFoundError:
             return {}
-    return {"guidance": load("control_guidance.json"),
-            "baselines": load("control_baselines.json"),
-            "cis": load("cis_mappings.json"),
+    def by_control(name):
+        """A knowledge base re-keyed to the catalogue's spelling.
+
+        These files write an enhancement "AC-2.1" while findings, the crosswalk
+        and the framework catalogue all write "AC-2(1)". Re-keying on load means
+        every lookup below hits, instead of missing all 182 enhancements and
+        reporting them as having no baseline tier, no guidance and no CIS
+        safeguard.
+        """
+        return {canonical_control_id(k): v for k, v in load(name).items()}
+
+    return {"guidance": by_control("control_guidance.json"),
+            "baselines": by_control("control_baselines.json"),
+            "cis": by_control("cis_mappings.json"),
             "effort": load("family_effort.json")}
 
 
@@ -79,7 +91,7 @@ def _effort(cid: str, available_connectors: list[str]) -> dict[str, Any]:
     if covered:
         base = max(1, base - 1)
         reasons.append("a connected source can automate this family (-1)")
-    tiers = _kb()["baselines"].get(cid, [])
+    tiers = _kb()["baselines"].get(canonical_control_id(cid), [])
     if tiers == ["HIGH"]:
         base = min(3, base + 1)
         reasons.append("HIGH-baseline-only specialist control (+1)")
@@ -102,11 +114,18 @@ def plan(db: Session, tenant_id: str, framework: str,
     failing = [c.upper() for c in (failing_controls or [])]
     if not failing:
         failing = _failing_from_attestations(db, tenant_id, framework)
-    failing_set = set(failing)
+    # Canonical, because `downstream` below comes from the graph in that
+    # namespace: intersecting the two in different spellings would silently
+    # report that a failing enhancement unblocks nothing.
+    failing_set = {canonical_control_id(c) for c in failing}
     conns = available_connectors or []
 
     items = []
-    for cid in failing:
+    for raw_cid in failing:
+        # Canonical for every knowledge-base and graph lookup; the caller's
+        # spelling is preserved in the response so the answer names the control
+        # they asked about.
+        cid = canonical_control_id(raw_cid)
         downstream = _downstream_hard(cid)
         unblocks = sorted(downstream & failing_set)
         leverage = len(downstream)
@@ -116,7 +135,7 @@ def plan(db: Session, tenant_id: str, framework: str,
         score = round((leverage + 3 * len(unblocks) + baseline_bonus) / eff["score"], 2)
         cis = kb["cis"].get(cid) or kb["cis"].get(_family(cid)) or []
         items.append({
-            "control_id": cid, "leverage": leverage, "unblocks": unblocks,
+            "control_id": raw_cid, "leverage": leverage, "unblocks": unblocks,
             "unblocks_count": len(unblocks), "effort": eff["band"],
             "effort_detail": eff["reasons"], "baseline": tiers or ["\u2014"],
             "priority_score": score,

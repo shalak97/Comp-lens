@@ -536,6 +536,36 @@ def _fn_size(v: Any) -> int:
     raise CELError("size() expects a string, list or map")
 
 
+def _type_name(v: Any) -> str:
+    """The CEL name for a value's type, for error messages."""
+    if isinstance(v, bool):
+        return "bool"
+    if v is None:
+        return "null"
+    return {int: "int", float: "double", str: "string",
+            list: "list", dict: "map"}.get(type(v), type(v).__name__)
+
+
+def _is_int(v: Any) -> bool:
+    """int, and not bool.
+
+    Python makes bool a subclass of int, so `True + 1` is 2 and `'a' * 2` is
+    'aa'. CEL has no such overloads — bool is its own type and arithmetic on it
+    is a type error. Without this the engine silently accepts expressions the
+    spec rejects, which is the same portability problem as the division one.
+    """
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _is_number(v: Any) -> bool:
+    return _is_int(v) or isinstance(v, float)
+
+
+def _require_numbers(op: str, a: Any, b: Any) -> None:
+    if not (_is_number(a) and _is_number(b)):
+        raise CELError(f"no matching overload: {_type_name(a)} {op} {_type_name(b)}")
+
+
 def _binary(op: str, a: Any, b: Any) -> Any:
     if op == "==":
         return a == b
@@ -558,19 +588,38 @@ def _binary(op: str, a: Any, b: Any) -> Any:
             return a + b
         if isinstance(a, list) and isinstance(b, list):
             return a + b
+        _require_numbers(op, a, b)
         return a + b
     if op == "-":
+        _require_numbers(op, a, b)
         return a - b
     if op == "*":
+        _require_numbers(op, a, b)
         return a * b
     if op == "/":
+        _require_numbers(op, a, b)
         if b == 0:
             raise CELError("division by zero")
-        return a // b if isinstance(a, int) and isinstance(b, int) else a / b
+        if _is_int(a) and _is_int(b):
+            # CEL integer division truncates toward zero, like C, Go and Java.
+            # Python's // floors toward negative infinity, so -7 / 2 is -4 here
+            # and -3 in every conformant implementation. The whole reason this
+            # pack is written in CEL rather than a Python subset is that the
+            # language is a published spec somebody can look up — an expression
+            # checked against that spec has to mean the same thing here.
+            q = abs(a) // abs(b)
+            return -q if (a < 0) != (b < 0) else q
+        return a / b
     if op == "%":
+        # CEL defines the remainder for integers only.
+        if not (_is_int(a) and _is_int(b)):
+            raise CELError(f"no matching overload: {_type_name(a)} % {_type_name(b)}")
         if b == 0:
             raise CELError("modulus by zero")
-        return a % b
+        # Sign follows the dividend, so that a == (a / b) * b + a % b holds
+        # with truncating division above. Python's % takes the sign of the
+        # divisor, which breaks that identity for mixed signs.
+        return a - b * _binary("/", a, b)
     raise CELError(f"unsupported operator {op}")
 
 
@@ -600,7 +649,10 @@ class _Evaluator:
         if kind == "not":
             return not _truthy(self.eval(node[1]))
         if kind == "neg":
-            return -self.eval(node[1])
+            v = self.eval(node[1])
+            if not _is_number(v):
+                raise CELError(f"no matching overload: -{_type_name(v)}")
+            return -v
         if kind == "cond":
             return self.eval(node[2]) if _truthy(self.eval(node[1])) else self.eval(node[3])
         if kind == "select":
@@ -727,7 +779,21 @@ class _Evaluator:
 
 
 def evaluate(expr: str, context: dict[str, Any]) -> Any:
-    """Evaluate a CEL expression against a context of named values."""
+    """Evaluate a CEL expression against a context of named values.
+
+    Everything this raises is a CELError. The evaluator works on Python values,
+    so an unhandled operand combination used to surface whatever Python raised —
+    a bare TypeError from `1 + 'a'`, for instance. Callers catch CELError; one
+    that leaks a TypeError makes a bad expression look like a bug in the engine
+    rather than a bad expression.
+    """
     if not isinstance(context, dict):
         raise CELError("context must be a mapping")
-    return _Evaluator(context).eval(parse(expr))
+    try:
+        return _Evaluator(context).eval(parse(expr))
+    except CELError:
+        raise
+    except RecursionError as exc:                    # pathologically nested input
+        raise CELError("expression is too deeply nested") from exc
+    except Exception as exc:  # noqa: BLE001 — the library boundary: one error type out
+        raise CELError(f"{type(exc).__name__}: {exc}") from exc
