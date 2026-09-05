@@ -24,6 +24,7 @@ import time
 from typing import Any
 
 from app.config import settings
+from app.connectors import urls as _urls
 from app.connectors.base import BaseConnector, ConnectorError
 from app.connectors.capabilities import Probe
 from app.connectors.http_client import ReadIntent, ResilientClient
@@ -318,7 +319,8 @@ class SplunkConnector(BaseConnector):
     def _index_telemetry(self, index: str | None) -> dict[str, Any]:
         if not index:
             raise ConnectorError("Splunk controls require asset_id (index name).")
-        entry = (self._get(f"/services/data/indexes/{index}").get("entry") or [{}])[0]
+        entry = (self._get(
+            f"/services/data/indexes/{_urls.segment(index)}").get("entry") or [{}])[0]
         content = entry.get("content", {}) or {}
 
         # frozenTimePeriodInSecs is when data leaves the index for good — the

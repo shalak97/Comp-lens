@@ -40,14 +40,34 @@ _SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 _LEVEL_SEVERITY = {"error": "high", "warning": "medium", "note": "low",
                    "none": "info"}
 # Comp-Lens severity word -> SARIF result.level (for emit)
+# `none` is absent on purpose: SARIF defines level "none" as "the rule was
+# evaluated and no problem was found", so pairing it with kind "fail" is
+# self-contradictory — and GitHub code scanning raises no alert at that level,
+# which silently dropped every INFO-severity control failure on upload.
 _SEVERITY_LEVEL = {"critical": "error", "high": "error", "medium": "warning",
-                   "low": "note", "info": "none", "unknown": "warning"}
+                   "low": "note", "info": "note", "unknown": "warning"}
 # Comp-Lens severity word -> representative GitHub "security-severity" (CVSS) score
 _SEVERITY_CVSS = {"critical": "9.5", "high": "8.0", "medium": "5.5",
                   "low": "2.5", "info": "0.0"}
 
 # Result kinds that are NOT findings (nothing to act on).
 _NON_FINDING_KINDS = {"pass", "notapplicable", "informational", "open", "review"}
+
+# Comp-Lens control status -> the SARIF result.kind that actually means it.
+# SARIF has exact vocabulary for "could not evaluate" and "does not apply", and
+# emitting both as `fail` uploaded them to GitHub code scanning as security
+# alerts asserting a control was not satisfied.
+_STATUS_KIND = {
+    "pass": None, "passed": None, "compliant": None,          # not emitted at all
+    "error": "open",                    # evaluated to no conclusion — needs a human
+    "not_applicable": "notApplicable",
+    "notapplicable": "notApplicable",
+    "n/a": "notApplicable",
+    "pending": "open",
+    "unknown": "review",
+}
+#: `level` must be `none` for any kind other than `fail`, per SARIF 2.1.0.
+_NON_FAIL_LEVEL = "none"
 
 # Rule-tag / rule-id keyword -> internal concept id (all must exist in the lexicon).
 # Every static-analysis finding evidences `security_testing`; these add specificity.
@@ -145,6 +165,29 @@ def _concepts_for(rule_id: str, rule: dict[str, Any] | None) -> list[str]:
     return concepts
 
 
+def _is_suppressed(result: dict[str, Any]) -> bool:
+    """Whether a result has been formally accepted or no longer exists.
+
+    SARIF's `suppressions` is the same idea as CycloneDX's VEX `analysis.state`,
+    which this codebase's CycloneDX adapter already honours: an accepted risk, a
+    `# nosec`, a baseline entry or a dismissed code-scanning alert is not an
+    open finding. Ignoring it meant a signed-off critical still drove RA-5 to
+    FAIL and landed in the POA&M as live remediation work.
+
+    Per the spec an `accepted`/`underReview` suppression suppresses the result;
+    a suppression explicitly `rejected` does not. `baselineState: "absent"`
+    means the result is gone as of this run.
+    """
+    sups = result.get("suppressions")
+    if isinstance(sups, list) and sups:
+        for s in sups:
+            state = (str(s.get("status") or "accepted").lower()
+                     if isinstance(s, dict) else "accepted")
+            if state != "rejected":
+                return True
+    return str(result.get("baselineState") or "").lower() == "absent"
+
+
 def _msg(result: dict[str, Any]) -> str:
     m = result.get("message")
     if isinstance(m, dict):
@@ -169,6 +212,8 @@ def from_sarif(log: dict[str, Any]) -> list[NormalizedEvidence]:
                 continue
             kind = str(result.get("kind") or "fail").lower()
             if kind in _NON_FINDING_KINDS:
+                continue
+            if _is_suppressed(result):
                 continue
             rule_id = str(result.get("ruleId") or "")
             rule = rules.get(rule_id)
@@ -227,7 +272,15 @@ def to_sarif(results: list[dict[str, Any]], *, tool_name: str = "Comp-Lens",
     rules: dict[str, dict[str, Any]] = {}
     sarif_results: list[dict[str, Any]] = []
     for r in results:
-        if str(r.get("status") or "").lower() in ("pass", "passed", "compliant"):
+        status = str(r.get("status") or "fail").lower()
+        # A control the platform could not evaluate, and one that does not
+        # apply, are not failures. Emitting them as `kind: "fail"` uploaded them
+        # to GitHub code scanning as alerts asserting the control was not
+        # satisfied — the same tri-state erosion this codebase guards against
+        # everywhere else, in the export most likely to be handed to someone
+        # outside the company.
+        kind = _STATUS_KIND.get(status, "fail")
+        if kind is None:
             continue
         cid = str(r.get("control_id") or "UNKNOWN")
         sev = str(r.get("severity") or "medium").lower()
@@ -238,11 +291,17 @@ def to_sarif(results: list[dict[str, Any]], *, tool_name: str = "Comp-Lens",
                 "properties": {"security-severity": _SEVERITY_CVSS.get(sev, "5.5"),
                                "tags": ["compliance"]},
             }
+        default_msg = (f"{cid}: control not satisfied" if kind == "fail"
+                       else f"{cid}: {status.replace('_', ' ')}")
         entry: dict[str, Any] = {
             "ruleId": cid, "ruleIndex": list(rules).index(cid),
-            "level": _SEVERITY_LEVEL.get(sev, "warning"), "kind": "fail",
-            "message": {"text": r.get("message") or f"{cid}: control not satisfied"},
-            "properties": {"security-severity": _SEVERITY_CVSS.get(sev, "5.5")},
+            # SARIF requires level `none` for any kind other than `fail`.
+            "level": (_SEVERITY_LEVEL.get(sev, "warning") if kind == "fail"
+                      else _NON_FAIL_LEVEL),
+            "kind": kind,
+            "message": {"text": r.get("message") or default_msg},
+            "properties": {"security-severity": _SEVERITY_CVSS.get(sev, "5.5"),
+                           "comp-lens-status": status},
         }
         loc = r.get("location")
         if loc:

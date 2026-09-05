@@ -36,7 +36,9 @@ def _c(key: str, name: str, category: str, auth: str, env: list[str],
     return {"key": key, "name": name, "category": category, "auth_method": auth,
             "env_vars": env, "evidence_types": evidence,
             "registry_key": registry_key, "maturity": maturity,
-            "vendor": vendor or name.split()[0]}
+            # `name.split()[0]` raises IndexError on an empty or whitespace-only
+            # name; fall back to the key, which is always present.
+            "vendor": vendor or next(iter(name.split()), key)}
 
 
 CONNECTOR_CATALOG: list[dict[str, Any]] = [

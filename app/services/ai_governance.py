@@ -176,8 +176,23 @@ _AI_ACT_TIERS = {
 
 
 def ai_act_obligations(risk_tier: str, governance: dict[str, bool]) -> dict[str, Any]:
-    """Map an AI system to its EU AI Act obligations + which are met."""
-    tier = _AI_ACT_TIERS.get(str(risk_tier).lower(), _AI_ACT_TIERS["limited"])
+    """Map an AI system to its EU AI Act obligations + which are met.
+
+    The denominator is every obligation the tier carries, not just the ones this
+    platform happens to model. Scoring only the modelled subset made an
+    obligation the platform cannot check disappear from both the percentage and
+    the gap list, so a **prohibited** system — the Act's "must not be deployed"
+    tier — reported 100% compliant with no gaps, and a high-risk system with all
+    six checkable boxes ticked reported 100% while *Conformity assessment* and
+    *Technical documentation* had never been assessed at all.
+
+    Obligations with no coverage signal are reported in their own `unassessed`
+    list rather than being silently dropped or counted as failures: "we cannot
+    observe this" and "we observed it and it is missing" are different claims.
+    """
+    key = str(risk_tier).lower()
+    recognised = key in _AI_ACT_TIERS
+    tier = _AI_ACT_TIERS.get(key, _AI_ACT_TIERS["limited"])
     # map governance booleans to obligation coverage (for high-risk)
     coverage = {
         "Risk management system": governance.get("impact_assessment", False),
@@ -188,15 +203,23 @@ def ai_act_obligations(risk_tier: str, governance: dict[str, bool]) -> dict[str,
         "Transparency to users": governance.get("transparency_notice", False),
     }
     obligations = tier["obligations"]
-    sum(1 for o in obligations if coverage.get(o, False))
-    applicable = [o for o in obligations if o in coverage]
-    met_applicable = sum(1 for o in applicable if coverage[o])
+    unassessed = [o for o in obligations if o not in coverage]
+    met = [o for o in obligations if coverage.get(o, False)]
+    gaps = [o for o in obligations if o in coverage and not coverage[o]]
     return {
-        "tier": str(risk_tier).lower(), "tier_label": tier["label"],
+        "tier": key if recognised else "unrecognised",
+        "tier_label": tier["label"],
+        "tier_recognised": recognised,
         "obligations": obligations,
         "coverage": coverage,
-        "compliance_pct": round(100 * met_applicable / len(applicable)) if applicable else 100,
-        "gaps": [o for o in applicable if not coverage[o]],
+        # Denominator is every obligation, so an unassessable one cannot inflate
+        # the score. None only when a tier carries no obligations at all.
+        "compliance_pct": (round(100 * len(met) / len(obligations))
+                           if obligations else None),
+        "met": met,
+        "gaps": gaps,
+        "unassessed": unassessed,
+        "assessable": len(obligations) - len(unassessed),
     }
 
 

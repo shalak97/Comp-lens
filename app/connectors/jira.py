@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 from app.config import settings
+from app.connectors import urls as _urls
 from app.connectors.base import BaseConnector, ConnectorError
 from app.connectors.http_client import ResilientClient
 
@@ -60,7 +61,8 @@ class JiraConnector(BaseConnector):
         if not issue_key:
             raise ConnectorError("Jira CM-3 requires asset_id (issue key, e.g. CHG-123).")
 
-        issue = self._get(f"/rest/api/3/issue/{issue_key}?expand=changelog")
+        issue = self._get(
+            f"/rest/api/3/issue/{_urls.segment(issue_key)}?expand=changelog")
         fields = issue.get("fields", {})
         status_name = (fields.get("status") or {}).get("name", "").lower()
 

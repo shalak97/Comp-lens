@@ -14,13 +14,20 @@ explainable decision. `pass_when` (single-rule shorthand) stays fully supported.
 """
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any
 
 import yaml
 
-from app.policy_as_code.evaluator import PolicyExpressionError, SafeEvaluator
+from app.policy_as_code.evaluator import (
+    PolicyExpressionError,
+    SafeEvaluator,
+    free_names,
+)
+
+logger = logging.getLogger(__name__)
 
 _SEV_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -65,10 +72,30 @@ class Policy:
     description: str = ""
     source_file: str = ""
     tests: list[dict[str, Any]] = field(default_factory=list)
+    #: Evidence signals every rule needs. Absent signals make the decision
+    #: not_applicable rather than letting the expression answer from nothing.
+    signals: list[str] = field(default_factory=list)
+
+    def _absent_signals(self, evidence: dict[str, Any]) -> list[str]:
+        return [s for s in self.signals if evidence.get(s) is None]
 
     def evaluate(self, evidence: dict[str, Any],
-                 dep_status: dict[str, str] | None = None) -> PolicyDecision:
-        dep_status = dep_status or {}
+                 dep_status: dict[str, str] | None = None) -> PolicyDecision:  # noqa: C901
+        # Tri-state, for the same reason the declarative check pack is
+        # tri-state (app/services/control_checks.py): "we could not observe
+        # this" and "we observed it and it is fine" are different claims, and a
+        # boolean expression cannot tell them apart. Missing fields resolve to
+        # None, and the natural way to write a compliance rule — `all(buckets,
+        # ...)`, `len(admins) == 0`, `count(...) == 0`, `not backdoor` — is
+        # vacuously TRUE over nothing. Without this guard a control with no
+        # evidence at all returned "pass / all rules satisfied".
+        absent = self._absent_signals(evidence)
+        if absent:
+            return PolicyDecision(
+                self.control_id, "not_applicable", "info",
+                f"Signal(s) unavailable in evidence: {', '.join(absent)}.",
+                requires=self.requires, frameworks=self.frameworks)
+
         rule_results: list[RuleResult] = []
         try:
             for r in self.rules:
@@ -86,10 +113,31 @@ class Policy:
                                   frameworks=self.frameworks)
 
         failed_rules = [r for r in rule_results if not r.passed]
-        # composition: required controls must also be passing
-        failed_deps = [c for c in self.requires if dep_status.get(c, "pass") != "pass"]
+        # Composition: required controls must also be passing. A control absent
+        # from dep_status has no policy at all — `dep_status.get(c, "pass")`
+        # used to read that absence as a pass, so `requires: [AC-2]` was
+        # satisfied by AC-2 not existing. Absence is unknown, and unknown is not
+        # satisfied. When no dep_status was supplied the caller is not
+        # evaluating composition at all (the single-control path), which is
+        # different from a dependency that is missing.
+        if dep_status is None:
+            failed_deps, unknown_deps, unassessed_deps = [], [], []
+        else:
+            failed_deps = [c for c in self.requires
+                           if dep_status.get(c) in ("fail", "error")]
+            unassessed_deps = [c for c in self.requires
+                               if dep_status.get(c) == "not_applicable"]
+            unknown_deps = [c for c in self.requires if c not in dep_status]
 
-        if not failed_rules and not failed_deps:
+        # A composite whose dependencies were never assessed is unassessed too,
+        # not failing: the same distinction the signal guard above draws.
+        if unassessed_deps and not failed_rules and not failed_deps:
+            return PolicyDecision(
+                self.control_id, "not_applicable", "info",
+                "required controls not assessed: " + ", ".join(unassessed_deps),
+                requires=self.requires, frameworks=self.frameworks)
+
+        if not failed_rules and not failed_deps and not unknown_deps:
             return PolicyDecision(
                 self.control_id, "pass", "info",
                 self.description or "all rules satisfied",
@@ -113,6 +161,9 @@ class Policy:
         reasons = [r.reason for r in failed_rules if r.reason]
         if failed_deps:
             reasons.append("required controls failing: " + ", ".join(failed_deps))
+        if unknown_deps:
+            reasons.append("required controls not evaluated (no policy defined): "
+                           + ", ".join(unknown_deps))
         return PolicyDecision(
             self.control_id, "fail", sev, "; ".join(reasons) or f"{self.control_id} failed",
             rules=[{"rule": r.rule_id, "passed": r.passed, "reason": r.reason}
@@ -180,6 +231,35 @@ def load_policy(data: dict[str, Any], source: str = "") -> Policy:
         _validate_expr(r["when"], data["control"], params)
     for esc in data.get("severity_escalation", []) or []:
         _validate_expr(esc.get("when", "false"), data["control"], params)
+
+    # Which evidence fields must be present for the rules to mean anything.
+    # Inferred from the expressions rather than hand-declared, so a policy
+    # author cannot forget to list one and silently get vacuous passes; an
+    # explicit `signals:` list overrides the inference where a policy genuinely
+    # wants a field to be optional. Params are thresholds, not evidence, and
+    # escalation expressions are excluded — a missing escalation signal should
+    # not make the whole control unassessable.
+    # An obligation no procedure fulfils is a silent no-op at dispatch time.
+    # Warn at load, where the policy author can still see it.
+    obligations = data.get("obligations", {}) or {}
+    for trigger, names in obligations.items():
+        from app.policy_as_code.obligations import unroutable_obligations
+
+        stray = unroutable_obligations(names if isinstance(names, list) else [])
+        if stray:
+            logger.warning(
+                "policy %s: obligation(s) on %s name no known procedure and will be "
+                "skipped at dispatch: %s", data["control"], trigger, ", ".join(stray))
+
+    declared = data.get("signals")
+    if declared is None:
+        inferred: set[str] = set()
+        for r in rules:
+            inferred |= free_names(r["when"])
+        signals = sorted(inferred - set(params))
+    else:
+        signals = [str(s) for s in declared]
+
     return Policy(
         control_id=str(data["control"]),
         title=data.get("title", str(data["control"])),
@@ -193,6 +273,7 @@ def load_policy(data: dict[str, Any], source: str = "") -> Policy:
         description=data.get("description", ""),
         source_file=source,
         tests=data.get("tests", []) or [],
+        signals=signals,
     )
 
 

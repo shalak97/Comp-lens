@@ -73,7 +73,12 @@ class Settings(BaseSettings):
     scheduler_interval_seconds: int = Field(default=60)
 
     # ── Notifications ──
-    notify_on_status: str = Field(default="fail")   # which finding status triggers alerts
+    # Which finding statuses trigger alerts — comma-separated, so a deployment
+    # is not forced to choose one. The default includes `error`: since
+    # bulk_assess writes ERROR rows for assets a connector could not read, a
+    # fail-only default meant nobody was told when the platform went blind to
+    # an asset, which is exactly when someone should be told.
+    notify_on_status: str = Field(default="fail,error")
     notify_slack_webhook: str | None = Field(default=None)
     notify_generic_webhook: str | None = Field(default=None)
     smtp_host: str | None = Field(default=None)

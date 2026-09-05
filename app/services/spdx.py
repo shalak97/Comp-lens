@@ -18,8 +18,10 @@ Targets SPDX 2.3 (JSON). Concept ids are the ones Comp-Lens speaks.
 """
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 from app.services.ocsf import NormalizedEvidence
 
@@ -109,28 +111,65 @@ def spdx_summary(doc: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _spdx_timestamp(dt: datetime | None = None) -> str:
+    """`YYYY-MM-DDThh:mm:ssZ`, which is the only shape SPDX 2.3 accepts.
+
+    `datetime.isoformat()` produces `+00:00` and microseconds, so every document
+    this module emitted was rejected by the SPDX validator on its timestamp
+    alone.
+    """
+    return (dt or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _spdx_id(prefix: str, name: str, seq: int) -> str:
+    """An SPDXID conforming to `SPDXRef-[a-zA-Z0-9.-]+`.
+
+    Only letters, digits, `.` and `-` are legal in an SPDX element id, so
+    `SPDXRef-Package-@babel/core` — any scoped npm package, and anything with an
+    underscore or a space — was structurally invalid. Illegal characters are
+    replaced and a sequence number keeps ids unique when two names normalise to
+    the same string.
+    """
+    slug = re.sub(r"[^A-Za-z0-9.-]", "-", str(name)).strip("-") or "unnamed"
+    return f"SPDXRef-{prefix}-{seq}-{slug}"[:200]
+
+
 def to_spdx(*, packages: list[dict[str, Any]] | None = None,
             name: str = "comp-lens-export", creator: str = "Comp-Lens") -> dict[str, Any]:
-    """Emit a minimal valid SPDX 2.3 document."""
+    """Emit a minimal valid SPDX 2.3 document.
+
+    "Valid" is meant literally: the timestamp is in SPDX's required form, every
+    SPDXID conforms to the element-id charset, and the document declares what it
+    describes — SPDX 2.3 requires a DESCRIBES relationship (or
+    `documentDescribes`) and this emitted neither.
+    """
+    pkgs = list(packages or [])
     return {
         "spdxVersion": SPDX_VERSION,
         "dataLicense": "CC0-1.0",
         "SPDXID": "SPDXRef-DOCUMENT",
         "name": name,
-        "documentNamespace": f"https://comp-lens/spdx/{name}",
+        "documentNamespace": f"https://comp-lens/spdx/{quote(str(name), safe='')}",
         "creationInfo": {
-            "created": datetime.now(UTC).isoformat(),
+            "created": _spdx_timestamp(),
             "creators": [f"Tool: {creator}"],
         },
-        "packages": list(packages or []),
+        "packages": pkgs,
+        "documentDescribes": [p["SPDXID"] for p in pkgs if p.get("SPDXID")],
+        "relationships": [
+            {"spdxElementId": "SPDXRef-DOCUMENT",
+             "relationshipType": "DESCRIBES",
+             "relatedSpdxElement": p["SPDXID"]}
+            for p in pkgs if p.get("SPDXID")
+        ],
     }
 
 
 def package(*, name: str, version: str | None = None, license_concluded: str = "NOASSERTION",
-            advisories: list[str] | None = None) -> dict[str, Any]:
+            advisories: list[str] | None = None, seq: int = 0) -> dict[str, Any]:
     """Build one SPDX package (helper for emit / tests)."""
     p: dict[str, Any] = {
-        "SPDXID": f"SPDXRef-Package-{name}",
+        "SPDXID": _spdx_id("Package", name, seq),
         "name": name, "downloadLocation": "NOASSERTION",
         "licenseConcluded": license_concluded,
     }
@@ -143,3 +182,4 @@ def package(*, name: str, version: str | None = None, license_concluded: str = "
 
 
 __all__ = ["SPDX_VERSION", "from_spdx", "spdx_summary", "to_spdx", "package"]
+

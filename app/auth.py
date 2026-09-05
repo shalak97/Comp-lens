@@ -97,19 +97,37 @@ def _parse_keys() -> dict[str, tuple[set[str], str]]:
         if not entry:
             continue
         if ":" not in entry:
-            logger.warning("API key configured without tenant scope; treating as admin.")
+            logger.warning(
+                "API key %s is configured with no tenant scope at all; it reaches "
+                "EVERY tenant with the admin role. Write it as `key:tenant[,tenant][:role]` "
+                "to scope it.", _mask(entry))
             mapping[entry] = ({ALL}, "admin")
             continue
         parts = entry.split(":")
         key = parts[0].strip()
         tset = {t.strip() for t in parts[1].split(",") if t.strip()}
 
+        if not key:
+            logger.error("API key entry %r has an empty key; refusing it.", entry)
+            continue
+        if not tset:
+            # `k:`, `k:,,,` and `k: :operator` all parse to an empty tenant set.
+            # This used to fall through to `tset or {ALL}` below, so a trailing
+            # colon or a stray comma silently widened a key from one tenant to
+            # every tenant — and, via `not tset` in default_role, usually to
+            # admin as well. A typo must never widen access: refuse the entry.
+            logger.error(
+                "API key %s declares a tenant scope but names no tenants (%r); refusing "
+                "the entry. Use `%s:*` if all-tenant reach is genuinely intended.",
+                _mask(key), entry, _mask(key))
+            continue
+
         # A key with no explicit role keeps exactly the reach it had before
         # roles existed: an all-tenant (`*`) key was the admin key, and a
         # tenant-scoped key could do everything within its tenants but nothing
         # administrative. Defaulting `*` to operator would silently strip admin
         # from every existing deployment's admin key.
-        default_role = "admin" if tset == {ALL} or not tset else DEFAULT_ROLE
+        default_role = "admin" if tset == {ALL} else DEFAULT_ROLE
         role = (parts[2].strip().lower() if len(parts) > 2 and parts[2].strip()
                 else default_role)
         if role not in ROLE_PERMISSIONS:
@@ -118,7 +136,7 @@ def _parse_keys() -> dict[str, tuple[set[str], str]]:
             logger.error("API key %s names unknown role %r; granting viewer only.",
                          _mask(key), role)
             role = "viewer"
-        mapping[key] = (tset or {ALL}, role)
+        mapping[key] = (tset, role)
     return mapping
 
 

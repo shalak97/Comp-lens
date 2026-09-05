@@ -124,7 +124,15 @@ def _tool_name(bom: dict[str, Any]) -> str:
 
 
 def from_cyclonedx(bom: dict[str, Any]) -> list[NormalizedEvidence]:
-    """One NormalizedEvidence per ACTIVE vulnerability (VEX-suppressed excluded)."""
+    """One NormalizedEvidence per ACTIVE vulnerability PER AFFECTED COMPONENT.
+
+    A CycloneDX vulnerability carries an `affects` list, and only `affects[0]`
+    used to become the evidence's asset: a CVE hitting five components produced
+    one finding against the first and left the other four looking clean, while
+    `vulnerable_components` counted 1 of 5. Attribution is what makes a finding
+    actionable — a vulnerability nobody can point at an asset is a statistic.
+    VEX-suppressed vulnerabilities are still excluded.
+    """
     if not isinstance(bom, dict):
         return []
     out: list[NormalizedEvidence] = []
@@ -143,19 +151,22 @@ def from_cyclonedx(bom: dict[str, Any]) -> list[NormalizedEvidence]:
         # a fix being available makes it a patch/flaw-remediation signal too
         if vuln.get("recommendation") or vuln.get("workaround"):
             concepts.append("patch_management")
-        out.append(NormalizedEvidence(
-            source_system=source, plane="vulnerability_threat", observed_at=now,
-            asset_id=(refs[0] if refs else None), asset_type="component", severity=sev,
-            concepts=concepts,
-            findings=[{
-                "id": vid, "severity": sev, "cvss_score": score, "cvss_method": method,
-                "vex_state": state, "affects": refs,
-                "source": ((vuln.get("source") or {}).get("name")),
-                "description": vuln.get("description"),
-            }],
-            provenance={"cyclonedx_spec": bom.get("specVersion", SPEC_VERSION),
-                        "bom_serial": bom.get("serialNumber"), "vuln_id": vid},
-        ))
+        # One row per affected component; a vulnerability naming none still
+        # produces a single unattributed row rather than disappearing.
+        for ref in (refs or [None]):
+            out.append(NormalizedEvidence(
+                source_system=source, plane="vulnerability_threat", observed_at=now,
+                asset_id=ref, asset_type="component", severity=sev,
+                concepts=list(concepts),
+                findings=[{
+                    "id": vid, "severity": sev, "cvss_score": score, "cvss_method": method,
+                    "vex_state": state, "component": ref, "affects": refs,
+                    "source": ((vuln.get("source") or {}).get("name")),
+                    "description": vuln.get("description"),
+                }],
+                provenance={"cyclonedx_spec": bom.get("specVersion", SPEC_VERSION),
+                            "bom_serial": bom.get("serialNumber"), "vuln_id": vid},
+            ))
     return out
 
 
@@ -172,12 +183,22 @@ def sbom_summary(bom: dict[str, Any]) -> dict[str, Any]:
             lid = lo.get("id") or lo.get("name")
             if lid:
                 licenses.add(str(lid))
+    # Severity counters are per DISTINCT vulnerability, not per evidence row —
+    # from_cyclonedx now emits one row per affected component, and a CVE hitting
+    # five components is one vulnerability, five vulnerable components.
+    # `critical_vulnerabilities` is the RA-5 policy field; inflating it by
+    # component fan-out would change what the control means.
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "unknown": 0}
     vulnerable_refs: set[str] = set()
-    for ev in from_cyclonedx(bom):
-        counts[ev.severity if ev.severity in counts else "unknown"] += 1
+    seen_vulns: set[str] = set()
+    for i, ev in enumerate(from_cyclonedx(bom)):
         if ev.asset_id:
             vulnerable_refs.add(ev.asset_id)
+        vid = str((ev.findings[0].get("id") if ev.findings else "") or f"__row{i}")
+        if vid in seen_vulns:
+            continue
+        seen_vulns.add(vid)
+        counts[ev.severity if ev.severity in counts else "unknown"] += 1
     return {
         "sbom_present": True,
         "component_count": len(components),

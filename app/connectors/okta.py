@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.config import settings
+from app.connectors import urls as _urls
 from app.connectors.base import Asset, BaseConnector, ConnectorError
 from app.connectors.http_client import ResilientClient
 
@@ -57,10 +58,11 @@ class OktaConnector(BaseConnector):
         if not user_ref:
             raise ConnectorError("Okta control requires asset_id (userId or login).")
 
-        user = self._get(f"/api/v1/users/{user_ref}")
+        ref = _urls.segment(user_ref)
+        user = self._get(f"/api/v1/users/{ref}")
 
         if control_id == "AC-2-7":
-            factors = self._get(f"/api/v1/users/{user_ref}/factors")
+            factors = self._get(f"/api/v1/users/{ref}/factors")
             active = [f for f in factors if f.get("status") == "ACTIVE"]
             return {
                 "mfa_enforced": len(active) > 0,

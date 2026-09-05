@@ -214,10 +214,24 @@ def _followthrough_lane(db: Session, tenant_id: str) -> dict[str, dict[str, Any]
             by_ctrl.setdefault(r.control_id, []).append(r)
     out = {}
     for cid, ds in by_ctrl.items():
-        ok = sum(1 for d in ds if d.status in ("done", "queued", "eligible"))
-        score = ok / len(ds) if ds else 0.0
-        out[cid] = {"score": round(score, 3),
-                     "detail": f"{ok}/{len(ds)} obligations succeeded"}
+        # Only `done` is follow-through. `queued` used to count as success, and
+        # nothing in this system ever transitions a dispatch out of `queued` —
+        # there is no worker and every connector is read-only — so a remediation
+        # ticket that was recorded and never acted on scored a perfect lane, and
+        # for a control with no other lane that became trust 100. `eligible`
+        # (waiver-eligible) is not remediation either, but it is not a failure:
+        # it leaves the denominator, the same way an unobservable signal does.
+        done = sum(1 for d in ds if d.status == "done")
+        waived = sum(1 for d in ds if d.status == "eligible")
+        pending = sum(1 for d in ds if d.status == "queued")
+        actionable = len(ds) - waived
+        if actionable <= 0:
+            continue  # nothing but waivers — no follow-through claim to make
+        detail = f"{done}/{actionable} obligations completed"
+        if pending:
+            detail += f" ({pending} still outstanding)"
+        out[cid] = {"score": round(done / actionable, 3), "detail": detail,
+                    "completed": done, "outstanding": pending, "waived": waived}
     return out
 
 
@@ -314,6 +328,13 @@ def unified_trust(db: Session, tenant_id: str, pol: TrustPolicy | None = None,
             "band": _band(composite * 100, pol),
             "lanes": {n: present[n] for n in present},
             "lane_coverage": f"{len(present)}/{len(lanes)}",
+            # `trust` is renormalised over the lanes a control actually has, so
+            # one lane at 1.0 and five lanes at 1.0 both read 100 — a very
+            # different claim in each case. lane_coverage says so, but it is a
+            # string a dashboard can drop; this says it in one word that cannot
+            # be mistaken for a score.
+            "corroboration": ("single-source" if len(present) < 2
+                              else f"corroborated-by-{len(present)}"),
         })
     controls.sort(key=lambda c: c["trust"])
 

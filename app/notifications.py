@@ -24,13 +24,23 @@ logger = logging.getLogger(__name__)
 
 
 def _slack(text: str) -> None:
-    requests.post(settings.notify_slack_webhook, json={"text": text},
-                  timeout=settings.request_timeout_seconds)
+    # raise_for_status, because `requests.post` returns normally on 4xx/5xx.
+    # Without it "delivered" meant "the socket did not error", so a webhook
+    # returning `404 invalid_token` — a revoked or mistyped URL, the most common
+    # failure there is — was recorded as a successful notification.
+    r = requests.post(settings.notify_slack_webhook, json={"text": text},
+                      timeout=settings.request_timeout_seconds)
+    r.raise_for_status()
+    # Slack's incoming webhooks answer 200 with a plain-text error body for a
+    # payload it rejects, so the status code alone is not delivery.
+    if r.text.strip() and r.text.strip().lower() != "ok":
+        raise RuntimeError(f"slack rejected the message: {r.text.strip()[:120]}")
 
 
 def _webhook(payload: dict[str, Any]) -> None:
-    requests.post(settings.notify_generic_webhook, json=payload,
-                  timeout=settings.request_timeout_seconds)
+    r = requests.post(settings.notify_generic_webhook, json=payload,
+                      timeout=settings.request_timeout_seconds)
+    r.raise_for_status()
 
 
 def _email(subject: str, body: str) -> None:
@@ -48,7 +58,9 @@ def _email(subject: str, body: str) -> None:
 
 def notify_finding(finding) -> dict[str, bool]:
     """Dispatch a finding alert to every configured channel. Returns per-channel result."""
-    if finding.status.value != settings.notify_on_status:
+    wanted = {s.strip().lower() for s in
+              str(settings.notify_on_status or "").split(",") if s.strip()}
+    if finding.status.value not in wanted:
         return {}
 
     title = f"[Comp-Lens] {finding.status.value.upper()} · {finding.control_id} · {finding.source_system}"
