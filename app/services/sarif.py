@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services.ocsf import NormalizedEvidence
+from app.services.shapes import as_dict, as_list
 
 SARIF_VERSION = "2.1.0"
 _SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
@@ -101,18 +102,18 @@ def _severity_from_cvss(score: Any) -> str | None:
 def _rule_index(run: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Map ruleId -> rule object from a run's tool driver (+ extensions)."""
     idx: dict[str, dict[str, Any]] = {}
-    tool = run.get("tool") or {}
-    components = [tool.get("driver") or {}]
-    components += [e for e in (tool.get("extensions") or []) if isinstance(e, dict)]
+    tool = as_dict(run.get("tool"))
+    components = [as_dict(tool.get("driver"))]
+    components += [e for e in (as_list(tool.get("extensions"))) if isinstance(e, dict)]
     for comp in components:
-        for rule in comp.get("rules") or []:
+        for rule in as_list(comp.get("rules")):
             if isinstance(rule, dict) and rule.get("id"):
                 idx.setdefault(str(rule["id"]), rule)
     return idx
 
 
 def _security_severity(result: dict[str, Any], rule: dict[str, Any] | None) -> Any:
-    for src in (result.get("properties") or {}, (rule or {}).get("properties") or {}):
+    for src in (as_dict(result.get("properties")), as_dict((as_dict(rule)).get("properties"))):
         if isinstance(src, dict) and src.get("security-severity") is not None:
             return src["security-severity"]
     return None
@@ -128,9 +129,9 @@ def _result_severity(result: dict[str, Any], rule: dict[str, Any] | None) -> str
 def _location(result: dict[str, Any]) -> tuple[str | None, int | None]:
     locs = result.get("locations")
     if isinstance(locs, list) and locs:
-        phys = (locs[0] or {}).get("physicalLocation") or {}
-        uri = ((phys.get("artifactLocation") or {}).get("uri"))
-        line = ((phys.get("region") or {}).get("startLine"))
+        phys = as_dict((as_dict(locs[0])).get("physicalLocation"))
+        uri = ((as_dict(phys.get("artifactLocation"))).get("uri"))
+        line = ((as_dict(phys.get("region"))).get("startLine"))
         return uri, (line if isinstance(line, int) else None)
     return None, None
 
@@ -148,7 +149,7 @@ def _rule_text(rule: dict[str, Any] | None) -> str:
     if not rule:
         return ""
     for k in ("shortDescription", "fullDescription"):
-        t = (rule.get(k) or {}).get("text")
+        t = (as_dict(rule.get(k))).get("text")
         if t:
             return str(t)
     return str(rule.get("name") or rule.get("id") or "")
@@ -156,7 +157,7 @@ def _rule_text(rule: dict[str, Any] | None) -> str:
 
 def _concepts_for(rule_id: str, rule: dict[str, Any] | None) -> list[str]:
     blob = (rule_id + " " + _rule_text(rule)).lower()
-    tags = (rule or {}).get("properties", {}).get("tags") or []
+    tags = as_list((as_dict(rule)).get("properties", {}).get("tags"))
     blob += " " + " ".join(str(t).lower() for t in tags)
     concepts = [_BASE_CONCEPT]
     for kw, concept in _TAG_CONCEPTS.items():
@@ -201,13 +202,13 @@ def from_sarif(log: dict[str, Any]) -> list[NormalizedEvidence]:
         return []
     out: list[NormalizedEvidence] = []
     now = datetime.now(UTC).isoformat()
-    for run in log.get("runs") or []:
+    for run in as_list(log.get("runs")):
         if not isinstance(run, dict):
             continue
-        driver = (run.get("tool") or {}).get("driver") or {}
+        driver = as_dict((as_dict(run.get("tool"))).get("driver"))
         tool_name = str(driver.get("name") or "SARIF").upper().replace(" ", "_")
         rules = _rule_index(run)
-        for result in run.get("results") or []:
+        for result in as_list(run.get("results")):
             if not isinstance(result, dict):
                 continue
             kind = str(result.get("kind") or "fail").lower()
