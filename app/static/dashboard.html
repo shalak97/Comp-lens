@@ -28,8 +28,22 @@
      stacks on --sans/--grot/--mono are real system faces, so the first paint
      is correct-looking rather than invisible, and display=swap does the
      handover. <noscript> keeps it working with JS disabled. -->
-<link rel="stylesheet" media="print" onload="this.media='all';this.onload=null"
+<link id="webfonts" rel="stylesheet" media="print"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
+<script>
+/* The media swap used to be a load handler written as an attribute on the link.
+   A CSP script hash covers a <script> block and never an event attribute, so
+   under script-src that attribute would simply not run and the webfonts would
+   never be promoted past media="print" — the page would render in the fallback
+   faces forever, silently, because a stylesheet that never applies is not a JS
+   error. Doing it here keeps the stylesheet non-blocking AND lets it apply. */
+(function(){
+  var l=document.getElementById("webfonts");
+  if(!l)return;
+  var promote=function(){l.media="all";};
+  if(l.sheet)promote(); else l.addEventListener("load",promote,{once:true});
+})();
+</script>
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/></noscript>
 <style>
 /* ============================================================
@@ -443,7 +457,7 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
     </div>
     <nav id="nav"></nav>
     <div class="railfoot">
-      <div class="conn" id="connbtn" onclick="openSettings()">
+      <div class="conn" id="connbtn" data-act="openSettings">
         <span class="led connecting" id="led"></span>
         <span class="ct"><b id="connlabel">Connecting…</b><span id="connsub">checking endpoint</span></span>
         <svg class="gear" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -452,13 +466,13 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
   </aside>
   <div id="stage">
     <header id="top">
-      <button id="burger" onclick="document.getElementById('rail').classList.toggle('open')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <button id="burger" data-act="toggleRail"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
       <div class="crumb" id="crumb">comp-lens / <b>overview</b></div>
       <div class="sp"></div>
-      <button class="kbtn" onclick="openCmd()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span>Search</span><kbd>⌘K</kbd></button>
-      <button class="dswitch" id="demoswitch" onclick="toggleDemo()" aria-pressed="false" title="Show a sample dataset instead of live data">Demo<span class="dot"></span></button>
-      <button class="icbtn priv" id="privbtn" onclick="openPrivacy()" title="Privacy & data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
-      <button class="icbtn" id="themebtn" onclick="toggleTheme()" title="Toggle theme"></button>
+      <button class="kbtn" data-act="openCmd"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span>Search</span><kbd>⌘K</kbd></button>
+      <button class="dswitch" id="demoswitch" data-act="toggleDemo" aria-pressed="false" title="Show a sample dataset instead of live data">Demo<span class="dot"></span></button>
+      <button class="icbtn priv" id="privbtn" data-act="openPrivacy" title="Privacy & data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
+      <button class="icbtn" id="themebtn" data-act="toggleTheme" title="Toggle theme"></button>
     </header>
     <div id="databanner" class="databanner"></div>
     <!-- Truncation notice. Lives outside <main> so a view re-render can't wipe
@@ -470,7 +484,7 @@ tbody[data-ent] tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--focus)}
 <div id="consent" class="consent" role="dialog" aria-label="Privacy choices" aria-live="polite"></div>
 <div class="scrim" id="settings"></div>
 <div class="scrim" id="scrim2" style="z-index:88"></div>
-<div class="dscrim" id="dscrim" onclick="closeDrawer()"></div>
+<div class="dscrim" id="dscrim" data-act="closeDrawer"></div>
 <div class="drawer" id="drawer"></div>
 <div id="cmd"></div>
 <div id="toast"><span class="d"></span><span id="toasttxt"></span></div>
@@ -519,6 +533,16 @@ const ACTION_NAMES = new Set([
   "instTestInline", "instDelete", "openAuditDetail", "openFindingByControl",
   "openControlByIdFromDrawer", "graphNodeByIndex", "syncCloseThenSync",
   "closeDrawerThenAddConnection", "__vpOk", "render",
+  // ── chrome and navigation, formerly inline attributes ──
+  "acFields", "clearLocalData", "clickPdfInput", "closeDrawer",
+  "closeDrawerThenNavigate", "closeSettings", "consentAcceptAll",
+  "consentEssentialOnly", "insertPolicyPdfHere", "loadIngestExample",
+  "navigate", "openAddConnection", "openAddConnectionFirst", "openCmd",
+  "openConsentPrefs", "openPrivacy", "openPrivacyNotice", "openSettings",
+  "retryConn", "reverifyAllEvidence", "runIngest", "runPostureAsOf",
+  "runPostureTimeline", "saveConsentPrefs", "saveSettings", "setAcStore",
+  "submitAddConnection", "syncClose", "toastMsg", "toggleDemo", "toggleOn",
+  "toggleRail", "toggleTheme", "useDemo", "vpCancel",
 ]);
 
 /* Build the attributes for a delegated action:  ${act("instSync", id, label)} */
@@ -786,10 +810,10 @@ function renderDataBanner(){
   const b=$("#databanner"); if(!b)return;
   if(STATE.demo){
     b.className="databanner demo show";
-    b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>DEMO DATA</b> — you're viewing a sample dataset for exploration, not your live environment. No live data is shown or written.</span><span class="bspace"></span><span class="blink" onclick="toggleDemo(false)">Turn off demo</span>`;
+    b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span><b>DEMO DATA</b> — you're viewing a sample dataset for exploration, not your live environment. No live data is shown or written.</span><span class="bspace"></span><span class="blink" ${act("toggleDemo",false)}>Turn off demo</span>`;
   }else if(STATE.mode==="offline"){
     b.className="databanner offline show";
-    b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1l22 22M16.7 11.7A6 6 0 0 0 12 10M5 12.5a10 10 0 0 1 4-2.3M8.5 16.4a4 4 0 0 1 5 0M12 20h.01"/></svg><span>Can't reach the API${CFG.base?` at <b>${esc(hostOf(CFG.base))}</b>`:""}. Views are empty by design — demo data is hidden so it can't be mistaken for live data.</span><span class="bspace"></span><span class="blink" onclick="retryConn()">Retry</span><span class="blink" onclick="toggleDemo(true)">Explore with demo data</span>`;
+    b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1l22 22M16.7 11.7A6 6 0 0 0 12 10M5 12.5a10 10 0 0 1 4-2.3M8.5 16.4a4 4 0 0 1 5 0M12 20h.01"/></svg><span>Can't reach the API${CFG.base?` at <b>${esc(hostOf(CFG.base))}</b>`:""}. Views are empty by design — demo data is hidden so it can't be mistaken for live data.</span><span class="bspace"></span><span class="blink" ${act("retryConn")}>Retry</span><span class="blink" ${act("toggleDemo",true)}>Explore with demo data</span>`;
   }else{
     b.className="databanner"; b.innerHTML="";
   }
@@ -874,7 +898,7 @@ function toggleTheme(){const cur=document.documentElement.getAttribute("data-the
 /* ===================== SETTINGS ===================== */
 function openSettings(){
   const s=$("#settings");
-  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Connection</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Connection</h3><div class="x" ${act("closeSettings")}>✕</div></div>
   <div class="dialog-b">
     <div class="note">Point the console at your own Comp-Lens API. Credentials stay in this browser tab only — never written to disk or sent anywhere except your endpoint.</div>
     <div class="fld"><label>API base URL</label><input id="cfgBase" value="${esc(CFG.base)}" placeholder="https://your-instance.onrender.com"/></div>
@@ -882,10 +906,10 @@ function openSettings(){
     <div class="fld"><label>Tenant ID</label><input id="cfgTenant" value="${esc(CFG.tenant)}" placeholder="default"/></div>
   </div>
   <div class="dialog-f">
-    <button class="btn ghost" onclick="useDemo()">Use demo data</button>
+    <button class="btn ghost" ${act("useDemo")}>Use demo data</button>
     <div style="flex:1"></div>
-    <button class="btn" onclick="closeSettings()">Cancel</button>
-    <button class="btn primary" onclick="saveSettings()">Save &amp; reconnect</button>
+    <button class="btn" ${act("closeSettings")}>Cancel</button>
+    <button class="btn primary" ${act("saveSettings")}>Save &amp; reconnect</button>
   </div></div>`;
   s.classList.add("on");
   s.onclick=e=>{if(e.target===s)closeSettings();};
@@ -912,11 +936,11 @@ function showConsentBanner(){
   b.innerHTML=`<h4>Your privacy on this device</h4>
     <div>Comp-Lens keeps a little data <b>in your browser</b> to work — your theme and demo preference, and any connector credentials you chose to keep local. There's no advertising or third-party tracking. ${dntOn()?'We detected <b>Do Not Track</b>, so optional storage stays off unless you turn it on.':''}</div>
     <div class="crow">
-      <button class="btn primary sm" onclick="consentAcceptAll()">Accept all</button>
-      <button class="btn sm" onclick="consentEssentialOnly()">Essential only</button>
-      <button class="btn sm" onclick="openConsentPrefs()">Manage</button>
+      <button class="btn primary sm" ${act("consentAcceptAll")}>Accept all</button>
+      <button class="btn sm" ${act("consentEssentialOnly")}>Essential only</button>
+      <button class="btn sm" ${act("openConsentPrefs")}>Manage</button>
       <div style="flex:1"></div>
-      <span class="clink" onclick="openPrivacyNotice()">Privacy notice</span>
+      <span class="clink" ${act("openPrivacyNotice")}>Privacy notice</span>
     </div>`;
   b.classList.add("on");
 }
@@ -927,14 +951,14 @@ function purgeDisallowed(){STORAGE_MANIFEST.forEach(m=>{if(m.cat!=="essential"&&
 function openConsentPrefs(){
   const c=loadConsent(), p=(c&&c.prefs)||{preferences:!dntOn(),analytics:false};
   const s=$("#settings");
-  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy preferences</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy preferences</h3><div class="x" ${act("closeSettings")}>✕</div></div>
   <div class="dialog-b">
     <div class="note">Choose what Comp-Lens may keep in this browser. There is no third-party or advertising tracking. Changes apply immediately.</div>
     <div class="tgl"><div class="tx"><div class="tt">Strictly necessary</div><div class="td">Your consent record and any connector credentials you chose to store locally. Always on.</div></div><button class="sw on lock" disabled aria-disabled="true"></button></div>
-    <div class="tgl"><div class="tx"><div class="tt">Preferences</div><div class="td">Remember your theme and demo-mode choice across visits.</div></div><button class="sw ${p.preferences?'on':''}" id="cp_preferences" onclick="this.classList.toggle('on')" aria-label="Preferences"></button></div>
-    <div class="tgl"><div class="tx"><div class="tt">Analytics</div><div class="td">None today. Reserved for anonymous, aggregate usage metrics — stays off unless you opt in.</div></div><button class="sw ${p.analytics?'on':''}" id="cp_analytics" onclick="this.classList.toggle('on')" aria-label="Analytics"></button></div>
+    <div class="tgl"><div class="tx"><div class="tt">Preferences</div><div class="td">Remember your theme and demo-mode choice across visits.</div></div><button class="sw ${p.preferences?'on':''}" id="cp_preferences" ${act("toggleOn")} aria-label="Preferences"></button></div>
+    <div class="tgl"><div class="tx"><div class="tt">Analytics</div><div class="td">None today. Reserved for anonymous, aggregate usage metrics — stays off unless you opt in.</div></div><button class="sw ${p.analytics?'on':''}" id="cp_analytics" ${act("toggleOn")} aria-label="Analytics"></button></div>
   </div>
-  <div class="dialog-f"><span class="clink" onclick="openPrivacyNotice()">Privacy notice</span><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" onclick="saveConsentPrefs()">Save preferences</button></div></div>`;
+  <div class="dialog-f"><span class="clink" ${act("openPrivacyNotice")}>Privacy notice</span><div style="flex:1"></div><button class="btn" ${act("closeSettings")}>Cancel</button><button class="btn primary" ${act("saveConsentPrefs")}>Save preferences</button></div></div>`;
   s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
 }
 function saveConsentPrefs(){
@@ -949,18 +973,18 @@ function openPrivacy(){
     let present=false,size=0; try{const v=localStorage.getItem(m.key); if(v!=null){present=true;size=v.length;}}catch(e){}
     return `<div class="tgl"><div class="tx"><div class="tt">${esc(m.label)} <span class="chip c-dim" style="font-size:9px"><span class="d"></span>${m.cat}</span></div><div class="td">${esc(m.desc)}</div></div><div class="mono" style="font-size:11px;color:var(--steel);text-align:right;min-width:48px">${present?size+" B":"—"}</div></div>`;
   }).join("");
-  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy &amp; data</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy &amp; data</h3><div class="x" ${act("closeSettings")}>✕</div></div>
   <div class="dialog-b">
     <div class="note">Everything Comp-Lens keeps about you on this device. None of it is shared with third parties.</div>
     ${rows}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
-      <button class="btn sm" onclick="openConsentPrefs()">Manage preferences</button>
-      <button class="btn sm" onclick="openPrivacyNotice()">Privacy notice</button>
+      <button class="btn sm" ${act("openConsentPrefs")}>Manage preferences</button>
+      <button class="btn sm" ${act("openPrivacyNotice")}>Privacy notice</button>
       <div style="flex:1"></div>
-      <button class="btn sm" style="color:var(--fail);border-color:var(--fail)" onclick="clearLocalData()">Clear all local data</button>
+      <button class="btn sm" style="color:var(--fail);border-color:var(--fail)" ${act("clearLocalData")}>Clear all local data</button>
     </div>
   </div>
-  <div class="dialog-f"><div style="flex:1"></div><button class="btn primary" onclick="closeSettings()">Done</button></div></div>`;
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn primary" ${act("closeSettings")}>Done</button></div></div>`;
   s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
 }
 function clearLocalData(){
@@ -972,15 +996,15 @@ function clearLocalData(){
 }
 function openPrivacyNotice(){
   const s=$("#settings");
-  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy notice</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Privacy notice</h3><div class="x" ${act("closeSettings")}>✕</div></div>
   <div class="dialog-b" style="font-size:13px;line-height:1.6;color:var(--body)">
     <p style="margin:0 0 10px"><b>What we store on your device.</b> Comp-Lens keeps a small amount of data in your browser's local storage: your theme and demo-mode preferences, a record of your privacy choices, and — only if you opt in — connector credentials you choose to keep local.</p>
     <p style="margin:0 0 10px"><b>Connector credentials.</b> When you mark a connection "this browser only," its API keys live solely in your browser. They are sent to the server only when you run a sync or test, used in memory, and never written to server storage.</p>
     <p style="margin:0 0 10px"><b>No third-party tracking.</b> Comp-Lens uses no advertising or cross-site tracking cookies, and honours the browser's Do Not Track signal for optional storage.</p>
     <p style="margin:0 0 10px"><b>Server-side data.</b> Evidence and compliance findings you generate are processed under your tenant. Credentials you choose to store on the server are encrypted at rest.</p>
-    <p style="margin:0"><b>Your controls.</b> Review what's stored, change consent, or erase all local data anytime from <span class="clink" onclick="openPrivacy()">Privacy &amp; data</span>.</p>
+    <p style="margin:0"><b>Your controls.</b> Review what's stored, change consent, or erase all local data anytime from <span class="clink" ${act("openPrivacy")}>Privacy &amp; data</span>.</p>
   </div>
-  <div class="dialog-f"><div style="flex:1"></div><button class="btn primary" onclick="closeSettings()">Close</button></div></div>`;
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn primary" ${act("closeSettings")}>Close</button></div></div>`;
   s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
 }
 async function saveSettings(){
@@ -1083,8 +1107,8 @@ const RENDER = {};
 RENDER.overview = async function(){
   const m=main();
   m.innerHTML=viewHead("Compliance posture","Live readiness across every connected system, framework, and control — and what to fix first.",
-    `<button class="btn" onclick="render()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15'/></svg>Refresh</button>
-     <button class="btn primary" onclick="STATE.active='reports';render()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg>Export audit pack</button>`,"posture / 01");
+    `<button class="btn" ${act("render")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15'/></svg>Refresh</button>
+     <button class="btn primary" ${act("navigate","reports")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg>Export audit pack</button>`,"posture / 01");
   const host=el("div");m.appendChild(host);
   host.innerHTML=`<div class="loading"><span class="spin"></span> Reading instruments…</div>`;
 
@@ -1115,10 +1139,10 @@ RENDER.overview = async function(){
   host.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Compliance score${liveBadge(live)}</div><div class="v num">${fmtPct(s.compliance_score)}<small>%</small></div><div class="s ${delta>=0?'up':'dn'}">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(1)} pts · 35d</div></div>
-    <div class="ro drill" onclick="STATE.active='trusttelemetry';render()" title="Fused from connector, policy, enforcement, attestation and follow-through evidence"><div class="k"><span class="tick" style="background:var(--iris,var(--focus))"></span>Verified trust</div><div class="v num">${trust.unified_trust_score!=null?trust.unified_trust_score:'—'}${trust.unified_trust_score!=null?'<small>/100</small>':''}</div><div class="s">${trust.band?trustChip(trust.band):(trust.controls_scored?trust.controls_scored+' scored':'no signal yet')} →</div></div>
+    <div class="ro drill" ${act("navigate","trusttelemetry")} title="Fused from connector, policy, enforcement, attestation and follow-through evidence"><div class="k"><span class="tick" style="background:var(--iris,var(--focus))"></span>Verified trust</div><div class="v num">${trust.unified_trust_score!=null?trust.unified_trust_score:'—'}${trust.unified_trust_score!=null?'<small>/100</small>':''}</div><div class="s">${trust.band?trustChip(trust.band):(trust.controls_scored?trust.controls_scored+' scored':'no signal yet')} →</div></div>
     <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Risk-weighted</div><div class="v num">${fmtPct(s.risk_weighted_score)}<small>%</small></div><div class="s">severity-adjusted</div></div>
-    <div class="ro drill" onclick="STATE.active='findings';render()"><div class="k"><span class="tick" style="background:var(--fail)"></span>Open exposure</div><div class="v num">${fmtPct(s.risk_exposure)}<small>%</small></div><div class="s">${crit.length} high / critical →</div></div>
-    <div class="ro drill" onclick="STATE.active='controls';render()"><div class="k"><span class="tick" style="background:var(--steel)"></span>Controls evaluated</div><div class="v num">${s.total||0}</div><div class="s">${s.waived||0} waived →</div></div>
+    <div class="ro drill" ${act("navigate","findings")}><div class="k"><span class="tick" style="background:var(--fail)"></span>Open exposure</div><div class="v num">${fmtPct(s.risk_exposure)}<small>%</small></div><div class="s">${crit.length} high / critical →</div></div>
+    <div class="ro drill" ${act("navigate","controls")}><div class="k"><span class="tick" style="background:var(--steel)"></span>Controls evaluated</div><div class="v num">${s.total||0}</div><div class="s">${s.waived||0} waived →</div></div>
   </div>
 
   <div class="cols">
@@ -1135,14 +1159,14 @@ RENDER.overview = async function(){
         <div class="panel-b">${sparkline(trendVals,520,72)}</div>
       </div>
       <div class="panel">
-        <div class="panel-h"><div><h3>Framework readiness</h3><div class="sub">Audit-readiness by standard</div></div><div class="sp"></div><button class="btn sm ghost" onclick="STATE.active='frameworks';render()">All frameworks →</button></div>
+        <div class="panel-h"><div><h3>Framework readiness</h3><div class="sub">Audit-readiness by standard</div></div><div class="sp"></div><button class="btn sm ghost" ${act("navigate","frameworks")}>All frameworks →</button></div>
         <div class="panel-b">${fwData.slice(0,4).map(f=>{const r=f.ready!=null?f.ready:0;const c=r>=80?'var(--pass)':r>=60?'var(--warn)':'var(--fail)';return calBar(f.name||f.id,(f.mapped!=null?f.mapped+"/"+f.controls+" mapped":""),r,c);}).join("")}</div>
       </div>
     </div>
   </div>
 
   <div class="panel">
-    <div class="panel-h"><div><h3>Needs attention</h3><div class="sub">Open failing controls, highest severity first</div></div><div class="sp"></div><button class="btn sm ghost" onclick="STATE.active='findings';render()">All findings →</button></div>
+    <div class="panel-h"><div><h3>Needs attention</h3><div class="sub">Open failing controls, highest severity first</div></div><div class="sp"></div><button class="btn sm ghost" ${act("navigate","findings")}>All findings →</button></div>
     <div class="panel-b flush"><div class="tbl-scroll"><table>
       <thead><tr><th>Finding</th><th>Control</th><th>Source</th><th>Severity</th><th>Status</th><th class="right">Detected</th></tr></thead>
       <tbody data-ent="findings">${(attn.map(f=>`
@@ -1297,7 +1321,7 @@ RENDER.frameworks = async function(){
 RENDER.connectors = async function(){
   const m=main();
   m.innerHTML=viewHead("Connectors","Automated evidence collection across cloud, identity, DevOps, ITSM, security, endpoint, SaaS and GRC. Each connector normalizes its system into the same control fields.",
-    `<button class="btn" onclick="STATE.active='evidencehub';render()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><path d='M14 2v6h6'/></svg>Evidence</button>`,"evidence / 01");
+    `<button class="btn" ${act("navigate","evidencehub")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><path d='M14 2v6h6'/></svg>Evidence</button>`,"evidence / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
 
   // Richest source is /connectors/status (per-tenant health + sync). Fall back to
@@ -1386,7 +1410,7 @@ RENDER.connectors = async function(){
       <div class="panel-h">
         <div><h3>Your connections</h3><div class="sub">${instances.length} connected account${instances.length===1?'':'s'} — add as many per system as you need</div></div>
         <div class="sp"></div>
-        <button class="btn primary sm" onclick="openAddConnection()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add connection</button>
+        <button class="btn primary sm" ${act("openAddConnection")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add connection</button>
       </div>
       <div class="panel-b flush"><div class="tbl-scroll"><table>
         <thead><tr><th>Connection</th><th>Type</th><th>Status</th><th>Evidence</th><th class="right">Last sync</th></tr></thead>
@@ -1403,7 +1427,7 @@ RENDER.connectors = async function(){
         <div class="seg" id="connCat"><button class="${CONN.cat==='all'?'on':''}" data-c="all">All</button>${cats.map(c=>`<button class="${CONN.cat===c?'on':''}" data-c="${esc(c)}">${esc(titlecase(c))}</button>`).join("")}</div>
         <div class="sp"></div>
         <div class="seg" id="connShow"><button class="${CONN.show==='all'?'on':''}" data-s="all">All</button><button class="${CONN.show==='active'?'on':''}" data-s="active">Active only</button></div>
-        <button class="btn sm" style="margin-left:10px" onclick="openAddConnection(CACHE.connectors&&CACHE.connectors[0]?CACHE.connectors[0].key:undefined)"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add connection</button>
+        <button class="btn sm" style="margin-left:10px" ${act("openAddConnectionFirst")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Add connection</button>
       </div>
       <div class="panel-b flush"><div class="tbl-scroll"><table>
         <thead><tr><th>Connector</th><th>Category</th><th>Maturity</th><th>Controls</th><th>Collects</th><th>Evidence</th><th>Auth</th><th>Status</th><th class="right">Last sync</th></tr></thead>
@@ -1568,13 +1592,13 @@ RENDER.postureasof = async function(){
     <div class="panel"><div class="panel-h"><h3>Reconstruct as of a date</h3><div class="sub">What did posture look like at this moment?</div></div>
       <div class="panel-b">
         <div class="fld"><label>As of</label><input type="datetime-local" id="asof-dt" value="${esc(nowLocal)}"></div>
-        <button class="btn primary" onclick="runPostureAsOf()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 3'/></svg>Reconstruct</button>
+        <button class="btn primary" ${act("runPostureAsOf")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 3'/></svg>Reconstruct</button>
         <div id="asof-result" style="margin-top:14px"></div>
       </div></div>
     <div class="panel"><div class="panel-h"><h3>Control timeline</h3><div class="sub">Every status transition for one control.</div></div>
       <div class="panel-b">
         <div class="fld"><label>Control ID</label><input type="text" id="tl-control" placeholder="e.g. AC-2"></div>
-        <button class="btn primary" onclick="runPostureTimeline()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 17v-5M12 17v-3M15 17v-7M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z'/></svg>View timeline</button>
+        <button class="btn primary" ${act("runPostureTimeline")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 17v-5M12 17v-3M15 17v-7M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z'/></svg>View timeline</button>
         <div id="tl-result" style="margin-top:14px"></div>
       </div></div>
   </div>`;
@@ -1630,7 +1654,7 @@ function openDrawer({eyebrow,title,sub,badges,body,actions}){
   const d=$("#drawer");
   d.innerHTML=`
     <div class="drawer-h">
-      <div class="eg">${esc(eyebrow||"detail")}<span class="x" onclick="closeDrawer()">✕</span></div>
+      <div class="eg">${esc(eyebrow||"detail")}<span class="x" ${act("closeDrawer")}>✕</span></div>
       <h3>${title||""}</h3>${sub?`<div class="sub">${sub}</div>`:""}
       ${badges?`<div class="badges">${badges}</div>`:""}
     </div>
@@ -1659,7 +1683,7 @@ function wireDelegation(){
 }
 
 const tkt=id=>`<button class="btn sm" ${act("createTicket", id||"")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>Create ticket</button>`;
-const closeBtn=`<button class="btn sm ghost" onclick="closeDrawer()">Close</button>`;
+const closeBtn=`<button class="btn sm ghost" ${act("closeDrawer")}>Close</button>`;
 
 const DETAIL={};
 DETAIL.findings=function(f){
@@ -1686,7 +1710,7 @@ DETAIL.controls=function(c){
     sub:esc(c.domain||""),badges:sevChip(c.severity)+statusChip(c.status||"pending"),
     body:
       ((tb)=>tb?dsec("Verified trust",
-        `<div class="drow link" onclick="closeDrawer();STATE.active='trusttelemetry';render()">`+
+        `<div class="drow link" ${act("closeDrawerThenNavigate","trusttelemetry")}>`+
         `<span style="flex:1;font-size:12.5px;color:var(--body)">Fused trust <b>${tb.trust}/100</b> across ${esc(tb.lane_coverage||'')} lanes</span>${trustChip(tb.band,tb.trust)}<span class="go">breakdown ›</span></div>`+
         `<div style="font-size:11px;color:var(--steel);margin-top:6px">Lanes: ${Object.keys(tb.lanes||{}).map(l=>esc(LANE_LABEL[l]||l)).join(", ")||'none'}</div>`):"")((CACHE.trustBy||{})[c.control_id])+
       dsec("Framework crosswalk",`<div class="flex wrap">${Object.entries(c.frameworks||{}).map(([k,v])=>`<span class="chip c-out">${esc(k)} ${esc((v||[]).join(", "))}</span>`).join("")||'<span style="color:var(--faint)">No mappings</span>'}</div>`)+
@@ -1865,6 +1889,22 @@ function openControlByIdFromDrawer(cid){
   (CACHE.controls||(STATE.demo?D.controls:[])).filter(c=>c.control_id===cid).forEach(DETAIL.controls);
 }
 function closeDrawerThenAddConnection(key){closeDrawer();openAddConnection(key);}
+/* Named stand-ins for what used to be expressions inside an on* attribute.
+   Under `script-src 'self' 'sha256-...'` a browser refuses to run an event
+   attribute at all — a hash covers a <script> block, never an attribute — so
+   every one of these had to become a function the delegated router can call.
+   `this` is the clicked element, because the router applies with it. */
+function navigate(view){STATE.active=view;render();}
+function toggleOn(){this.classList.toggle("on");}
+function toggleRail(){const r=document.getElementById("rail");if(r)r.classList.toggle("open");}
+function clickPdfInput(){const el=document.getElementById("pdfPolicyInput");if(el)el.click();}
+function closeDrawerThenNavigate(view){closeDrawer();navigate(view);}
+function toastMsg(m,kind){toast(m,kind);}
+function openAddConnectionFirst(){
+  openAddConnection(CACHE.connectors&&CACHE.connectors[0]?CACHE.connectors[0].key:undefined);
+}
+function vpCancel(){if(typeof window.__vp==="function")window.__vp(null);}
+function insertPolicyPdfHere(){insertPolicyPdf(this);}
 function syncCloseThenSync(key,name){syncClose();syncGrcPlatform(key,name);}
 function graphNodeByIndex(ni){graphNodeDetail(GMODEL,GMODEL.nodes[ni]);}
 function openFindingByControl(cid,i){const f=relFindings(cid)[i];if(f){closeDrawer();setTimeout(()=>DETAIL.findings(f),120);}}
@@ -1916,7 +1956,7 @@ async function enfSetMode(host,mode){
 RENDER.enforcement = async function(){
   const m=main();
   m.innerHTML=viewHead("Enforcement","Shadow-first Zero-Trust enforcement. Each protected legacy system sits behind an identity-aware proxy (PEP) that asks OPA (PDP) for an allow/deny on every request — using the very same Rego the detective side evaluates.",
-    `<button class="btn" onclick="render()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15'/></svg>Refresh</button>`,"compliance-as-code / 03");
+    `<button class="btn" ${act("render")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15'/></svg>Refresh</button>`,"compliance-as-code / 03");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Reading enforcement plane…</div>`;
 
   const [st,sy,dc]=await Promise.all([
@@ -1937,7 +1977,7 @@ RENDER.enforcement = async function(){
     <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>PEPs online${liveBadge(live)}</div><div class="v num">${status.peps_online||0}<small>/${status.pdp_nodes||0}</small></div><div class="s">data-plane nodes</div></div>
     <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>In shadow</div><div class="v num">${status.systems_shadow||0}</div><div class="s">${status.systems_enforcing||0} enforcing</div></div>
     <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Would-block · prevented</div><div class="v num">${(t.would_block||0).toLocaleString()}</div><div class="s">caught in shadow</div></div>
-    <div class="ro drill" onclick="STATE.active='risks';render()"><div class="k"><span class="tick" style="background:var(--fail)"></span>Fail-open systems</div><div class="v num">${failOpen}</div><div class="s">${failOpen?'operational risk →':'none'}</div></div>
+    <div class="ro drill" ${act("navigate","risks")}><div class="k"><span class="tick" style="background:var(--fail)"></span>Fail-open systems</div><div class="v num">${failOpen}</div><div class="s">${failOpen?'operational risk →':'none'}</div></div>
   </div>
 
   <div class="panel">
@@ -2068,7 +2108,7 @@ function askPassphrase(creating){
       <div class="fld"><label>Passphrase</label><input id="vpass" type="password" autocomplete="off" autofocus/></div>
       ${creating?'<div class="fld"><label>Confirm</label><input id="vpass2" type="password" autocomplete="off"/></div>':''}
     </div>
-    <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="__vp(null)">Cancel</button><button class="btn primary" ${act("__vpOk", creating)}>${creating?"Set passphrase":"Unlock"}</button></div></div>`;
+    <div class="dialog-f"><div style="flex:1"></div><button class="btn" ${act("vpCancel")}>Cancel</button><button class="btn primary" ${act("__vpOk", creating)}>${creating?"Set passphrase":"Unlock"}</button></div></div>`;
     s.classList.add("on");
     window.__vp=v=>{s.onclick=null;delete window.__vp;delete window.__vpOk;res(v);};
     window.__vpOk=isCreate=>{const p=($("#vpass")||{}).value||"";if(!p){toast("Enter a passphrase","warn");return;}if(isCreate){if(p!==(($("#vpass2")||{}).value||"")){toast("Passphrases don't match","warn");return;}if(p.length<6){toast("Use at least 6 characters","warn");return;}}window.__vp(p);};
@@ -2119,7 +2159,7 @@ function openTreatmentPicker(riskId,current){
   const opts=["mitigate","transfer","accept","avoid"];
   s.innerHTML=`<div class="dialog" style="max-width:380px"><div class="dialog-h"><h3>Update treatment</h3></div>
   <div class="dialog-b"><div class="fld"><label>Treatment</label><select id="trSel">${opts.map(o=>`<option value="${o}" ${o===current?'selected':''}>${o[0].toUpperCase()+o.slice(1)}</option>`).join("")}</select></div></div>
-  <div class="dialog-f"><div style="flex:1"></div><button class="btn" onclick="closeSettings()">Cancel</button><button class="btn primary" ${act("submitTreatment", riskId)}>Save</button></div></div>`;
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" ${act("closeSettings")}>Cancel</button><button class="btn primary" ${act("submitTreatment", riskId)}>Save</button></div></div>`;
   s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
 }
 async function submitTreatment(riskId){
@@ -2180,23 +2220,23 @@ function setAcStore(v){AC_STORE=v;const seg=$("#acStore");if(seg)[...seg.childre
 function openAddConnection(preKey){
   const cat=_cat(),s=$("#settings");
   const opts=cat.map(c=>`<option value="${esc(c.key)}">${esc(c.name)}${c.vendor&&c.vendor!==c.name?" · "+esc(c.vendor):""}</option>`).join("");
-  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Add connection</h3><div class="x" onclick="closeSettings()">✕</div></div>
+  s.innerHTML=`<div class="dialog"><div class="dialog-h"><h3>Add connection</h3><div class="x" ${act("closeSettings")}>✕</div></div>
   <div class="dialog-b">
     <div class="note">Connect an account of any system. You can add <b>multiple</b> connections per type — several AWS accounts, several Okta orgs, etc. Choose below whether credentials stay in this browser or are stored on the server.</div>
-    <div class="fld"><label>Connector type</label><select id="acType" onchange="acFields()">${opts}</select></div>
+    <div class="fld"><label>Connector type</label><select id="acType" ${act("acFields")}>${opts}</select></div>
     <div class="fld"><label>Label</label><input id="acLabel" placeholder="e.g. AWS — Production"/></div>
     <div class="fld"><label>Where to store credentials</label>
       <div class="seg" id="acStore">
-        <button type="button" class="on" data-store="local" onclick="setAcStore('local')">This browser only</button>
-        <button type="button" data-store="server" onclick="setAcStore('server')">Server (encrypted)</button>
+        <button type="button" class="on" data-store="local" ${act("setAcStore","local")}>This browser only</button>
+        <button type="button" data-store="server" ${act("setAcStore","server")}>Server (encrypted)</button>
       </div>
       <div id="acStoreNote" class="note" style="margin-top:8px">Credentials are <b>encrypted in this browser</b> (AES-GCM) and sent to the server only to run a sync \u2014 never stored there.</div>
     </div>
     <div id="acFields"></div>
   </div>
   <div class="dialog-f"><div style="flex:1"></div>
-    <button class="btn" onclick="closeSettings()">Cancel</button>
-    <button class="btn primary" onclick="submitAddConnection()">Add connection</button>
+    <button class="btn" ${act("closeSettings")}>Cancel</button>
+    <button class="btn primary" ${act("submitAddConnection")}>Add connection</button>
   </div></div>`;
   AC_STORE="local";
   s.classList.add("on"); s.onclick=e=>{if(e.target===s)closeSettings();};
@@ -2325,9 +2365,9 @@ DETAIL.instances=function(i){
 RENDER.policy = async function(){
   const m=main();
   m.innerHTML=viewHead("Policies","Controls expressed as code. Each policy is versioned, evaluated against connected systems, and produces pass/fail evidence automatically.",
-    `<input type="file" id="pdfPolicyInput" accept="application/pdf,.pdf" style="display:none" onchange="insertPolicyPdf(this)">`+
-    `<button class="btn" onclick="document.getElementById('pdfPolicyInput').click()" title="Insert a policy document (PDF)"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M9 13h6M9 17h6'/></svg>Insert PDF</button>`+
-    `<button class="btn primary" onclick="toast('Policy editor opens in your IDE via the CLI')"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New policy</button>`,"compliance-as-code / 01");
+    `<input type="file" id="pdfPolicyInput" accept="application/pdf,.pdf" style="display:none" ${act("insertPolicyPdfHere")}>`+
+    `<button class="btn" ${act("clickPdfInput")} title="Insert a policy document (PDF)"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M9 13h6M9 17h6'/></svg>Insert PDF</button>`+
+    `<button class="btn primary" ${act("toastMsg","Policy editor opens in your IDE via the CLI")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New policy</button>`,"compliance-as-code / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=`<div class="loading"><span class="spin"></span> Loading policies…</div>`;
   const[pol]=await Promise.all([load(withTenant("/policies"),D.policies)]);
   const rows=[...PDF_POLICIES, ...(pol.data||(STATE.demo?D.policies:[]))];CACHE.policies=rows;
@@ -2543,7 +2583,7 @@ RENDER.evidencehub = async function(){
     <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Pending verify</div><div class="v num">${rows.filter(r=>!r.verified).length}</div></div>
     <div class="ro"><div class="k">Seal</div><div class="v num" style="font-size:20px">SHA-256</div></div>
   </div>
-  <div class="panel"><div class="panel-h"><h3>Evidence ledger</h3><div class="sp"></div><button class="btn sm" onclick="reverifyAllEvidence()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>Verify integrity</button></div>
+  <div class="panel"><div class="panel-h"><h3>Evidence ledger</h3><div class="sp"></div><button class="btn sm" ${act("reverifyAllEvidence")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M9 12l2 2 4-4'/><circle cx='12' cy='12' r='9'/></svg>Verify integrity</button></div>
   <div class="panel-b flush"><div class="tbl-scroll"><table>
     <thead><tr><th>Record</th><th>Control</th><th>Source</th><th>Hash</th><th>Sealed</th><th>State</th></tr></thead>
     <tbody data-ent="evidence">${rows.map(r=>`<tr>
@@ -2574,7 +2614,7 @@ RENDER.evidenceingest = async function(){
   <div class="panel"><div class="panel-h"><h3>Ingest a document</h3><div class="sub">Paste a standard-format document and format below</div></div>
     <div class="panel-b">
       <div class="grid g-2">
-        <div class="fld"><label>Format</label><select id="ing-fmt" onchange="loadIngestExample()">
+        <div class="fld"><label>Format</label><select id="ing-fmt" ${act("loadIngestExample")}>
           <option value="ocsf">OCSF · Compliance Finding</option>
           <option value="sarif">SARIF · Static analysis</option>
           <option value="cyclonedx">CycloneDX · SBOM / VEX</option>
@@ -2583,10 +2623,10 @@ RENDER.evidenceingest = async function(){
           <option value="stix">STIX · Threat intel</option>
           <option value="sigstore">Sigstore · Signed attestation</option>
         </select></div>
-        <div class="fld" style="display:flex;align-items:flex-end"><button class="btn" onclick="loadIngestExample()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>Load example</button></div>
+        <div class="fld" style="display:flex;align-items:flex-end"><button class="btn" ${act("loadIngestExample")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>Load example</button></div>
       </div>
       <div class="fld"><label>Document (JSON)</label><textarea id="ing-body" rows="10" style="font-family:var(--mono);font-size:12px" placeholder="Paste an OCSF event, SARIF log, CycloneDX/SPDX BOM, in-toto statement, STIX bundle, or Sigstore bundle…"></textarea></div>
-      <button class="btn primary" onclick="runIngest()"><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7'/><path d='M3 12h5l2 3h4l2-3h5'/></svg>Ingest</button>
+      <button class="btn primary" ${act("runIngest")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7'/><path d='M3 12h5l2 3h4l2-3h5'/></svg>Ingest</button>
       <div id="ing-result" style="margin-top:14px"></div>
     </div></div>`;
   document.getElementById("ing-body").value=JSON.stringify(INGEST_EXAMPLES.ocsf,null,2);
@@ -2759,7 +2799,7 @@ RENDER.grcplatforms = async function(){
     return {key,name,status:(status.connected||[]).includes(key)?"connected":"not_connected",...s};
   });
   CACHE.platforms=plats;
-  m2.innerHTML=grcPlatTable(plats)+`<div class="note">Each platform is a real, credential-gated connector (read-only, fails closed without credentials). Inherited attestations are stored separately from native connector evidence and cross-checked in <span class="clink" onclick="STATE.active='trustgraph';render()">multi-source agreement</span>.</div>`;
+  m2.innerHTML=grcPlatTable(plats)+`<div class="note">Each platform is a real, credential-gated connector (read-only, fails closed without credentials). Inherited attestations are stored separately from native connector evidence and cross-checked in <span class="clink" ${act("navigate","trustgraph")}>multi-source agreement</span>.</div>`;
 };
 function grcPlatTable(plats){
   const HM={connected:"c-pass",not_connected:"c-dim"};
@@ -2825,13 +2865,13 @@ async function syncGrcPlatform(key,name){
   const endpoint=CFG.base.replace(/\/$/,"")+path;
   const sc=$("#scrim2");
   sc.innerHTML=`<div class="dialog syncdlg" role="dialog" aria-modal="true" aria-label="Syncing ${esc(name)}">
-    <div class="dialog-h"><h3 id="sync-t">Connecting to ${esc(name)}…</h3><span class="x" onclick="syncClose()">✕</span></div>
+    <div class="dialog-h"><h3 id="sync-t">Connecting to ${esc(name)}…</h3><span class="x" ${act("syncClose")}>✕</span></div>
     <div class="dialog-b">
       <div class="sub" id="sync-s" style="font-size:12.5px;color:var(--steel);margin-bottom:14px">Read-only attestation sync. Nothing is written back to ${esc(name)}.</div>
       <ul class="syncsteps" id="sync-l">${steps.map(s=>`<li class="syncstep" data-s="idle"><span class="d"></span><span>${esc(s)}</span></li>`).join("")}</ul>
       <div id="sync-p"></div>
     </div>
-    <div class="dialog-f" id="sync-f"><button class="btn sm ghost" onclick="syncClose()">Cancel</button></div>
+    <div class="dialog-f" id="sync-f"><button class="btn sm ghost" ${act("syncClose")}>Cancel</button></div>
   </div>`;
   sc.classList.add("on");
 
@@ -2846,7 +2886,7 @@ async function syncGrcPlatform(key,name){
   const dwell=fn=>setTimeout(fn,Math.max(0,900-(Date.now()-started)));
 
   const finish=(retry)=>{ $("#sync-f").innerHTML=(retry?`<button class="btn sm ghost" ${act("syncCloseThenSync", key, name)}>Try again</button>`:"")
-    +`<button class="btn sm primary" onclick="syncClose()">Close</button>`; };
+    +`<button class="btn sm primary" ${act("syncClose")}>Close</button>`; };
 
   const fail=(e)=>{ settled=true; stop();
     const info=syncClassify(e,name);

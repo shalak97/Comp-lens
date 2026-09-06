@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services.ocsf import NormalizedEvidence
+from app.services.shapes import as_list
 
 STIX_SPEC = "2.1"
 
@@ -42,7 +43,7 @@ _LABEL_SEVERITY = {"malicious-activity": "high", "attribution": "medium",
 
 
 def _cve_of(obj: dict[str, Any]) -> str | None:
-    for ref in obj.get("external_references") or []:
+    for ref in as_list(obj.get("external_references")):
         if isinstance(ref, dict) and str(ref.get("source_name", "")).lower() == "cve":
             return ref.get("external_id")
     return None
@@ -62,11 +63,16 @@ def from_stix(bundle: dict[str, Any]) -> list[NormalizedEvidence]:
         return []
     out: list[NormalizedEvidence] = []
     now = datetime.now(UTC).isoformat()
-    for obj in bundle.get("objects") or []:
+    for obj in as_list(bundle.get("objects")):
         if not isinstance(obj, dict):
             continue
+        # STIX `type` is a string by spec, but nothing stops a document
+        # sending an object or a list — and looking that up in a set raised
+        # `TypeError: unhashable type` out of the adapter, so a malformed
+        # bundle became a 500 rather than a 400. A non-string type matches
+        # nothing, which is the same outcome as an unrecognised one.
         otype = obj.get("type")
-        if otype not in _INTEL_TYPES:
+        if not isinstance(otype, str) or otype not in _INTEL_TYPES:
             continue
         name = obj.get("name") or _cve_of(obj) or obj.get("id")
         out.append(NormalizedEvidence(
@@ -89,9 +95,10 @@ def stix_summary(bundle: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(bundle, dict):
         return {"threat_objects": 0}
     counts: dict[str, int] = {}
-    for obj in bundle.get("objects") or []:
-        if isinstance(obj, dict) and obj.get("type") in _INTEL_TYPES:
-            counts[obj["type"]] = counts.get(obj["type"], 0) + 1
+    for obj in as_list(bundle.get("objects")):
+        t = obj.get("type") if isinstance(obj, dict) else None
+        if isinstance(t, str) and t in _INTEL_TYPES:
+            counts[t] = counts.get(t, 0) + 1
     return {
         "threat_objects": sum(counts.values()),
         "vulnerabilities": counts.get("vulnerability", 0),
@@ -103,7 +110,7 @@ def stix_summary(bundle: dict[str, Any]) -> dict[str, Any]:
 
 def to_stix_bundle(objects: list[dict[str, Any]]) -> dict[str, Any]:
     return {"type": "bundle", "id": f"bundle--{uuid.uuid4()}",
-            "spec_version": STIX_SPEC, "objects": list(objects or [])}
+            "spec_version": STIX_SPEC, "objects": list(as_list(objects))}
 
 
 def vulnerability(*, name: str, cve: str | None = None,

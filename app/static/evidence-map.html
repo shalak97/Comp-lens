@@ -220,7 +220,16 @@ function adjacency(g){const adj={};g.nodes.forEach(n=>adj[n.id]=new Set());
   g.edges.forEach(e=>{if(adj[e.source]&&adj[e.target]){adj[e.source].add(e.target);adj[e.target].add(e.source);}});return adj;}
 function render(){
   const svg=$('#svg');svg.innerHTML='';
-  if(!G||!G.nodes.length){$('#empty').style.display='flex';$('#empty').innerHTML='<div style="font-size:40px">⊘</div><div>No evidence yet.</div><button class="btn primary" onclick="document.getElementById(\'upload\').click()">+ Add your first document</button>';return;}
+  if(!G||!G.nodes.length){
+    /* The button used to carry an inline onclick. A CSP script hash covers a
+       <script> block and never an event attribute, so the attribute would not
+       run under script-src — the empty-state button would be dead. */
+    $('#empty').style.display='flex';
+    $('#empty').innerHTML='<div style="font-size:40px">⊘</div><div>No evidence yet.</div><button class="btn primary" id="addfirst">+ Add your first document</button>';
+    const b=document.getElementById('addfirst');
+    if(b)b.addEventListener('click',()=>{const u=document.getElementById('upload');if(u)u.click();});
+    return;
+  }
   $('#empty').style.display='none';
   const root=mk('g',{transform:`translate(${view.x},${view.y}) scale(${view.k})`});root.id='root';svg.appendChild(root);
   const eg=mk('g',{});root.appendChild(eg);const ng=mk('g',{});root.appendChild(ng);

@@ -37,6 +37,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services.ocsf import NormalizedEvidence
+from app.services.shapes import as_dict, as_list
 
 BOM_FORMAT = "CycloneDX"
 SPEC_VERSION = "1.6"
@@ -82,7 +83,7 @@ def _severity_from_score(score: Any) -> str | None:
 def _vuln_severity(vuln: dict[str, Any]) -> tuple[str, Any, str | None]:
     """Highest severity across a vulnerability's ratings -> (word, score, method)."""
     best_word, best_score, best_method = "unknown", None, None
-    for r in vuln.get("ratings") or []:
+    for r in as_list(vuln.get("ratings")):
         if not isinstance(r, dict):
             continue
         word = _CDX_SEVERITY.get(str(r.get("severity") or "").lower())
@@ -104,18 +105,18 @@ def _vex_state(vuln: dict[str, Any]) -> str | None:
 
 def _affected_refs(vuln: dict[str, Any]) -> list[str]:
     out = []
-    for a in vuln.get("affects") or []:
+    for a in as_list(vuln.get("affects")):
         if isinstance(a, dict) and a.get("ref"):
             out.append(str(a["ref"]))
     return out
 
 
 def _tool_name(bom: dict[str, Any]) -> str:
-    meta = bom.get("metadata") or {}
+    meta = as_dict(bom.get("metadata"))
     tools = meta.get("tools")
     # 1.5+ shape: {"components":[{"name":...}]}; legacy: [{"name":...}]
     if isinstance(tools, dict):
-        comps = tools.get("components") or []
+        comps = as_list(tools.get("components"))
         if comps and isinstance(comps[0], dict) and comps[0].get("name"):
             return str(comps[0]["name"]).upper().replace(" ", "_")
     if isinstance(tools, list) and tools and isinstance(tools[0], dict) and tools[0].get("name"):
@@ -138,7 +139,7 @@ def from_cyclonedx(bom: dict[str, Any]) -> list[NormalizedEvidence]:
     out: list[NormalizedEvidence] = []
     now = datetime.now(UTC).isoformat()
     source = _tool_name(bom)
-    for vuln in bom.get("vulnerabilities") or []:
+    for vuln in as_list(bom.get("vulnerabilities")):
         if not isinstance(vuln, dict):
             continue
         state = _vex_state(vuln)
@@ -161,7 +162,7 @@ def from_cyclonedx(bom: dict[str, Any]) -> list[NormalizedEvidence]:
                 findings=[{
                     "id": vid, "severity": sev, "cvss_score": score, "cvss_method": method,
                     "vex_state": state, "component": ref, "affects": refs,
-                    "source": ((vuln.get("source") or {}).get("name")),
+                    "source": ((as_dict(vuln.get("source"))).get("name")),
                     "description": vuln.get("description"),
                 }],
                 provenance={"cyclonedx_spec": bom.get("specVersion", SPEC_VERSION),
@@ -175,11 +176,11 @@ def sbom_summary(bom: dict[str, Any]) -> dict[str, Any]:
     counts only ACTIVE criticals (VEX-suppressed excluded) — the RA-5 field."""
     if not isinstance(bom, dict):
         return {"sbom_present": False}
-    components = [c for c in (bom.get("components") or []) if isinstance(c, dict)]
+    components = [c for c in (as_list(bom.get("components"))) if isinstance(c, dict)]
     licenses: set[str] = set()
     for c in components:
-        for lic in c.get("licenses") or []:
-            lo = (lic or {}).get("license") or {}
+        for lic in as_list(c.get("licenses")):
+            lo = as_dict((as_dict(lic)).get("license"))
             lid = lo.get("id") or lo.get("name")
             if lid:
                 licenses.add(str(lid))
@@ -217,16 +218,16 @@ def component_evidence(bom: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(bom, dict):
         return []
     out: list[dict[str, Any]] = []
-    for c in bom.get("components") or []:
+    for c in as_list(bom.get("components")):
         if not isinstance(c, dict):
             continue
-        identity = ((c.get("evidence") or {}).get("identity"))
+        identity = ((as_dict(c.get("evidence"))).get("identity"))
         # 1.6 allows identity to be a list; 1.5 a single object
         identities = identity if isinstance(identity, list) else ([identity] if identity else [])
         for idn in identities:
             if not isinstance(idn, dict):
                 continue
-            techniques = [str(m.get("technique")) for m in (idn.get("methods") or [])
+            techniques = [str(m.get("technique")) for m in (as_list(idn.get("methods")))
                           if isinstance(m, dict) and m.get("technique")]
             out.append({
                 "ref": c.get("bom-ref") or c.get("purl") or c.get("name"),
@@ -267,8 +268,8 @@ def to_cyclonedx(*, components: list[dict[str, Any]] | None = None,
             "timestamp": datetime.now(UTC).isoformat(),
             "tools": {"components": [{"type": "application", "name": product}]},
         },
-        "components": list(components or []),
-        "vulnerabilities": list(vulnerabilities or []),
+        "components": list(as_list(components)),
+        "vulnerabilities": list(as_list(vulnerabilities)),
     }
 
 

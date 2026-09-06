@@ -13,6 +13,7 @@ import os as _os_evm
 import re
 from contextlib import asynccontextmanager
 from dataclasses import asdict as _asdict
+from functools import lru_cache as _lru_cache
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -1155,6 +1156,32 @@ def ingest_standard_evidence(
 
 
 _STATIC_DIR = _os.path.join(_os.path.dirname(__file__), "static")
+
+
+@_lru_cache(maxsize=8)
+def _csp_for_file_cached(path: str, stamp: tuple) -> str:
+    from app.hardening import csp_for
+
+    # The dashboard's API base is configurable, so a hosted console pointed at
+    # a separate API origin must still be able to reach it. cors_origins is the
+    # operator's own declaration of which origins are in play, so it is the
+    # right source for connect-src; a wildcard there means the operator has
+    # already chosen not to constrain this.
+    origins = [o for o in getattr(settings, "cors_origins", []) if o and o != "*"]
+    extra = "*" if "*" in getattr(settings, "cors_origins", []) else " ".join(origins)
+    with open(path, "rb") as fh:
+        return csp_for(fh.read(), connect_extra=extra)
+
+
+def _csp_for_file(path: str) -> str:
+    """CSP for one console, recomputed whenever the file changes on disk."""
+    try:
+        st = _os.stat(path)
+    except OSError:
+        return ""
+    return _csp_for_file_cached(path, (st.st_mtime_ns, st.st_size))
+
+
 if _os.path.isdir(_STATIC_DIR):
     app.mount("/static", _StaticFiles(directory=_STATIC_DIR), name="static")
 
@@ -1168,8 +1195,11 @@ if _os.path.isdir(_STATIC_DIR):
         # revalidation is a 304 with no body: correctness without the bytes.
         # /evidence/map already did exactly this; the dashboard was the
         # oversight.
-        return _FileResponse(_os.path.join(_STATIC_DIR, "dashboard.html"),
-                             headers={"Cache-Control": "no-cache"})
+        path = _os.path.join(_STATIC_DIR, "dashboard.html")
+        return _FileResponse(path, headers={
+            "Cache-Control": "no-cache",
+            "Content-Security-Policy": _csp_for_file(path),
+        })
 
 
 # ── framework catalog + attestation (full coverage) ──
@@ -1566,7 +1596,7 @@ _EVMAP_FILE = _os_evm.path.join(_os_evm.path.dirname(__file__), "static", "evide
 
 @app.get("/evidence-map", include_in_schema=False)
 def _serve_evidence_map():
-    return _FileResponse_evm(_EVMAP_FILE, headers={"Cache-Control":"no-cache,no-store,must-revalidate","Pragma":"no-cache","Expires":"0"})
+    return _FileResponse_evm(_EVMAP_FILE, headers={"Cache-Control":"no-cache,no-store,must-revalidate","Pragma":"no-cache","Expires":"0","Content-Security-Policy":_csp_for_file(_EVMAP_FILE)})
 
 
 

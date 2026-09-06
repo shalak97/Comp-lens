@@ -36,6 +36,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services.ocsf import NormalizedEvidence
+from app.services.shapes import as_dict, as_list
 
 STATEMENT_TYPE_V1 = "https://in-toto.io/Statement/v1"
 SLSA_PROVENANCE_V1 = "https://slsa.dev/provenance/v1"
@@ -83,7 +84,7 @@ def _subjects(stmt: dict[str, Any]) -> list[dict[str, Any]]:
     a result indistinguishable from "this artifact is not covered".
     """
     out = []
-    for s in stmt.get("subject") or []:
+    for s in as_list(stmt.get("subject")):
         if isinstance(s, dict) and s.get("name"):
             digest = s.get("digest") if isinstance(s.get("digest"), dict) else {}
             digests = {str(k).lower(): str(v).lower()
@@ -107,16 +108,16 @@ def is_signed(obj: dict[str, Any]) -> bool:
 
 
 def _builder_id(stmt: dict[str, Any]) -> str | None:
-    pred = stmt.get("predicate") or {}
+    pred = as_dict(stmt.get("predicate"))
     if not isinstance(pred, dict):
         return None
     # SLSA v1 shape
-    rd = pred.get("runDetails") or {}
-    builder = (rd.get("builder") or {}) if isinstance(rd, dict) else {}
+    rd = as_dict(pred.get("runDetails"))
+    builder = (as_dict(rd.get("builder"))) if isinstance(rd, dict) else {}
     if isinstance(builder, dict) and builder.get("id"):
         return str(builder["id"])
     # SLSA v0.2 shape
-    b2 = pred.get("builder") or {}
+    b2 = as_dict(pred.get("builder"))
     if isinstance(b2, dict) and b2.get("id"):
         return str(b2["id"])
     return None
@@ -166,7 +167,7 @@ def to_intoto_statement(*, subject_name: str, sha256: str,
         "_type": STATEMENT_TYPE_V1,
         "subject": [{"name": subject_name, "digest": {"sha256": sha256}}],
         "predicateType": predicate_type,
-        "predicate": predicate or {},
+        "predicate": as_dict(predicate),
     }
 
 

@@ -26,6 +26,7 @@ from typing import Any
 
 from app.services.intoto import dsse_decode
 from app.services.ocsf import NormalizedEvidence
+from app.services.shapes import as_dict, as_list
 
 _INTEGRITY_CONCEPTS = ["data_integrity", "audit_log_protection"]
 
@@ -62,8 +63,8 @@ def bundle_metadata(bundle: dict[str, Any]) -> dict[str, Any]:
         "in_transparency_log": bool(tlogs),
         "rekor_log_index": first.get("logIndex") or first.get("log_index"),
         "integrated_time": first.get("integratedTime") or first.get("integrated_time"),
-        "payload_type": (env or {}).get("payloadType"),
-        "predicate_type": (payload or {}).get("predicateType") if isinstance(payload, dict) else None,
+        "payload_type": (as_dict(env)).get("payloadType"),
+        "predicate_type": (as_dict(payload)).get("predicateType") if isinstance(payload, dict) else None,
         "media_type": bundle.get("mediaType") or bundle.get("media_type"),
         "cryptographically_verified": False,  # structural read only — never claim crypto proof
     }
@@ -78,7 +79,7 @@ def from_sigstore(bundle: dict[str, Any]) -> NormalizedEvidence | None:
     payload = dsse_decode(env) if env else None
     subjects = []
     if isinstance(payload, dict):
-        for s in payload.get("subject") or []:
+        for s in as_list(payload.get("subject")):
             if isinstance(s, dict) and s.get("name"):
                 subjects.append(s["name"])
     return NormalizedEvidence(

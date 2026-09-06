@@ -26,9 +26,12 @@ fields the policy engine reads), so nothing downstream has to change to consume 
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+
+from app.services.shapes import as_dict
 
 OCSF_VERSION = "1.4.0"
 
@@ -103,10 +106,25 @@ _CLASS_CONCEPTS = {
 
 
 def _epoch_ms(value: Any) -> int:
-    if isinstance(value, (int, float)) and value > 0:
+    # `math.isfinite` before int(): a producer sending `"time": Infinity` (legal
+    # in the JSON many libraries emit, and what a NaN timestamp serialises to)
+    # raised OverflowError out of the adapter and became a 500.
+    if isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and math.isfinite(value) and value > 0:
         # already epoch ms if it looks like ms, else seconds -> ms
         return int(value) if value > 1e11 else int(value * 1000)
     return int(datetime.now(UTC).timestamp() * 1000)
+
+
+def _key(value: Any) -> Any:
+    """A value safe to use as a dict key.
+
+    OCSF's class/category ids are integers, but nothing stops a document
+    carrying `"class_uid": []`, and looking that up raised `TypeError:
+    unhashable type` from inside the adapter. Unhashable input becomes None,
+    which simply matches no entry — the same outcome as an unknown id.
+    """
+    return value if isinstance(value, (str, int, float, bool, type(None))) else None
 
 
 def _iso_from_ms(ms: int) -> str:
@@ -177,7 +195,7 @@ class NormalizedEvidence:
 
 
 def _source_system(event: dict[str, Any]) -> str:
-    prod = ((event.get("metadata") or {}).get("product") or {})
+    prod = (as_dict((as_dict(event.get("metadata"))).get("product")))
     name = prod.get("name") or prod.get("vendor_name")
     return str(name).upper().replace(" ", "_") if name else "OCSF"
 
@@ -195,7 +213,7 @@ def _extract_asset(event: dict[str, Any]) -> tuple[str | None, str | None]:
             return (r.get("uid") or r.get("hostname") or r.get("name")), r.get("type")
     actor = event.get("actor")
     if isinstance(actor, dict):
-        user = actor.get("user") or {}
+        user = as_dict(actor.get("user"))
         if isinstance(user, dict) and (user.get("uid") or user.get("name")):
             return (user.get("uid") or user.get("name")), "user"
     return None, None
@@ -230,8 +248,8 @@ def from_ocsf(event: dict[str, Any]) -> NormalizedEvidence | None:
     if not isinstance(event, dict):
         return None
 
-    class_uid = event.get("class_uid")
-    category_uid = event.get("category_uid")
+    class_uid = _key(event.get("class_uid"))
+    category_uid = _key(event.get("category_uid"))
     if category_uid is None and isinstance(class_uid, int):
         category_uid = class_uid // 1000  # class_uid encodes category as its thousands
     ms = _epoch_ms(event.get("time"))
@@ -243,7 +261,7 @@ def from_ocsf(event: dict[str, Any]) -> NormalizedEvidence | None:
         observed_at=_iso_from_ms(ms), asset_id=asset_id, asset_type=asset_type,
         severity=_severity_word(event),
         provenance={"ocsf_class_uid": class_uid, "ocsf_category_uid": category_uid,
-                    "ocsf_version": (event.get("metadata") or {}).get("version"),
+                    "ocsf_version": (as_dict(event.get("metadata"))).get("version"),
                     "time_ms": ms},
     )
 
@@ -260,7 +278,7 @@ def from_ocsf(event: dict[str, Any]) -> NormalizedEvidence | None:
             ev.telemetry["mfa_enforced"] = b
 
     elif class_uid == CLASS_COMPLIANCE_FINDING:
-        comp = event.get("compliance") or {}
+        comp = as_dict(event.get("compliance"))
         if isinstance(comp, dict):
             status_raw = str(comp.get("status") or "").lower()
             status = "pass" if status_raw in ("pass", "passed", "compliant") else (

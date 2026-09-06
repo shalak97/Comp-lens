@@ -46,6 +46,29 @@ _SSH_PORT = 22
 _RDP_PORT = 3389
 
 
+def _absent(exc: Exception, *codes: str) -> bool | None:
+    """Did this call fail because the thing is not configured, or because we
+    could not look?
+
+    AWS answers "there is no encryption configuration on this bucket" with an
+    error, and answers "you may not ask" with a different error. Both are
+    exceptions, and treating them alike is how a missing IAM permission becomes
+    a critical finding: `AC-3-OBJSTORE-PUBLIC` reads `public_access_blocked ==
+    true`, so a denied `GetBucketPublicAccessBlock` reported every bucket in
+    the estate as publicly readable.
+
+    Returns False when the named "not configured" code is present — an observed
+    fact, and a real control failure — and None otherwise, which the check
+    engine renders as NOT_APPLICABLE rather than inventing a verdict.
+
+    Matched on the message rather than a botocore error code so this module
+    keeps working without importing botocore, which is the idiom the rest of
+    the file already uses for exactly this distinction.
+    """
+    text = str(exc)
+    return False if any(c in text for c in codes) else None
+
+
 def _days_since(dt: datetime | None) -> int | None:
     if not dt:
         return None
@@ -385,8 +408,8 @@ class AWSConnector(BaseConnector):
         s3 = self._session.client("s3")
 
         # encryption at rest
-        enc = False
-        kms = False
+        enc = None
+        kms = None
         try:
             rules = (s3.get_bucket_encryption(Bucket=bucket)
                      .get("ServerSideEncryptionConfiguration", {}).get("Rules", []))
@@ -394,11 +417,17 @@ class AWSConnector(BaseConnector):
             kms = any(
                 r.get("ApplyServerSideEncryptionByDefault", {}).get("SSEAlgorithm") == "aws:kms"
                 for r in rules)
-        except Exception:  # noqa: BLE001
-            enc = False
+        except Exception as exc:  # noqa: BLE001
+            # This used to be `enc = False` for ANY failure, so a role without
+            # s3:GetEncryptionConfiguration reported every bucket unencrypted —
+            # three high-severity SC-28 controls, failing on evidence we never
+            # had. Only the "no configuration exists" error means unencrypted.
+            enc = kms = _absent(exc, "ServerSideEncryptionConfigurationNotFound")
+            if enc is None:
+                logger.warning("S3 %s: encryption unreadable (%s)", bucket, exc)
 
         # public access block
-        blocked = False
+        blocked = None
         try:
             cfg = s3.get_public_access_block(Bucket=bucket)["PublicAccessBlockConfiguration"]
             blocked = all(
@@ -410,8 +439,13 @@ class AWSConnector(BaseConnector):
                     "RestrictPublicBuckets",
                 )
             )
-        except Exception:  # noqa: BLE001
-            blocked = False
+        except Exception as exc:  # noqa: BLE001
+            # AC-3-OBJSTORE-PUBLIC is a CRITICAL control reading this signal.
+            # `blocked = False` on any failure meant a denied
+            # GetBucketPublicAccessBlock announced the whole estate as public.
+            blocked = _absent(exc, "NoSuchPublicAccessBlockConfiguration")
+            if blocked is None:
+                logger.warning("S3 %s: public-access block unreadable (%s)", bucket, exc)
 
         versioning = None
         with contextlib.suppress(Exception):
@@ -469,20 +503,36 @@ class AWSConnector(BaseConnector):
         validation = False
         kms = False
         cw = False
+        readable = 0
         for trail in trails:
             try:
                 status = ct.get_trail_status(Name=trail["TrailARN"])
-                if not status.get("IsLogging"):
-                    continue
-                logging_on = True
-                # Only attribute these to trails that are actually logging —
-                # a well-configured but disabled trail proves nothing.
-                multi_region = multi_region or bool(trail.get("IsMultiRegionTrail"))
-                validation = validation or bool(trail.get("LogFileValidationEnabled"))
-                kms = kms or bool(trail.get("KmsKeyId"))
-                cw = cw or bool(trail.get("CloudWatchLogsLogGroupArn"))
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                # Skipping a trail we cannot read used to leave every signal at
+                # its False default, so a role without cloudtrail:GetTrailStatus
+                # reported `logging_enabled: False` — a CRITICAL
+                # AU-2-ACCOUNT-LOGGING failure asserting the account keeps no
+                # audit trail, on no evidence at all.
+                logger.warning("CloudTrail %s: status unreadable (%s)",
+                               trail.get("Name", "?"), exc)
                 continue
+            readable += 1
+            if not status.get("IsLogging"):
+                continue
+            logging_on = True
+            # Only attribute these to trails that are actually logging —
+            # a well-configured but disabled trail proves nothing.
+            multi_region = multi_region or bool(trail.get("IsMultiRegionTrail"))
+            validation = validation or bool(trail.get("LogFileValidationEnabled"))
+            kms = kms or bool(trail.get("KmsKeyId"))
+            cw = cw or bool(trail.get("CloudWatchLogsLogGroupArn"))
+
+        # Trails exist but not one of them could be read: we know nothing about
+        # this account's logging, which is different from knowing it has none.
+        # No trails at all IS an observation, and stays False.
+        if trails and readable == 0:
+            return {"owner": "secops-team"}
+
         return {
             "logging_enabled": logging_on,
             "owner": "secops-team",

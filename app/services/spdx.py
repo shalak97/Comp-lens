@@ -24,6 +24,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.services.ocsf import NormalizedEvidence
+from app.services.shapes import as_dict, as_list
 
 SPDX_VERSION = "SPDX-2.3"
 
@@ -35,7 +36,7 @@ _LICENSE_NOISE = {"", "noassertion", "none"}
 
 
 def _tool(doc: dict[str, Any]) -> str:
-    creators = ((doc.get("creationInfo") or {}).get("creators")) or []
+    creators = as_list((as_dict(doc.get("creationInfo"))).get("creators"))
     for c in creators:
         s = str(c)
         if s.lower().startswith("tool:"):
@@ -45,7 +46,7 @@ def _tool(doc: dict[str, Any]) -> str:
 
 def _security_refs(pkg: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
-    for ref in pkg.get("externalRefs") or []:
+    for ref in as_list(pkg.get("externalRefs")):
         if isinstance(ref, dict) and str(ref.get("referenceCategory", "")).upper() == "SECURITY":
             out.append(ref)
     return out
@@ -67,7 +68,7 @@ def from_spdx(doc: dict[str, Any]) -> list[NormalizedEvidence]:
     out: list[NormalizedEvidence] = []
     now = datetime.now(UTC).isoformat()
     source = _tool(doc)
-    for pkg in doc.get("packages") or []:
+    for pkg in as_list(doc.get("packages")):
         if not isinstance(pkg, dict):
             continue
         refs = _security_refs(pkg)
@@ -95,7 +96,7 @@ def spdx_summary(doc: dict[str, Any]) -> dict[str, Any]:
     """Flat telemetry: inventory size, license set, and packages with advisories."""
     if not isinstance(doc, dict):
         return {"sbom_present": False}
-    packages = [p for p in (doc.get("packages") or []) if isinstance(p, dict)]
+    packages = [p for p in (as_list(doc.get("packages"))) if isinstance(p, dict)]
     licenses: set[str] = set()
     with_adv = 0
     for p in packages:
@@ -143,7 +144,7 @@ def to_spdx(*, packages: list[dict[str, Any]] | None = None,
     describes — SPDX 2.3 requires a DESCRIBES relationship (or
     `documentDescribes`) and this emitted neither.
     """
-    pkgs = list(packages or [])
+    pkgs = list(as_list(packages))
     return {
         "spdxVersion": SPDX_VERSION,
         "dataLicense": "CC0-1.0",
