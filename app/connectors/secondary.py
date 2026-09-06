@@ -88,6 +88,19 @@ def _ingress_exposure(rules: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _tri(value: Any, *, invert: bool = False) -> bool | None:
+    """A boolean property read three ways: true, false, or not answered.
+
+    `bool(x)` and `x is False` both turn an absent property into a definite
+    negative, which for a compliance signal is an assertion the response never
+    made. None reaches the check engine as NOT_APPLICABLE.
+    """
+    if value is None:
+        return None
+    truth = bool(value)
+    return (not truth) if invert else truth
+
+
 def _sub_relative(resource_id: str) -> str:
     """Strip the ``/subscriptions/{id}`` prefix off a full ARM resource id.
 
@@ -337,8 +350,15 @@ class AzureConnector(BaseConnector):
             f"https://graph.microsoft.com/v1.0{path}",
             headers={"Authorization": f"Bearer {self._acquire_graph_token()}"})
 
-    def _arm(self, resource_path: str, api_version: str | None = None) -> Any:
-        """GET an Azure Resource Manager resource under the configured subscription."""
+    def _arm(self, resource_path: str, api_version: str | None = None,
+             *, not_found_ok: bool = False) -> Any:
+        """GET an Azure Resource Manager resource under the configured subscription.
+
+        `not_found_ok` returns None for a 404 instead of raising, which is how a
+        caller distinguishes "ARM says this setting does not exist" — a real
+        answer — from "the call failed", which is not one. Without it every
+        failure looks alike and a 403 becomes a control verdict.
+        """
         if not settings.azure_subscription_id:
             raise ConnectorError("AZURE_SUBSCRIPTION_ID is required for resource controls.")
         token = self._acquire_token("https://management.azure.com/.default")
@@ -347,7 +367,8 @@ class AzureConnector(BaseConnector):
         return self._client.get(
             url,
             headers={"Authorization": f"Bearer {token}"},
-            params={"api-version": api_version or self._ARM_API})
+            params={"api-version": api_version or self._ARM_API},
+            not_found_ok=not_found_ok)
 
     def healthcheck(self) -> bool:
         try:
@@ -504,8 +525,14 @@ class AzureConnector(BaseConnector):
             # distinction is whether the key is customer-managed.
             "encryption_at_rest": True,
             "kms_encrypted": key_source == "Microsoft.Keyvault",
-            "public_access_blocked": props.get("allowBlobPublicAccess") is False,
-            "tls_required": bool(props.get("supportsHttpsTrafficOnly")),
+            # `X is False` and `bool(X)` both read an ABSENT property as an
+            # observed negative, and these two drive a critical and a high
+            # control. ARM does normally return both, so this is a narrower
+            # risk than the failure paths above — but "the property was not in
+            # the response" is not evidence that public access is open, and
+            # guessing costs nothing to avoid.
+            "public_access_blocked": _tri(props.get("allowBlobPublicAccess"), invert=True),
+            "tls_required": _tri(props.get("supportsHttpsTrafficOnly")),
             "versioning_enabled": bool(
                 props.get("isVersioningEnabled", enc.get("isVersioningEnabled"))),
             # Blob diagnostic settings are the Azure analogue of S3 server
@@ -530,16 +557,28 @@ class AzureConnector(BaseConnector):
                            resource_path, exc)
             raise
 
-    def _has_management_policy(self, rg: str, account: str) -> bool:
+    def _has_management_policy(self, rg: str, account: str) -> bool | None:
+        """Whether a lifecycle policy exists, or None if we could not look.
+
+        The 404 reasoning below was right and stopped one step short: ARM does
+        404 when no policy exists, but ConnectorError is this client's single
+        failure type — a 403 from a role without Storage read, a 429, an open
+        circuit and a timeout all arrive the same way. Catching them together
+        turned "we could not check" into "there is no lifecycle policy".
+        `not_found_ok` separates the one case that is an answer from the rest.
+        """
         try:
             doc = self._arm(
                 f"/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/"
-                f"{account}/managementPolicies/default")
-            rules = (doc.get("properties", {}).get("policy", {}) or {}).get("rules") or []
-            return bool(rules)
-        except ConnectorError:
-            # ARM 404s when no policy exists, which is a real answer: none.
-            return False
+                f"{account}/managementPolicies/default", not_found_ok=True)
+        except ConnectorError as exc:
+            logger.warning("Azure management-policy read failed for %s/%s: %s",
+                           rg, account, exc)
+            return None
+        if doc is None:
+            return False        # ARM 404: no policy exists. A real answer.
+        rules = (doc.get("properties", {}).get("policy", {}) or {}).get("rules") or []
+        return bool(rules)
 
     def _sql_server_telemetry(self, name: str | None, params: dict[str, Any]) -> dict[str, Any]:
         if not name:
@@ -608,13 +647,21 @@ class AzureConnector(BaseConnector):
             return None
 
     def _entra_only_auth(self, server_path: str) -> bool | None:
+        """Whether Entra-only auth is enforced, or None if we could not look.
+
+        The signature already said None was a legal answer; the body never
+        returned one. Same shape as _has_management_policy above, and the
+        opposite of _has_delete_lock ten lines up, which gets it right.
+        """
         try:
             doc = self._arm(f"{server_path}/azureADOnlyAuthentications/Default",
-                            api_version="2021-11-01")
-            return bool(doc.get("properties", {}).get("azureADOnlyAuthentication"))
-        except ConnectorError:
-            # 404 means the setting was never enabled — a real "no".
-            return False
+                            api_version="2021-11-01", not_found_ok=True)
+        except ConnectorError as exc:
+            logger.warning("Azure Entra-only-auth read failed for %s: %s", server_path, exc)
+            return None
+        if doc is None:
+            return False        # 404: the setting was never enabled. A real "no".
+        return bool(doc.get("properties", {}).get("azureADOnlyAuthentication"))
 
     def _subscription_telemetry(self) -> dict[str, Any]:
         """Subscription-wide logging and threat detection."""
@@ -677,26 +724,38 @@ class AzureConnector(BaseConnector):
 
         # A VM is publicly reachable when any attached NIC's ip configuration
         # carries a public IP.
+        # `public` stays False until a NIC is actually read, and an unreadable
+        # NIC leaves us unable to answer. This is the one place in the file
+        # where the old default failed in the DANGEROUS direction: skipping
+        # every NIC left `public_ip_assigned: False`, reporting a VM as not
+        # internet-facing on no evidence — SC-7-COMPUTE-PUBLIC-IP passing for a
+        # host that may well be exposed. Everything else here over-reported;
+        # this under-reported.
         public = False
-        for nic in (props.get("networkProfile", {}) or {}).get("networkInterfaces", []) or []:
-            nic_id = nic.get("id", "")
-            if not nic_id:
-                continue
+        nics = (props.get("networkProfile", {}) or {}).get("networkInterfaces", []) or []
+        nics = [n for n in nics if isinstance(n, dict) and n.get("id")]
+        read = 0
+        for nic in nics:
+            nic_id = nic["id"]
             try:
                 nic_doc = self._arm(_sub_relative(nic_id), api_version="2023-05-01")
             except ConnectorError as exc:
                 logger.warning("Azure NIC read failed for %s: %s", nic_id, exc)
                 continue
+            read += 1
             for cfg in (nic_doc.get("properties", {}) or {}).get("ipConfigurations", []) or []:
                 if (cfg.get("properties", {}) or {}).get("publicIPAddress"):
                     public = True
+        # A VM with no NICs is genuinely not reachable — that is an
+        # observation. A VM whose NICs we could not read is not.
+        public_known = (not nics) or read > 0
 
         instance = self._arm(f"{base}/instanceView", api_version="2023-03-01")
         state = next((s.get("displayStatus") for s in instance.get("statuses", []) or []
                       if str(s.get("code", "")).startswith("PowerState/")), None)
 
         return {
-            "public_ip_assigned": public,
+            "public_ip_assigned": public if public_known else None,
             # Boot diagnostics plus a Monitor diagnostic setting is the Azure
             # equivalent of EC2 detailed monitoring: telemetry leaving the host.
             "detailed_monitoring_enabled": bool(

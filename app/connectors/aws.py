@@ -660,14 +660,28 @@ class AWSConnector(BaseConnector):
     # ── account-wide security services ──
     def _guardduty_telemetry(self) -> dict[str, Any]:
         gd = self._session.client("guardduty")
+        detectors = gd.list_detectors().get("DetectorIds", [])
         enabled = False
-        for det_id in gd.list_detectors().get("DetectorIds", []):
+        readable = 0
+        for det_id in detectors:
             try:
-                if gd.get_detector(DetectorId=det_id).get("Status") == "ENABLED":
-                    enabled = True
-                    break
-            except Exception:  # noqa: BLE001
+                status = gd.get_detector(DetectorId=det_id).get("Status")
+            except Exception as exc:  # noqa: BLE001
+                # Identical to the CloudTrail shape thirty lines up, and missed
+                # when that one was fixed: skipping every unreadable detector
+                # left `enabled` at False, so a role without
+                # guarddutyGetDetector reported SI-4-THREAT-DETECTION as
+                # failing — no threat detection — on no evidence.
+                logger.warning("GuardDuty detector %s unreadable: %s", det_id, exc)
                 continue
+            readable += 1
+            if status == "ENABLED":
+                enabled = True
+                break
+        # No detectors at all is an observation: GuardDuty is not on. Detectors
+        # we could not read is not.
+        if detectors and readable == 0:
+            return {"owner": "secops-team"}
         return {"threat_detection_enabled": enabled, "owner": "secops-team"}
 
     def _config_recorder_telemetry(self) -> dict[str, Any]:
