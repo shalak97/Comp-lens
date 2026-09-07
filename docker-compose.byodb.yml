@@ -1,0 +1,39 @@
+# Comp-Lens against a PostgreSQL database YOU own.
+#
+#   docker compose -f docker-compose.byodb.yml up -d
+#
+# Or set this once in .env and use plain `docker compose up -d`:
+#
+#   COMPOSE_FILE=docker-compose.byodb.yml
+#
+# The difference from docker-compose.yml is only what is ABSENT: no `db`
+# service, no Postgres image, no volume holding your data. The stack stores
+# nothing except the evidence blobs, and even those move to S3 by setting
+# EVIDENCE_BACKEND=s3. Your compliance findings live in your database, on your
+# infrastructure, under your backup and retention policy.
+#
+# Required in .env:
+#   DATABASE_URL=postgresql://user:password@your-host:5432/complens?sslmode=require
+#
+# Paste the URL your provider gives you — 'postgres://' and bare
+# 'postgresql://' are both accepted and corrected at startup.
+#
+# The app service is inherited from docker-compose.yml rather than copied, so
+# a credential or setting added there reaches this deployment too. `extends`
+# deliberately does not carry `depends_on`, which is exactly what has to go.
+
+services:
+  app:
+    extends:
+      file: docker-compose.yml
+      service: app
+    environment:
+      # No bundled database to fall back to: this must be set, and the
+      # container refuses to start with a message naming what is missing
+      # rather than a driver stack trace.
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required. Point it at your own PostgreSQL — see DEPLOY.md}
+    volumes:
+      - complens_evidence:/data/evidence
+
+volumes:
+  complens_evidence:

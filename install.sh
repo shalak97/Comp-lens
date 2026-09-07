@@ -51,7 +51,47 @@ ok "Docker and Compose are ready ($COMPOSE)"
 [ -f Dockerfile ] || die "Dockerfile not found. Run this script from the Comp-Lens repository root."
 [ -f docker-compose.yml ] || die "docker-compose.yml not found. Run from the repository root."
 
-# ── 2. secret generation + .env ─────────────────────────────────────
+# ── 2a. which database? ─────────────────────────────────────────────
+# Asked before secrets are generated, because the answer decides whether a
+# database password is even meaningful. Non-interactive callers (CI, an
+# unattended install) can skip the prompt with:
+#     DATABASE_URL=postgresql://... ./install.sh
+#     COMPLENS_DB=bundled ./install.sh
+DB_CHOICE="${COMPLENS_DB:-}"
+if [ -z "$DB_CHOICE" ]; then
+  if [ -n "${DATABASE_URL:-}" ]; then
+    DB_CHOICE="own"
+    info "DATABASE_URL is set in the environment — using your own database."
+  elif [ -f "$ENV_FILE" ]; then
+    DB_CHOICE="keep"          # existing install; don't second-guess it
+  elif [ -t 0 ]; then
+    printf "\n${c_bold}Where should Comp-Lens store your compliance data?${c_reset}\n\n"
+    printf "  ${c_bold}1)${c_reset} Bundled PostgreSQL  — a database container runs here. Nothing\n"
+    printf "     else to set up; backups and upgrades are yours to run.\n\n"
+    printf "  ${c_bold}2)${c_reset} Your own PostgreSQL — RDS, Cloud SQL, Neon, Supabase, or your\n"
+    printf "     own server. No database container starts, and your findings stay\n"
+    printf "     on infrastructure you already back up.\n\n"
+    printf "Choice [1]: "
+    read -r reply || reply=""
+    case "$reply" in
+      2) DB_CHOICE="own" ;;
+      *) DB_CHOICE="bundled" ;;
+    esac
+  else
+    DB_CHOICE="bundled"       # no tty and nothing specified: keep the old default
+  fi
+fi
+
+if [ "$DB_CHOICE" = "own" ] && [ -z "${DATABASE_URL:-}" ]; then
+  printf "\nPaste your PostgreSQL connection URL.\n"
+  printf "  ${c_bold}postgresql://user:password@host:5432/complens?sslmode=require${c_reset}\n"
+  printf "(a 'postgres://' URL from your provider is fine — it gets corrected)\n\n"
+  printf "DATABASE_URL: "
+  read -r DATABASE_URL || DATABASE_URL=""
+  [ -n "$DATABASE_URL" ] || die "No URL given. Re-run and choose 1 for the bundled database, or paste a URL."
+fi
+
+# ── 2b. secret generation + .env ────────────────────────────────────
 gen_secret() {
   if command -v openssl >/dev/null 2>&1; then openssl rand -hex 32
   else head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; fi
@@ -59,6 +99,46 @@ gen_secret() {
 
 if [ -f "$ENV_FILE" ]; then
   ok "Using existing $ENV_FILE (not overwriting)"
+elif [ "$DB_CHOICE" = "own" ]; then
+  info "Generating secrets and writing $ENV_FILE (using your database)…"
+  SIGNING_KEY="$(gen_secret)"
+  cat > "$ENV_FILE" <<ENVEOF
+# ─── Comp-Lens configuration (generated $(date -u +%Y-%m-%dT%H:%MZ)) ───
+# Secrets below were auto-generated. Keep this file private — do NOT commit it.
+
+# Database: your own PostgreSQL. No database container is started, and no
+# compliance data is stored anywhere but here.
+DATABASE_URL=${DATABASE_URL}
+COMPOSE_FILE=docker-compose.byodb.yml
+
+# Evidence chain-of-custody signing key (HMAC). Rotating this invalidates old signatures.
+EVIDENCE_SIGNING_KEY=${SIGNING_KEY}
+
+# App
+APP_ENV=production
+HOST_PORT=${HOST_PORT}
+ENABLE_SCHEDULER=false
+EVIDENCE_BACKEND=local
+
+# ─── Optional: API auth ───────────────────────────────────────────
+# Leave blank for no auth (fine behind a VPN). Format: "key:tenant,key2:*"
+COMP_LENS_API_KEYS=
+
+# ─── Optional: activate live connectors ───────────────────────────
+# Only connectors listed here make real API calls. e.g. OKTA,GITHUB,AWS
+LIVE_CONNECTORS_ALLOWLIST=
+
+# Connector credentials (fill the ones you use, then re-run ./install.sh)
+# OKTA_ORG_URL=https://your-org.okta.com
+# OKTA_API_TOKEN=
+# GITHUB_TOKEN=
+# AWS_ACCESS_KEY_ID=
+# AWS_SECRET_ACCESS_KEY=
+# AWS_REGION=us-east-1
+# NOTIFY_SLACK_WEBHOOK=
+ENVEOF
+  chmod 600 "$ENV_FILE"
+  ok "Wrote $ENV_FILE (mode 600) — pointing at your database"
 else
   info "Generating secrets and writing $ENV_FILE…"
   SIGNING_KEY="$(gen_secret)"
@@ -137,6 +217,14 @@ if command -v hostname >/dev/null 2>&1; then
 fi
 
 printf "\n${c_green}${c_bold}Comp-Lens is running.${c_reset}\n\n"
+if grep -q '^COMPOSE_FILE=docker-compose.byodb.yml' "$ENV_FILE" 2>/dev/null; then
+  printf "  Database    ${c_bold}your own PostgreSQL${c_reset} — no database container is running,\n"
+  printf "              and your compliance data stays on infrastructure you control.\n"
+  printf "              Back it up where you already back that server up.\n\n"
+else
+  printf "  Database    bundled PostgreSQL in a container on this machine.\n"
+  printf "              Back it up with ${c_bold}make backup${c_reset} — nothing else will.\n\n"
+fi
 printf "  Dashboard   ${c_bold}http://%s:%s/dashboard${c_reset}\n" "$HOST_ADDR" "$HOST_PORT"
 printf "  API docs    http://%s:%s/docs\n" "$HOST_ADDR" "$HOST_PORT"
 printf "  Health      http://%s:%s/health/ready\n\n" "$HOST_ADDR" "$HOST_PORT"

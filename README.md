@@ -335,7 +335,11 @@ Before using Comp-Lens in production, review and harden:
 
 - Authentication and API key enforcement
 - Tenant isolation
-- Database configuration
+- Database configuration — Comp-Lens is self-hosted and stores your compliance
+  data in a PostgreSQL database **you** choose: either the bundled one, or your
+  own RDS / Cloud SQL / Neon / Supabase instance, in which case no database
+  container runs at all. Nothing is sent anywhere else. See
+  [DEPLOY.md](DEPLOY.md#where-your-data-lives).
 - Evidence storage backend
 - Evidence signing keys
 - Secrets management
