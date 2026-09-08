@@ -33,7 +33,7 @@ import random
 
 import pytest
 
-from app.models import ControlStatus, Finding, Severity
+from app.models import ControlStatus, Posture, Severity
 from app.services.assessment import AssessmentService
 
 TENANT = "score-invariants"
@@ -45,10 +45,18 @@ SEVERITIES = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW,
 
 
 def _finding(db, i: int, status: ControlStatus, severity: Severity) -> None:
-    db.add(Finding(
-        finding_id=f"f{i}", tenant_id=TENANT, run_id=f"r{i}", framework="NIST",
-        control_id=f"AC-{i}", source_system="AWS", asset_id=f"a{i}",
-        status=status, severity=severity, description="x"))
+    """Add one posture cell.
+
+    `compliance_summary` reads POSTURE, not findings — current state bounded by
+    distinct (asset x control), rather than the whole findings history. An
+    earlier version of this file created Finding rows, which contribute nothing
+    to the summary, so every score came back None and the tests "passed" the
+    empty-tenant assertion for entirely the wrong reason.
+    """
+    db.add(Posture(
+        tenant_id=TENANT, control_id=f"AC-{i}", source_system="AWS",
+        asset_id=f"a{i}", asset_key=f"a{i}", status=status, severity=severity,
+        last_finding_id=f"f{i}"))
 
 
 def _summary(db, rows: list[tuple[ControlStatus, Severity]]) -> dict:
