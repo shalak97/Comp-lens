@@ -92,11 +92,36 @@ def test_a_genuine_zero_is_still_reported_as_zero(db_session):
     assert summary["compliance_score"] == 0.0
 
 
-def test_an_all_error_estate_has_no_score_rather_than_zero(db_session):
-    """ERROR means the platform could not verify the control. A whole estate
-    the connectors could not read is not a compliance failure."""
+def test_an_error_row_stays_in_the_denominator(db_session):
+    """This test originally asserted the opposite, and was wrong.
+
+    My reasoning was that ERROR means "we could not verify this", so it should
+    leave the denominator like NOT_APPLICABLE does — making an all-ERROR estate
+    score None rather than 0%. That is defensible in isolation and loses badly
+    to the counter-argument already recorded in
+    tests/test_unverifiable_controls.py:
+
+        a control that errored on 400 of 500 assets produced a compliance score
+        computed over the 100 that worked ... Less of the estate was measured
+        and the number went *up*, because the assets that could not be read
+        were the ones dropped.
+
+    Dropping unreadable assets from the denominator makes ignorance look like
+    compliance, which is the dangerous direction for this product. Counting
+    them makes it look worse than it is, which is the safe one. So ERROR is
+    applicable-and-not-passing, deliberately.
+
+    An all-ERROR estate scoring 0% is the limit of that policy, and it is
+    consistent: the platform can read nothing, so it can vouch for nothing. It
+    is NOT the same as the empty-tenant case fixed above, where there are no
+    rows at all and therefore nothing to be conservative about.
+    """
     summary = _summary(db_session, [(ControlStatus.ERROR, Severity.HIGH)] * 6)
-    assert summary["compliance_score"] is None
+    assert summary["compliance_score"] == 0.0
+    assert summary["by_status"]["error"] == 6
+    # and the risk score, whose denominator is only pass+fail, still declines
+    # to answer — the two metrics disagree on purpose, not by accident.
+    assert summary["risk_weighted_score"] is None
 
 
 # ── the properties, over random estates ──
