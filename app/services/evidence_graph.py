@@ -166,19 +166,20 @@ class EvidenceService:
     def add_document(self, tenant_id: str, name: str, content: str,
                      source_type: str = "text") -> dict[str, Any]:
         chash = content_hash(content)
-        existing = self.db.execute(
-            select(EvidenceDocument).where(EvidenceDocument.tenant_id == tenant_id,
-                                           EvidenceDocument.content_hash == chash)).scalar_one_or_none()
-        if existing:
-            doc = existing
+        # Re-uploading the same content is deliberately idempotent: the same
+        # document is found by hash and its old hits are cleared before
+        # re-extraction. Two SIMULTANEOUS uploads of it both saw nothing and
+        # both inserted; uq_evidence_doc_hash refused the second, and the
+        # uncaught refusal became a 500 for an upload that had succeeded.
+        from app.services.upsert import get_or_create
+        doc, created = get_or_create(
+            self.db, EvidenceDocument,
+            match={"tenant_id": tenant_id, "content_hash": chash},
+            defaults={"name": name, "content": content, "char_count": len(content),
+                      "source_type": source_type, "status": "pending"})
+        if not created:
             self.db.execute(EvidenceConceptHit.__table__.delete().where(
                 EvidenceConceptHit.doc_id == doc.doc_id))
-        else:
-            doc = EvidenceDocument(tenant_id=tenant_id, name=name, content=content,
-                                   content_hash=chash, char_count=len(content),
-                                   source_type=source_type, status="pending")
-            self.db.add(doc)
-            self.db.flush()
         method, hits = extract(content)
         doc.method = method
         doc.model = (llm_client.active_model() if method == "llm" else None)

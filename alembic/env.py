@@ -1,7 +1,17 @@
 """Alembic environment — wires migrations to the app's models + DATABASE_URL."""
 from logging.config import fileConfig
 
+# Every module that defines a table has to be imported here, because
+# target_metadata below is only as complete as what has been imported by the
+# time it is read. app.models pulls in ai_governance_models, audit_models,
+# grc_platforms.models and grc_tprm_models transitively — but NOT
+# crawler_models or policy_models, so `alembic revision --autogenerate` saw
+# crawl_targets, crawl_results and obligation_dispatches sitting in the
+# database with no model behind them and would have drafted op.drop_table for
+# all three. A data-destroying migration produced by the ordinary workflow.
+import app.crawler_models  # noqa: F401  register tables
 import app.models  # noqa: F401  register tables
+import app.policy_models  # noqa: F401  register tables
 from alembic import context
 from app.config import settings
 from app.database import Base

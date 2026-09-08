@@ -192,7 +192,8 @@ class ResilientClient:
 
     def get_all_pages(self, url: str, headers: dict[str, str] | None = None,
                       params: dict[str, Any] | None = None,
-                      *, max_pages: int = 200) -> list[Any]:
+                      *, max_pages: int = 200,
+                      max_seconds: float = 300.0) -> list[Any]:
         """Every item of a Link-header-paginated collection, not the first page.
 
         Okta and GitHub both page with RFC 5988 `Link: <…>; rel="next"`. A
@@ -206,14 +207,27 @@ class ResilientClient:
         returns a self-referential next link cannot spin forever. Reaching it
         raises rather than returning a short list, because a silently truncated
         inventory is the exact thing this method is for.
+
+        `max_seconds` bounds the same loop in wall clock, because the page cap
+        alone does not. Every individual request is bounded — a 15s timeout,
+        four attempts, a circuit breaker that opens after five failures — but
+        the COMPOSITION was not: a server that answers slowly and successfully
+        trips nothing, so 200 pages at 15s each is fifty minutes holding one of
+        FastAPI's ~40 threadpool slots, with no error anywhere to show for it.
+        The budget raises for the same reason the page cap does.
         """
         out: list[Any] = []
         seen: set[str] = set()
         next_url: str | None = url
         first = True
+        deadline = time.monotonic() + max_seconds
         for _ in range(max_pages):
             if next_url is None:
                 return out
+            if time.monotonic() > deadline:
+                raise ConnectorError(
+                    f"{self.service}: collection still paging after {max_seconds:.0f}s "
+                    f"({len(out)} items so far); refusing to return a partial inventory")
             if next_url in seen:
                 raise ConnectorError(f"{self.service}: pagination loop at {next_url}")
             seen.add(next_url)
@@ -373,22 +387,19 @@ def _redact(text: str) -> str:
     return text
 
 
-def paginate(client: ResilientClient, url: str, headers: dict[str, str],
-             next_key: str = "next", item_key: str | None = None,
-             max_pages: int = 20) -> list:
-    """Generic cursor pagination — follows `next`-style links, capped for safety."""
-    out: list = []
-    page = 0
-    while url and page < max_pages:
-        data = client.get(url, headers=headers)
-        items = data.get(item_key, []) if (item_key and isinstance(data, dict)) else data
-        if isinstance(items, list):
-            out.extend(items)
-        nxt = None
-        if isinstance(data, dict):
-            nxt = data.get(next_key)
-            if isinstance(nxt, dict):
-                nxt = nxt.get("href") or nxt.get("url")
-        url = nxt
-        page += 1
-    return out
+# `paginate()` was removed here. It followed body-cursor pagination and stopped
+# at 20 pages by returning what it had — silently. A connector using it on an
+# org with more than 20 pages of users would have enumerated a slice of the
+# estate and reported on it as though it were the estate, which is precisely
+# the failure ResilientClient.get_all_pages was written to refuse: that one
+# treats its page cap as a stop and RAISES rather than hand back a short list.
+#
+# It had no callers — Okta and GitHub both went through get_all_pages — so this
+# deletes dead code rather than changing behaviour. The reason to delete it
+# instead of fixing it is that two pagination helpers sitting side by side, one
+# of which quietly truncates, is a trap: the next connector author picks by
+# name, and `paginate` is the friendlier name.
+#
+# For body-cursor APIs (a `next` field in the JSON rather than a Link header),
+# extend get_all_pages with a cursor accessor. Do not reintroduce a helper that
+# can return a partial inventory without saying so.

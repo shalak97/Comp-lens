@@ -137,8 +137,13 @@ class ReportService:
         story.append(Paragraph(f"Tenant: {tenant_id}", styles["Normal"]))
         story.append(Paragraph(f"Generated: {datetime.now(UTC).isoformat()}", styles["Normal"]))
         story.append(Spacer(1, 12))
+        # "None%" in an audit report would be worse than the 0% it replaces.
+        # A report covering nothing has to say so in words.
+        score = summary.get("compliance_score")
+        headline = (f"Compliance score: <b>{score}%</b>" if score is not None
+                    else "Compliance score: <b>not assessed</b>")
         story.append(Paragraph(
-            f"Compliance score: <b>{summary['compliance_score']}%</b> "
+            f"{headline} "
             f"({summary['by_status']['pass']} pass / {summary['by_status']['fail']} fail "
             f"/ {summary['total']} total)", styles["Heading2"]))
         story.append(Spacer(1, 12))

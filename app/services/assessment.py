@@ -12,6 +12,8 @@ full findings history.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import random
 import time
@@ -82,18 +84,89 @@ def _is_locked_error(exc: OperationalError) -> bool:
 IMPLICIT_IDEMPOTENCY_WINDOW = timedelta(minutes=5)
 
 
-def _idem_key(req: AssessmentRequest) -> str:
+def _legacy_idem_key(req: AssessmentRequest) -> str:
+    """The pre-hash key format. Read-only, so existing records still match.
+
+    Kept solely so the first assessment after this change finds the record it
+    already wrote and returns the same finding, instead of creating a duplicate
+    for every control in the estate.
+    """
     if req.idempotency_key:
         return f"{req.tenant_id}:{req.idempotency_key}"
     return f"{req.tenant_id}:{req.framework}:{req.control_id}:{req.source_system}:{req.asset_id}"
+
+
+def _hash_key(kind: str, parts: list[str | None]) -> str:
+    """An injective key over `parts`, namespaced by `kind`.
+
+    JSON is the whole trick: it escapes the separator, so no value can forge a
+    field boundary, and it encodes None distinguishably from the string
+    "None". `kind` keeps the different sorts of key — derived, caller-supplied,
+    externally-ingested — in disjoint spaces, so one can never impersonate
+    another.
+
+    The result is fixed-width, which also removes a second, quieter hazard:
+    idempotency_keys.key is String(256) and the old formats grew with their
+    inputs. A realistic ECS task-definition ARN already reached 254 characters,
+    so a slightly longer asset would have overflowed — an error on PostgreSQL,
+    and on a database that silently truncates, a collision.
+    """
+    payload = json.dumps([kind, *parts], separators=(",", ":"))
+    return f"{kind[0]}:{hashlib.sha256(payload.encode()).hexdigest()}"
+
+
+def _idem_key(req: AssessmentRequest) -> str:
+    """A key that means exactly one assessment.
+
+    The previous format joined caller-controlled fields with ':' — a delimiter
+    that is legal, and common, inside those fields. Three collisions were
+    reachable, and all three make one assessment return a different
+    assessment's finding:
+
+      1. A client-supplied idempotency_key of "NIST:AC-2:AWS:prod" produced the
+         same key as the DERIVED one for control AC-2 on asset "prod". A caller
+         could therefore be handed, or overwrite, the verdict of a control they
+         did not assess — inside their own tenant, so no authorization check
+         stands in the way.
+      2. Colons are ubiquitous in AWS ARNs, so source_system="AWS" with
+         asset "arn:aws:s3:::b" collided with source "AWS:arn" and asset
+         "aws:s3:::b".
+      3. asset_id=None formatted as the literal string "None", colliding with
+         an asset genuinely named None — an account-wide check and a single
+         asset sharing one verdict.
+
+    Hashing a JSON array fixes all three: JSON escapes the separator, so the
+    encoding is injective, and the two KINDS of key are namespaced apart so a
+    client-supplied one can never impersonate a derived one. `None` stays
+    distinguishable from "None" because JSON encodes them differently.
+    """
+    if req.idempotency_key:
+        return _hash_key("client", [req.tenant_id, req.idempotency_key])
+    return _hash_key("derived", [req.tenant_id, req.framework, req.control_id,
+                                 req.source_system, req.asset_id])
 
 
 class AssessmentService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _existing(self, key: str) -> Finding | None:
+    def _existing(self, key: str, legacy_key: str | None = None) -> Finding | None:
+        """Look up a previous verdict by idempotency key.
+
+        `legacy_key` lets a record written under the pre-hash format still be
+        found once. Without it, the first assessment of every control after
+        this change would miss and mint a duplicate finding for the whole
+        estate — a migration artefact indistinguishable, in the findings table,
+        from a real re-detection.
+
+        The lookup is by primary key and carries no tenant predicate, which is
+        safe only because the key itself is derived from the tenant. That is
+        now enforced by construction rather than by convention: both branches
+        of _idem_key hash the tenant into the digest.
+        """
         rec = self.db.get(IdempotencyRecord, key)
+        if rec is None and legacy_key:
+            rec = self.db.get(IdempotencyRecord, legacy_key)
         return self.db.get(Finding, rec.finding_id) if rec else None
 
     def _upsert_posture(self, *, tenant_id, framework, control_id, source_system,
@@ -307,7 +380,7 @@ class AssessmentService:
         key = _idem_key(req)
         renew = self._stale_implicit_record(key, explicit=bool(req.idempotency_key))
         if renew is None:
-            existing = self._existing(key)
+            existing = self._existing(key, _legacy_idem_key(req))
             if existing:
                 return existing
         connector = registry.get(req.source_system)
@@ -358,7 +431,7 @@ class AssessmentService:
     def _record_unverifiable_once(self, req: AssessmentRequest, error: Exception) -> Finding | None:
         key = _idem_key(req)
         renew = self._stale_implicit_record(key, explicit=bool(req.idempotency_key))
-        if renew is None and self._existing(key) is not None:
+        if renew is None and self._existing(key, _legacy_idem_key(req)) is not None:
             return None
         return self._commit_finding(
             tenant_id=req.tenant_id, framework=req.framework, control_id=req.control_id,
@@ -377,8 +450,15 @@ class AssessmentService:
         Returns the created Finding, or None if it was already ingested
         (so callers can report it as skipped — ingestion is idempotent).
         """
-        idem = f"{tenant_id}:ext:{external_id or (control_id + ':' + (asset_id or ''))}"
-        if self._existing(idem) is not None:
+        # Same delimiter flaw as _idem_key had, in a second hand-built key: an
+        # external_id of "AC-2:prod" produced exactly the key derived for
+        # control AC-2 on asset "prod", so a scanner's finding could suppress —
+        # or be suppressed by — an unrelated one. external_id comes straight
+        # from whatever tool posted it, so it is not even adversarial input,
+        # just a scanner that names findings with colons.
+        legacy = f"{tenant_id}:ext:{external_id or (control_id + ':' + (asset_id or ''))}"
+        idem = _hash_key("external", [tenant_id, external_id, control_id, asset_id])
+        if self._existing(idem, legacy) is not None:
             return None
         return self._commit_finding(
             tenant_id=tenant_id, framework=framework, control_id=control_id,
@@ -513,7 +593,16 @@ class AssessmentService:
                     risk_exposure += w
         total = sum(by_status.values())
         applicable = total - by_status["not_applicable"]
-        score = round(by_status["pass"] / applicable * 100, 2) if applicable else 0.0
+        # 0.0 here used to mean two different things: "we assessed everything
+        # and nothing passed" and "there is nothing to assess". A tenant that
+        # had never run an assessment therefore opened the dashboard on a
+        # headline reading 0% compliant — the most alarming number the product
+        # can show, for the one situation where it knows nothing at all.
+        #
+        # Same rule as risk_weighted below, and the same rule the connectors
+        # follow: an absent measurement is None, not a verdict at the bottom of
+        # the scale.
+        score = round(by_status["pass"] / applicable * 100, 2) if applicable else None
         # Higher is better: 100 means weighed exposure was measured and found to
         # be zero. No weighed rows at all is NOT that — it is "no evidence", and
         # returning 100 for it made a never-assessed tenant, an all-ERROR estate

@@ -238,7 +238,10 @@ class ComplianceSnapshot(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     tenant_id: Mapped[str] = mapped_column(String(128), index=True)
     framework: Mapped[str] = mapped_column(String(64), default="ALL")
-    score: Mapped[float] = mapped_column()
+    # Nullable because "nothing was assessable at this moment" is a real state
+    # for a snapshot to record, and storing it as 0.0 would draw a trend line
+    # crashing to zero whenever an estate went dark.
+    score: Mapped[float | None] = mapped_column(nullable=True)
     total: Mapped[int] = mapped_column(Integer)
     passed: Mapped[int] = mapped_column(Integer)
     failed: Mapped[int] = mapped_column(Integer)

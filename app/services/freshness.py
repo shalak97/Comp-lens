@@ -33,10 +33,37 @@ def _parse(ts: Any) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
+#: Longest cadence that can still be added to a date without overflowing.
+#: timedelta tops out near 1e9 days; a century is already far past any real
+#: validation policy, and anything larger is a typo or a hostile value.
+MAX_CADENCE_DAYS = 36_600
+
+
 def cadence_days(cadence: str | int) -> int:
-    if isinstance(cadence, int) and cadence > 0:
-        return cadence
+    """Days between validations. Always a usable, in-range int.
+
+    `bool` is excluded explicitly because isinstance(True, int) is True in
+    Python, so a cadence of True would have been returned AS True — a bool
+    where an int is declared, silently meaning "one day".
+    """
+    if isinstance(cadence, int) and not isinstance(cadence, bool) and cadence > 0:
+        return min(int(cadence), MAX_CADENCE_DAYS)
     return CADENCE_DAYS.get(str(cadence or "").lower(), CADENCE_DAYS[DEFAULT_CADENCE])
+
+
+def _add_days(base: datetime, days: int) -> datetime | None:
+    """`base + days`, or None when that falls outside the representable range.
+
+    A timestamp near datetime.max — year 9999 from a malformed document, or a
+    connector reporting nonsense — makes this addition raise OverflowError.
+    Adapters already accept any shape a producer sends, so such a date reaches
+    here as data, not as an attack, and a date arithmetic error is not a reason
+    to fail the request that carried it.
+    """
+    try:
+        return base + timedelta(days=days)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def next_validation(last_validated: Any, cadence: str | int = DEFAULT_CADENCE) -> str | None:
@@ -44,7 +71,8 @@ def next_validation(last_validated: Any, cadence: str | int = DEFAULT_CADENCE) -
     base = _parse(last_validated)
     if base is None:
         return None
-    return (base + timedelta(days=cadence_days(cadence))).isoformat()
+    nxt = _add_days(base, cadence_days(cadence))
+    return nxt.isoformat() if nxt else None
 
 
 def freshness(last_validated: Any, cadence: str | int = DEFAULT_CADENCE,
@@ -63,8 +91,16 @@ def freshness(last_validated: Any, cadence: str | int = DEFAULT_CADENCE,
     if base is None:
         return {"last_validated": None, "cadence_days": days, "next_validation": None,
                 "age_days": None, "ttl_days": None, "is_stale": True}
-    nxt = base + timedelta(days=days)
+    nxt = _add_days(base, days)
     age = (now - base).total_seconds() / 86400.0
+    if nxt is None:
+        # A date so far out that the next validation is not representable. It
+        # cannot be overdue, so reporting it stale would be a claim nothing
+        # supports — the same tri-state rule the rest of the platform follows:
+        # say "unknown", not "bad".
+        return {"last_validated": base.isoformat(), "cadence_days": days,
+                "next_validation": None, "age_days": round(age, 3),
+                "ttl_days": None, "is_stale": False}
     ttl = (nxt - now).total_seconds() / 86400.0
     return {
         "last_validated": base.isoformat(),

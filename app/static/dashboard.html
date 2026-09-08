@@ -1029,14 +1029,18 @@ function arcPath(cx,cy,r,a0,a1){
 }
 function focusGauge(score,seg){
   const S=220,cx=110,cy=110,R=86, START=-135, SWEEP=270;
-  const pct=clamp(score||0,0,100);
+  /* `score||0` drew a needle pinned at 0% for a tenant that had assessed
+     nothing — the alarming end of the dial, as a picture, for the one state
+     where the platform knows nothing. An unknown score draws no needle. */
+  const known=score!=null&&!isNaN(score);
+  const pct=known?clamp(score,0,100):0;
   const end=START+SWEEP*pct/100;
   let ticks="";
   for(let i=0;i<=54;i++){
     const ang=START+SWEEP*(i/54);
     const major=i%9===0;
     const r1=major?R+14:R+9, r2=R+4;
-    const reached=ang<=end+0.01;
+    const reached=known&&ang<=end+0.01;
     const[x1,y1]=polar(cx,cy,r1,ang),[x2,y2]=polar(cx,cy,r2,ang);
     ticks+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${reached?'var(--focus)':'var(--rule2)'}" stroke-width="${major?1.6:1}"/>`;
   }
@@ -1048,15 +1052,15 @@ function focusGauge(score,seg){
     if(s.v>0)band+=`<path d="${arcPath(cx,cy,R-16,a0,a1)}" stroke="${s.color}" stroke-width="6" fill="none" stroke-linecap="butt"/>`;
     acc+=s.v;
   });
-  return `<svg viewBox="0 0 ${S} ${S}" width="220" height="220" role="img" aria-label="Compliance score ${pct.toFixed(0)}">
+  return `<svg viewBox="0 0 ${S} ${S}" width="220" height="220" role="img" aria-label="${known?`Compliance score ${pct.toFixed(0)} percent`:"Compliance score not yet assessed"}">
     <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--etch)" stroke-width="10"/>
     <path d="${arcPath(cx,cy,R,START,START+SWEEP)}" stroke="var(--etch)" stroke-width="10" fill="none"/>
-    <path d="${arcPath(cx,cy,R,START,end)}" stroke="var(--focus)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    ${known?`<path d="${arcPath(cx,cy,R,START,end)}" stroke="var(--focus)" stroke-width="10" fill="none" stroke-linecap="round"/>`:""}
     ${ticks}${band}
     <line x1="${cx-9}" y1="${cy}" x2="${cx+9}" y2="${cy}" stroke="var(--rule2)" stroke-width="1"/>
     <line x1="${cx}" y1="${cy-9}" x2="${cx}" y2="${cy+9}" stroke="var(--rule2)" stroke-width="1"/>
-    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-family="Space Grotesk" font-size="44" font-weight="600" fill="var(--ink)" letter-spacing="-2">${pct.toFixed(1)}</text>
-    <text x="${cx}" y="${cy+20}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" letter-spacing="2.5" fill="var(--steel)">PERCENT</text>
+    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-family="Space Grotesk" font-size="${known?44:26}" font-weight="600" fill="var(--${known?"ink":"steel"})" letter-spacing="-2">${known?pct.toFixed(1):"—"}</text>
+    <text x="${cx}" y="${cy+20}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" letter-spacing="2.5" fill="var(--steel)">${known?"PERCENT":"NOT ASSESSED"}</text>
   </svg>`;
 }
 
@@ -1128,8 +1132,12 @@ RENDER.overview = async function(){
     {label:"Waived",v:s.waived||0,color:"var(--focus)"},
     {label:"N/A",v:bs.not_applicable||0,color:"var(--dim)"},
   ];
-  const trendVals=(tr.data||[]).map(p=>p.compliance_score);
+  /* Snapshots taken when nothing was assessable carry a null score. They are
+     not points on a compliance trend, and null arithmetic would silently
+     produce a delta out of one real number and one absence. */
+  const trendVals=(tr.data||[]).map(p=>p.compliance_score).filter(v=>v!=null);
   const delta=trendVals.length>1?(trendVals[trendVals.length-1]-trendVals[0]):0;
+  const scored=s.compliance_score!=null;
   const findings=(fnd.data||[]);
   const openFindings=findings.filter(f=>["open","in_progress","fail"].includes(f.status));
   const crit=openFindings.filter(f=>["critical","high"].includes(String(f.severity).toLowerCase()));
@@ -1138,7 +1146,7 @@ RENDER.overview = async function(){
 
   host.innerHTML=`
   <div class="readouts">
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Compliance score${liveBadge(live)}</div><div class="v num">${fmtPct(s.compliance_score)}<small>%</small></div><div class="s ${delta>=0?'up':'dn'}">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(1)} pts · 35d</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Compliance score${liveBadge(live)}</div><div class="v num">${fmtPct(s.compliance_score)}${scored?'<small>%</small>':''}</div><div class="s ${scored&&delta>=0?'up':scored?'dn':''}">${scored?`${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(1)} pts · 35d`:'nothing assessed yet'}</div></div>
     <div class="ro drill" ${act("navigate","trusttelemetry")} title="Fused from connector, policy, enforcement, attestation and follow-through evidence"><div class="k"><span class="tick" style="background:var(--iris,var(--focus))"></span>Verified trust</div><div class="v num">${trust.unified_trust_score!=null?trust.unified_trust_score:'—'}${trust.unified_trust_score!=null?'<small>/100</small>':''}</div><div class="s">${trust.band?trustChip(trust.band):(trust.controls_scored?trust.controls_scored+' scored':'no signal yet')} →</div></div>
     <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Risk-weighted</div><div class="v num">${fmtPct(s.risk_weighted_score)}<small>%</small></div><div class="s">severity-adjusted</div></div>
     <div class="ro drill" ${act("navigate","findings")}><div class="k"><span class="tick" style="background:var(--fail)"></span>Open exposure</div><div class="v num">${fmtPct(s.risk_exposure)}<small>%</small></div><div class="s">${crit.length} high / critical →</div></div>

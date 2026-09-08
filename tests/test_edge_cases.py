@@ -173,10 +173,11 @@ def test_summary_only_counts_own_tenant(client):
     client.post("/assessments", json={"tenant_id": "sumiso", "control_id": "SC-28", "source_system": "DEMO", "asset_id": "z", "params": {"fail": True}})
     s = client.get("/summary?tenant_id=sumiso").json()
     assert s["by_status"]["fail"] >= 1
-    # a tenant with no data returns a clean zero summary, not an error
+    # a tenant with no data returns a clean summary, not an error — and no
+    # score, because 0.0 would read as "assessed and everything failed"
     empty = client.get("/summary?tenant_id=nonexistent-tenant").json()
     assert empty["total"] == 0
-    assert empty["compliance_score"] == 0.0
+    assert empty["compliance_score"] is None
 
 
 # ──────────────────────────────────────────────────────────────────────────
