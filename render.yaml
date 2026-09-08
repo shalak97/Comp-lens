@@ -8,6 +8,24 @@ services:
     dockerfilePath: ./Dockerfile
     autoDeployTrigger: commit
     healthCheckPath: /health/live
+    # Evidence artifacts have to outlive the container. Without this they were
+    # written to /tmp, which Render discards on every restart and every deploy
+    # — so each deploy destroyed the chain-of-custody records this product
+    # exists to produce.
+    #
+    # Two costs of a disk, both deliberate and both reversible by moving to S3
+    # (see EVIDENCE_BACKEND below): a disk attaches to exactly one instance, so
+    # it rules out running more than one, and deploys are no longer
+    # zero-downtime. Neither matters at one always-on instance; both are the
+    # reason S3 is the right answer once a second instance is wanted.
+    #
+    # Requires a paid instance type. The service plan is deliberately NOT set
+    # here — naming one would silently downgrade the service if it is on
+    # something larger than whatever this file guessed.
+    disk:
+      name: comp-lens-evidence
+      mountPath: /var/lib/complens
+      sizeGB: 5
     envVars:
       - key: APP_ENV
         value: production
@@ -21,10 +39,20 @@ services:
         value: false
       - key: ENABLE_DEMO_CONNECTOR
         value: true
+      # 'local' now means the persistent disk declared above, not /tmp.
+      #
+      # To move to S3 instead — the right call once you want more than one
+      # instance — set EVIDENCE_BACKEND=s3 and EVIDENCE_S3_BUCKET together, and
+      # give the service credentials for the bucket. Do NOT set the backend to
+      # s3 on its own: the app refuses to start without a bucket name, which
+      # would be a crash loop rather than a misconfiguration warning. The disk
+      # can then be removed.
       - key: EVIDENCE_BACKEND
         value: local
       - key: EVIDENCE_LOCAL_PATH
-        value: /tmp/evidence_store          # NOTE: /tmp is ephemeral on Render — evidence artifacts reset on restart; use a persistent disk or object backend for durability
+        value: /var/lib/complens/evidence
+      # - key: EVIDENCE_S3_BUCKET
+      #   sync: false
       # Run scheduled connector syncs / assessments in-process. Render web
       # services are always-on, so the background runner ticks here. Without
       # this the runner is a no-op and schedules created in the UI/API never
@@ -58,7 +86,15 @@ services:
       #   sync: false
 
 databases:
+  # A free Render Postgres expires 30 days after creation, allows a 14-day
+  # grace period to upgrade, and is then DELETED along with all of its data.
+  # That is the whole customer dataset — findings, posture history,
+  # attestations — on a countdown, for a product sold as a system of record.
+  #
+  # basic-256mb is the smallest paid tier ($6/month at time of writing, plus
+  # $0.30/GB/month of storage) and is what makes backups and point-in-time
+  # recovery available at all.
   - name: comp-lens-db
-    plan: free
+    plan: basic-256mb
     databaseName: complens
     user: complens

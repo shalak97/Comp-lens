@@ -40,4 +40,4 @@ EXPOSE 8000
 # neither cause. DB_WAIT_SECONDS covers the first case and bounds the second.
 #
 # Migrations are idempotent — safe to run on every boot.
-CMD ["sh", "-c", "python -m app.dbcheck --wait ${DB_WAIT_SECONDS:-60} && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "python -m app.dbcheck --wait ${DB_WAIT_SECONDS:-60} && python -m app.storecheck && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
