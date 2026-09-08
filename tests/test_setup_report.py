@@ -161,11 +161,20 @@ def test_s3_without_a_bucket_is_blocking(monkeypatch):
 
 def test_open_auth_is_blocking_in_production_only(monkeypatch):
     """No API keys on a laptop is convenience; on a public address it is an
-    open compliance database."""
+    open compliance database.
+
+    `is_production` is a read-only property derived from app_env, so it is set
+    the way the application sets it rather than patched over — patching the
+    property raises, and patching it *successfully* would test a Settings
+    object the app can never actually have.
+    """
     monkeypatch.delenv("COMP_LENS_API_KEYS", raising=False)
-    monkeypatch.setattr(setup_status.settings, "is_production", True)
+    monkeypatch.setattr(setup_status.settings, "app_env", "production")
+    assert setup_status.settings.is_production is True
     assert setup_status._auth()["state"] == setup_status.BLOCKED
-    monkeypatch.setattr(setup_status.settings, "is_production", False)
+
+    monkeypatch.setattr(setup_status.settings, "app_env", "local")
+    assert setup_status.settings.is_production is False
     assert setup_status._auth()["state"] == setup_status.ATTENTION
 
 
