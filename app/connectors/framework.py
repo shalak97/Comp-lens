@@ -195,12 +195,14 @@ def sync(db: Session, c: dict[str, Any], tenant_id: str = "default",
             tenant_id=tenant_id, connector_key=c["key"], category=n["category"],
             evidence_type=n["evidence_type"], title=n["title"], status=n["status"],
             mode=n["mode"], signals=n["signals"], controls=n["controls"]))
-    st = db.execute(select(ConnectorSyncState).where(
-        ConnectorSyncState.tenant_id == tenant_id,
-        ConnectorSyncState.connector_key == c["key"])).scalars().first()
-    if not st:
-        st = ConnectorSyncState(tenant_id=tenant_id, connector_key=c["key"])
-        db.add(st)
+    # A scheduled sync and a manual one can overlap: the scheduler leases
+    # SCHEDULES, not connectors, so POST /connectors/{name}/sync is free to run
+    # alongside. uq_sync_tenant_connector refuses the second insert, which is
+    # correct — but nothing caught the refusal, so the loser returned a 500 for
+    # a sync that had actually happened.
+    from app.services.upsert import get_or_create
+    st, _ = get_or_create(db, ConnectorSyncState,
+                          match={"tenant_id": tenant_id, "connector_key": c["key"]})
     st.last_sync_at = utc_now()
     st.status = "ok" if not error else "degraded"
     st.mode = mode

@@ -44,21 +44,22 @@ def _upsert_policy_posture(db: Session, tenant_id: str, control_id: str,
                            status: ControlStatus, severity: Severity, finding_id: str) -> None:
     """Materialize the policy verdict into Posture so the unified-trust policy
     lane can read it. One row per (tenant, control) for the POLICY-AS-CODE source."""
-    p = db.execute(select(Posture).where(
-        Posture.tenant_id == tenant_id, Posture.control_id == control_id,
-        Posture.source_system == POLICY_POSTURE_SOURCE, Posture.asset_key == "",
-    )).scalar_one_or_none()
-    if p:
+    # Two policy runs for one tenant race here. The Posture unique constraint
+    # refuses the second insert, so nothing was ever corrupted — but the
+    # refusal was uncaught, turning a concurrent run into a 500.
+    from app.services.upsert import get_or_create
+    p, created = get_or_create(
+        db, Posture,
+        match={"tenant_id": tenant_id, "control_id": control_id,
+               "source_system": POLICY_POSTURE_SOURCE, "asset_key": ""},
+        defaults={"asset_id": None, "status": status, "prev_status": None,
+                  "severity": severity, "last_finding_id": finding_id})
+    if not created:
         p.prev_status = p.status
         p.status = status
         p.severity = severity
         p.last_finding_id = finding_id
         p.updated_at = datetime.now(UTC)
-    else:
-        db.add(Posture(
-            tenant_id=tenant_id, control_id=control_id, source_system=POLICY_POSTURE_SOURCE,
-            asset_id=None, asset_key="", status=status, prev_status=None,
-            severity=severity, last_finding_id=finding_id))
 
 
 # ── 1. POLICY ENGINE → FINDINGS ──────────────────────────────────────
