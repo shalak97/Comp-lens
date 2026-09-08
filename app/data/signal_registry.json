@@ -1,0 +1,722 @@
+{
+  "version": "signal-registry-v1",
+  "_comment": "The vocabulary joining connectors to controls. See app/signals.py for what each field means and what is enforced.",
+  "signals": {
+    "access_key_count": {
+      "type": "int",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Number of active programmatic access keys on the identity.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "iam_user",
+        "service_principal"
+      ],
+      "unit": "keys"
+    },
+    "access_logging_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Server access logging is configured on the resource.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "gcs_bucket",
+        "s3_bucket",
+        "storage_account"
+      ]
+    },
+    "asset": {
+      "type": "string",
+      "plane": "data_protection",
+      "kind": "metadata",
+      "meaning": "Identifier of the asset this telemetry describes.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "gcs_bucket",
+        "s3_bucket",
+        "snyk_project",
+        "splunk_index",
+        "storage_account",
+        "tenable_asset",
+        "wiz_cloud_resource"
+      ]
+    },
+    "audit_logs_retained": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "Audit logs are retained rather than discarded on rotation.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "splunk_index"
+      ]
+    },
+    "auto_minor_version_upgrade": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The engine applies minor version patches automatically.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "rds_instance",
+        "sql_database"
+      ]
+    },
+    "backup_retention_days": {
+      "type": "int",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Days of automated backups retained.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "rds_instance",
+        "sql_database"
+      ],
+      "unit": "days"
+    },
+    "cloudwatch_logs_integrated": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "Logs are shipped to a central log store, not only kept locally.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloudtrail",
+        "project",
+        "subscription"
+      ]
+    },
+    "code_scanning_enabled": {
+      "type": "bool",
+      "plane": "vulnerability_threat",
+      "kind": "signal",
+      "meaning": "Static analysis runs on the repository's code.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "snyk_project"
+      ]
+    },
+    "config_recording_enabled": {
+      "type": "bool",
+      "plane": "configuration",
+      "kind": "signal",
+      "meaning": "A configuration recorder is running for the account.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "config_recorder"
+      ]
+    },
+    "config_records_all_resources": {
+      "type": "bool",
+      "plane": "configuration",
+      "kind": "signal",
+      "meaning": "The configuration recorder covers every supported resource type.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "config_recorder"
+      ]
+    },
+    "console_access_enabled": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "The identity can sign in interactively (as opposed to API-only).",
+      "absence": "unobserved",
+      "emitted_by": [
+        "entra_user",
+        "iam_user"
+      ]
+    },
+    "critical_vulnerabilities": {
+      "type": "int",
+      "plane": "vulnerability_threat",
+      "kind": "signal",
+      "meaning": "Count of open vulnerabilities rated critical.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "snyk_project",
+        "tenable_asset",
+        "wiz_cloud_resource"
+      ],
+      "unit": "findings"
+    },
+    "days_since_key_rotation": {
+      "type": "int",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Age of the oldest active credential.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "iam_user",
+        "service_principal"
+      ],
+      "unit": "days"
+    },
+    "days_since_last_login": {
+      "type": "int",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Time since the identity last authenticated.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "entra_user",
+        "iam_user"
+      ],
+      "unit": "days"
+    },
+    "deletion_protection_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The resource cannot be deleted without first clearing a guard.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "rds_instance",
+        "sql_database"
+      ]
+    },
+    "detailed_monitoring_enabled": {
+      "type": "bool",
+      "plane": "host_runtime",
+      "kind": "signal",
+      "meaning": "High-resolution metrics are collected for the host.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "compute_instance",
+        "ec2_instance",
+        "virtual_machine"
+      ]
+    },
+    "ebs_optimized": {
+      "type": "bool",
+      "plane": "host_runtime",
+      "kind": "signal",
+      "meaning": "The instance uses dedicated bandwidth for block storage.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "ec2_instance"
+      ]
+    },
+    "encryption_at_rest": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Stored data is encrypted at rest.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "ebs_volume",
+        "gcs_bucket",
+        "managed_disk",
+        "persistent_disk",
+        "rds_instance",
+        "s3_bucket",
+        "sql_database",
+        "storage_account"
+      ]
+    },
+    "flow_logs_enabled": {
+      "type": "bool",
+      "plane": "network_boundary",
+      "kind": "signal",
+      "meaning": "Network flow logs are captured for the boundary.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "virtual_network",
+        "vpc",
+        "vpc_network"
+      ]
+    },
+    "has_admin_policy": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "An administrator-equivalent policy is attached to the identity.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "entra_user",
+        "iam_user"
+      ]
+    },
+    "has_inline_policy": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Permissions are attached inline rather than via a managed policy.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "entra_user",
+        "iam_user"
+      ]
+    },
+    "iam_auth_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The datastore accepts identity-based authentication.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "rds_instance",
+        "sql_database"
+      ]
+    },
+    "imdsv2_required": {
+      "type": "bool",
+      "plane": "host_runtime",
+      "kind": "signal",
+      "meaning": "The instance metadata service requires session-oriented (v2) requests.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "ec2_instance"
+      ]
+    },
+    "instance_state": {
+      "type": "string",
+      "plane": "host_runtime",
+      "kind": "signal",
+      "meaning": "Lifecycle state of the compute instance.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "compute_instance",
+        "ec2_instance",
+        "virtual_machine"
+      ]
+    },
+    "key_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The encryption key is enabled for use.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "kms_key"
+      ]
+    },
+    "key_rotation_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Automatic key rotation is configured.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "key_vault_key",
+        "kms_key"
+      ]
+    },
+    "kms_encrypted": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Encrypted with a managed key service key rather than provider-default.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "ebs_volume",
+        "gcs_bucket",
+        "managed_disk",
+        "persistent_disk",
+        "s3_bucket",
+        "storage_account"
+      ]
+    },
+    "lifecycle_configured": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "An object lifecycle / retention policy is configured.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "gcs_bucket",
+        "s3_bucket",
+        "storage_account"
+      ]
+    },
+    "log_exports_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The engine exports its logs off the instance.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "rds_instance",
+        "sql_database"
+      ]
+    },
+    "log_file_validation_enabled": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "Delivered log files carry integrity validation.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloudtrail"
+      ]
+    },
+    "logging_enabled": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "The resource emits an audit or access log.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloudtrail",
+        "project",
+        "splunk_index",
+        "subscription"
+      ]
+    },
+    "mfa_enabled": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Multi-factor authentication is registered for the identity.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "entra_user",
+        "iam_user"
+      ]
+    },
+    "mfa_enforced": {
+      "type": "string",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Multi-factor authentication is required, not merely available.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "entra_user",
+        "iam_user"
+      ]
+    },
+    "multi_az_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The resource is replicated across availability zones.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "rds_instance",
+        "sql_database"
+      ]
+    },
+    "multi_region_enabled": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "The trail or export covers every region, not just its home region.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloudtrail",
+        "project",
+        "subscription"
+      ]
+    },
+    "open_ingress_rule_count": {
+      "type": "int",
+      "plane": "network_boundary",
+      "kind": "signal",
+      "meaning": "Number of inbound rules whose source is the public internet.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "firewall",
+        "network_security_group",
+        "security_group"
+      ],
+      "unit": "rules"
+    },
+    "owner": {
+      "type": "string",
+      "plane": "data_protection",
+      "kind": "metadata",
+      "meaning": "Team accountable for the asset, for routing findings.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "cloudtrail",
+        "compute_instance",
+        "entra_user",
+        "firewall",
+        "gcs_bucket",
+        "iam_user",
+        "key_vault_key",
+        "kms_key",
+        "managed_disk",
+        "network_security_group",
+        "persistent_disk",
+        "project",
+        "s3_bucket",
+        "service_principal",
+        "snyk_project",
+        "splunk_index",
+        "sql_database",
+        "storage_account",
+        "subscription",
+        "tenable_asset",
+        "virtual_machine",
+        "virtual_network",
+        "vpc_network",
+        "wiz_cloud_resource"
+      ]
+    },
+    "password_max_age_days": {
+      "type": "int",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "Maximum password age before rotation is forced; 0 means never expires.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam",
+        "subscription"
+      ],
+      "unit": "days"
+    },
+    "password_min_length": {
+      "type": "int",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Minimum characters a password must contain.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ],
+      "unit": "characters"
+    },
+    "password_requires_lowercase": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Password policy requires a lowercase character.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ]
+    },
+    "password_requires_numbers": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Password policy requires a digit.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ]
+    },
+    "password_requires_symbols": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Password policy requires a symbol.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ]
+    },
+    "password_requires_uppercase": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Password policy requires an uppercase character.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ]
+    },
+    "password_reuse_prevention": {
+      "type": "int",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "Number of previous passwords that cannot be reused.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ],
+      "unit": "passwords"
+    },
+    "principal": {
+      "type": "string",
+      "plane": "identity_access",
+      "kind": "metadata",
+      "meaning": "Identity the telemetry describes.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "entra_user",
+        "iam_user",
+        "service_principal"
+      ]
+    },
+    "public_access_blocked": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Public access is blocked at the resource or account level.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "gcs_bucket",
+        "s3_bucket",
+        "storage_account"
+      ]
+    },
+    "public_ip_assigned": {
+      "type": "bool",
+      "plane": "host_runtime",
+      "kind": "signal",
+      "meaning": "The host has a public IP address attached.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "compute_instance",
+        "ec2_instance",
+        "virtual_machine"
+      ]
+    },
+    "publicly_accessible": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The resource is reachable from the public internet.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloud_sql",
+        "rds_instance",
+        "sql_database"
+      ]
+    },
+    "rdp_open_to_world": {
+      "type": "bool",
+      "plane": "network_boundary",
+      "kind": "signal",
+      "meaning": "RDP (3389) is reachable from any source address.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "firewall",
+        "network_security_group",
+        "security_group"
+      ]
+    },
+    "retention_days": {
+      "type": "int",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "Days log data is retained before deletion.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "splunk_index"
+      ],
+      "unit": "days"
+    },
+    "root_access_keys_present": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "The account root identity has programmatic access keys.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ]
+    },
+    "root_mfa_enabled": {
+      "type": "bool",
+      "plane": "identity_access",
+      "kind": "signal",
+      "meaning": "The account root identity has MFA registered.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "account_iam"
+      ]
+    },
+    "siem_alerts_monitored": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "Alerts are routed to a monitored detection pipeline.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "splunk_index"
+      ]
+    },
+    "ssh_open_to_world": {
+      "type": "bool",
+      "plane": "network_boundary",
+      "kind": "signal",
+      "meaning": "SSH (22) is reachable from any source address.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "firewall",
+        "network_security_group",
+        "security_group"
+      ]
+    },
+    "threat_detection_enabled": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "A managed threat-detection service is active and enabled.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "guardduty",
+        "project",
+        "subscription"
+      ]
+    },
+    "tls_required": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "The resource refuses connections that are not encrypted in transit.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "gcs_bucket",
+        "s3_bucket",
+        "storage_account"
+      ]
+    },
+    "trail_kms_encrypted": {
+      "type": "bool",
+      "plane": "logging_monitoring",
+      "kind": "signal",
+      "meaning": "Delivered audit logs are encrypted with a customer-managed key.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "cloudtrail"
+      ]
+    },
+    "unrestricted_ingress": {
+      "type": "bool",
+      "plane": "network_boundary",
+      "kind": "signal",
+      "meaning": "Any inbound rule allows all ports from any source.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "firewall",
+        "network_security_group",
+        "security_group"
+      ]
+    },
+    "versioning_enabled": {
+      "type": "bool",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Object versioning is enabled, so overwrites are recoverable.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "gcs_bucket",
+        "s3_bucket",
+        "storage_account"
+      ]
+    },
+    "volume_state": {
+      "type": "string",
+      "plane": "data_protection",
+      "kind": "signal",
+      "meaning": "Lifecycle state of the block storage volume.",
+      "absence": "unobserved",
+      "emitted_by": [
+        "ebs_volume"
+      ]
+    }
+  }
+}

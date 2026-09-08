@@ -35,7 +35,10 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-production}
       PORT: 8000
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-complens}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-complens}
+      # Defaults to the bundled `db` service. Set DATABASE_URL in .env to use a
+      # PostgreSQL you own instead — and prefer docker-compose.byodb.yml, which
+      # also stops the unused Postgres container from starting. See DEPLOY.md.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-complens}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-complens}}
       EVIDENCE_SIGNING_KEY: ${EVIDENCE_SIGNING_KEY:?set EVIDENCE_SIGNING_KEY in .env}
       AUTO_CREATE_TABLES: "false"
       ENABLE_SCHEDULER: ${ENABLE_SCHEDULER:-false}

@@ -37,25 +37,30 @@ connector makes every existing check that its probes cover work immediately.
 from __future__ import annotations
 
 import logging
+import pathlib
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-# Telemetry planes — the ontology the rest of the platform already speaks
-# (see app/data/telemetry_ontology.json and the control bindings' "plane" key).
-PLANES = frozenset({
-    "identity_access",
-    "configuration",
-    "change_delivery",
-    "vulnerability_threat",
-    "host_runtime",
-    "data_protection",
-    "network_boundary",
-    "logging_monitoring",
-    "attestation_document",
-})
+# Telemetry planes, read from the ontology rather than repeated here.
+#
+# This used to be a hand-maintained frozenset, which made three copies of one
+# vocabulary — this set, app/data/telemetry_ontology.json, and the plane each
+# signal is assigned. They had already drifted: the ontology was missing
+# data_protection, logging_monitoring and network_boundary, which between them
+# account for over half the probes in the platform, so those probes fell out
+# of every ontology-grouped view without anything reporting it. Exactly the
+# failure the signal registry exists to stop, one level up.
+def _load_planes() -> frozenset[str]:
+    import json
+    path = (pathlib.Path(__file__).resolve().parent.parent
+            / "data" / "telemetry_ontology.json")
+    return frozenset(json.loads(path.read_text())["planes"])
+
+
+PLANES = _load_planes()
 
 
 @dataclass(frozen=True)
@@ -83,6 +88,22 @@ class Probe:
             logger.warning(
                 "probe %s declares unknown plane %r (known: %s)",
                 self.probe_id, self.plane, ", ".join(sorted(PLANES)),
+            )
+        # A signal name is how a check finds this probe. An unregistered one is
+        # either a typo — in which case the check that wanted it silently gets
+        # NOT_APPLICABLE forever — or a new fact nobody has defined the meaning
+        # of. Warn rather than raise: a connector should not fail to import
+        # over vocabulary, and tests/test_signal_registry.py makes it an error
+        # where an error belongs.
+        from app import signals as _signals
+
+        unknown = [s for s in self.signals if s not in _signals.REGISTRY]
+        if unknown:
+            logger.warning(
+                "probe %s declares signals absent from the registry: %s — add "
+                "them to app/data/signal_registry.json with their type and "
+                "what absence means",
+                self.probe_id, ", ".join(sorted(unknown)),
             )
 
     def covers(self, required: tuple[str, ...] | list[str]) -> bool:

@@ -222,6 +222,36 @@ not observe this" and "we observed it and it is wrong" are different claims, and
 cloud call is individually guarded so a missing IAM permission degrades to unobserved
 rather than fabricating a finding.
 
+**The signal registry** (`app/signals.py`, `app/data/signal_registry.json`).
+The inversion above joins probes to checks by a signal name, and for a long time
+that name was a bare string written in two independent places and matched by
+string equality. Nothing declared what a signal *was* — its type, its unit, its
+plane, or what its absence meant. That last omission is where nearly every defect
+in this codebase came from: a value meaning "we could not observe this" emitted as
+`False`, meaning "we observed this is false". Tri-state honesty was a convention,
+and a convention is a thing you can forget.
+
+The registry gives the vocabulary an owner. Each of the 60 signals declares its
+type, plane, unit, meaning, and `absence: "unobserved"` — so the tri-state is a
+declaration a loader can check rather than a habit reviewers must catch. It makes
+five failures loud that were previously silent: a typo'd signal in the pack (which
+used to become a permanently `NOT_APPLICABLE` control, indistinguishable from the
+honest answer), a probe promising a name nothing defines, a check comparing a
+signal against a literal of the wrong type, a control decided on metadata like
+`owner`, and a fork in the plane vocabulary.
+
+That last one had already happened. `capabilities.PLANES` was a hand-maintained
+frozenset alongside `telemetry_ontology.json`'s own list; they disagreed on five
+entries, and three planes used by over half the platform's probes —
+`data_protection`, `logging_monitoring`, `network_boundary` — were absent from the
+ontology entirely. `PLANES` is now derived from the ontology, and
+`tests/test_signal_registry.py` fails if the two ever diverge again.
+
+There is no free tool that does this for compliance posture. The nearest analogue
+is OpenTelemetry's semantic-convention registry and its Weaver live-check — the
+same shape, declare the vocabulary then verify emitters conform — but for
+observability telemetry rather than control evidence.
+
 **The guardrail.** `tests/test_capability_surface.py::test_no_orphan_checks` fails the
 build if the pack ever declares a control no connector can satisfy — precisely the drift
 that let the old `control_bindings.json` reference six connectors that did not exist.

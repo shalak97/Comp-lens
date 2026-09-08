@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -99,9 +99,28 @@ class Settings(BaseSettings):
         return not self.is_production
 
     # ── Database ──
-    # Local default is SQLite; production should set DATABASE_URL to Postgres:
+    # Local default is SQLite; production should set DATABASE_URL to Postgres.
+    # You can point this at any PostgreSQL you control — see DEPLOY.md. Paste
+    # the URL your provider gives you: the validator below adds the driver
+    # SQLAlchemy needs, so all of these work as written:
+    #   postgres://user:pass@host/db              (Heroku, Render)
+    #   postgresql://user:pass@host/db?sslmode=require   (Neon, Supabase, RDS)
     #   postgresql+psycopg://user:pass@host:5432/complens
     database_url: str = Field(default="sqlite:///./complens.db")
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, v: str) -> str:
+        """Accept the URL the operator's provider actually handed them.
+
+        A bare 'postgresql://' means psycopg2 to SQLAlchemy, and 'postgres://'
+        is rejected outright — neither failure names the fix, and both land on
+        someone whose only mistake was copying the URL from their console.
+        Normalising here means every consumer (engine, alembic, dbcheck) sees
+        the same corrected value.
+        """
+        from app.db_url import normalize
+        return normalize(v)
 
     # ── Evidence store ──
     # If S3 is configured, evidence goes to S3; otherwise local files.
