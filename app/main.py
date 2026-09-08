@@ -1922,7 +1922,11 @@ def doc_upload(payload: dict, tenant_id: str = "default",
     """
     authorize_tenant(p, tenant_id)
     import base64
-    name = (payload.get("filename") or "upload").lower()
+    # `or "upload"` only replaces a falsy filename. A truthy non-string — 123,
+    # or ["a.pdf"] — passed straight through to .lower() and raised
+    # AttributeError, which the endpoint reports as a 500 for what is plainly
+    # a bad request.
+    name = str(payload.get("filename") or "upload").lower()
     b64 = payload.get("content_base64", "")
     if not b64:
         raise HTTPException(400, "provide 'content_base64': base64-encoded file content")

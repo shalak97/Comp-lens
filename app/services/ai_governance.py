@@ -23,6 +23,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.shapes import as_dict, as_dicts
+
+#: These three functions are reached directly from POST bodies typed only as
+#: `dict`, so FastAPI validates nothing inside them: `params`, `pets` and
+#: `governance` arrive as whatever JSON the caller sent. The adapters learned
+#: this the hard way — a field of the wrong type is not a server error, it is a
+#: field carrying nothing — and `shapes` is the same answer applied here.
+
 # ── PET catalog: each technology, what it protects, how to read its strength ──
 PET_CATALOG: dict[str, dict[str, Any]] = {
     "differential_privacy": {
@@ -76,8 +84,11 @@ _SENSITIVITY = {"none": 5, "internal": 20, "pii": 60, "phi": 80, "financial": 75
 
 def assess_pet(pet_id: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Assess one PET's strength from its parameters → a 0..1 effectiveness score."""
-    params = params or {}
-    meta = PET_CATALOG.get(pet_id)
+    params = as_dict(params)
+    # PET_CATALOG.get(pet_id) raises "unhashable type" on a list or dict, and
+    # the endpoint's `if not pet` guard lets a non-empty one through — so
+    # {"pet": ["x"]} was a 500 rather than the 400 it deserves.
+    meta = PET_CATALOG.get(pet_id) if isinstance(pet_id, str) else None
     if not meta:
         return {"pet": pet_id, "known": False, "effectiveness": 0.0,
                 "assessment": "unknown technology"}
@@ -137,7 +148,11 @@ def compute_privacy_risk(data_sensitivity: str, pets: list[dict[str, Any]]) -> d
     Multiple PETs compound (defense in depth) with diminishing returns.
     """
     inherent = _SENSITIVITY.get(str(data_sensitivity).lower(), 40)
-    assessed = [assess_pet(p.get("pet"), p.get("params")) for p in (pets or [])]
+    # `pets` is whatever was in the JSON body. A string iterates into single
+    # characters, an int does not iterate at all, and a list of non-objects has
+    # no .get — all three were 500s. as_dicts keeps only the entries that are
+    # actually objects, which is the correct reading of a malformed list.
+    assessed = [assess_pet(p.get("pet"), p.get("params")) for p in as_dicts(pets)]
     # combined mitigation: each PET removes a fraction of remaining risk (compounding)
     remaining = 1.0
     for a in assessed:
@@ -193,6 +208,10 @@ def ai_act_obligations(risk_tier: str, governance: dict[str, bool]) -> dict[str,
     key = str(risk_tier).lower()
     recognised = key in _AI_ACT_TIERS
     tier = _AI_ACT_TIERS.get(key, _AI_ACT_TIERS["limited"])
+    # `governance` reaches here straight from a request body, where it may be
+    # null, a string or a list. A missing flag already means "not attested" —
+    # a malformed one means exactly the same thing, and neither is a crash.
+    governance = as_dict(governance)
     # map governance booleans to obligation coverage (for high-risk)
     coverage = {
         "Risk management system": governance.get("impact_assessment", False),
