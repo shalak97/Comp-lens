@@ -83,6 +83,38 @@
     "EVIDENCE",
     "ATTEST"
    ]
+  },
+  "data_protection": {
+   "label": "Data Protection",
+   "shape": "snapshot",
+   "trust": "high",
+   "cadence": "periodic",
+   "producers": [
+    "AWS",
+    "AZURE",
+    "WIZ"
+   ]
+  },
+  "logging_monitoring": {
+   "label": "Logging & Monitoring",
+   "shape": "snapshot",
+   "trust": "high",
+   "cadence": "periodic",
+   "producers": [
+    "AWS",
+    "AZURE",
+    "WIZ"
+   ]
+  },
+  "network_boundary": {
+   "label": "Network Boundary",
+   "shape": "snapshot",
+   "trust": "high",
+   "cadence": "periodic",
+   "producers": [
+    "AWS",
+    "AZURE"
+   ]
   }
  },
  "capabilities": {
