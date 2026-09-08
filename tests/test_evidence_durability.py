@@ -43,35 +43,40 @@ WEB = next(s for s in RENDER["services"] if s.get("name") == "comp-lens")
 
 
 # ── the deployment config ──
-def test_evidence_is_not_written_to_ephemeral_storage():
-    """/tmp does not survive a restart on Render, so evidence written there is
-    gone by the next deploy — including the deploy that wrote it."""
-    path = next(e["value"] for e in WEB["envVars"]
-                if e.get("key") == "EVIDENCE_LOCAL_PATH")
-    assert not path.startswith("/tmp"), (
-        f"EVIDENCE_LOCAL_PATH={path} is ephemeral on Render; point it at the "
-        "mounted disk or move EVIDENCE_BACKEND to s3")
-
-
-def test_the_evidence_path_is_on_the_mounted_disk():
-    """A disk that nothing writes to is just a bill."""
-    path = next(e["value"] for e in WEB["envVars"]
-                if e.get("key") == "EVIDENCE_LOCAL_PATH")
+# This blueprint is deliberately free-tier: Render disks need a paid instance
+# and a paid Postgres is ~$6/month, which is not a trade every deployment wants
+# to make. So these tests do NOT demand durability. They demand that the choice
+# stays coherent and stays visible, because the failure mode of a free tier is
+# not slowness — it is believing data is kept when it is not.
+def test_a_local_evidence_path_is_either_durable_or_declared_ephemeral():
+    """Ephemeral storage is a legitimate choice; a silent one is not. Either a
+    disk backs the path, or the file says out loud that evidence does not
+    survive a deploy."""
     backend = next(e["value"] for e in WEB["envVars"]
                    if e.get("key") == "EVIDENCE_BACKEND")
     if backend != "local":
-        pytest.skip("evidence is on an object store; the disk is not in play")
+        pytest.skip("evidence is on an object store, not container storage")
+
+    path = next(e["value"] for e in WEB["envVars"]
+                if e.get("key") == "EVIDENCE_LOCAL_PATH")
     disk = WEB.get("disk")
-    assert disk, "EVIDENCE_BACKEND=local needs a persistent disk declared"
-    assert path.startswith(disk["mountPath"]), (
-        f"EVIDENCE_LOCAL_PATH={path} is not under the disk mounted at "
-        f"{disk['mountPath']}, so it lands on ephemeral container storage")
+    if disk:
+        assert path.startswith(disk["mountPath"]), (
+            f"EVIDENCE_LOCAL_PATH={path} is not under the disk mounted at "
+            f"{disk['mountPath']}, so the disk is paid for and unused")
+        return
+    raw = (ROOT / "render.yaml").read_text().upper()
+    assert "EPHEMERAL" in raw, (
+        "no persistent disk is declared, so evidence does not survive a "
+        "deploy. That is fine for a hobby deployment, but render.yaml has to "
+        "say so — the previous version buried it in a NOTE and it went "
+        "unnoticed until a deploy destroyed the evidence.")
 
 
 def test_the_s3_backend_is_never_half_configured():
     """The store raises at import when the backend is s3 with no bucket, which
-    is a crash loop rather than a warning. If the commented block above is ever
-    uncommented, both lines have to move together."""
+    is a crash loop rather than a warning. Whoever uncomments that block must
+    move both lines together."""
     keys = {e.get("key") for e in WEB["envVars"]}
     backend = next(e["value"] for e in WEB["envVars"]
                    if e.get("key") == "EVIDENCE_BACKEND")
@@ -79,23 +84,38 @@ def test_the_s3_backend_is_never_half_configured():
         assert "EVIDENCE_S3_BUCKET" in keys
 
 
-def test_the_database_is_not_on_a_plan_that_deletes_itself():
-    """A free Render Postgres is deleted 30 days after creation (plus 14 days'
-    grace). That is the findings, posture history and attestations — the system
-    of record — on a countdown."""
+def test_the_free_database_expiry_is_written_down():
+    """A free Render Postgres is deleted 30 days after creation, plus 14 days'
+    grace. Staying on it is a valid choice for a hobby project; not knowing
+    about the clock is not."""
     db = next(d for d in RENDER["databases"] if d["name"] == "comp-lens-db")
-    assert db.get("plan") != "free", (
-        "comp-lens-db is on the free plan, which expires and is then deleted "
-        "with all of its data")
+    if db.get("plan") != "free":
+        return
+    raw = (ROOT / "render.yaml").read_text()
+    assert "30 days" in raw and "delete" in raw.lower(), (
+        "the database is on the free plan, which expires and is deleted — "
+        "render.yaml must say so where the plan is set")
 
 
 def test_the_web_service_plan_is_not_pinned_here():
-    """Naming a plan in the blueprint would silently DOWNGRADE the service if
-    it is running on something larger. The disk requires a paid instance, but
-    which paid instance is the dashboard's business, not this file's."""
+    """Naming a plan in the blueprint would silently change the instance type
+    on the next sync — downgrading a larger one, or upgrading a free one into a
+    bill nobody asked for. That belongs in the dashboard."""
     assert "plan" not in WEB, (
-        "pinning the web service plan risks downgrading a larger running "
-        "instance on the next blueprint sync")
+        "pinning the web service plan risks changing the running instance "
+        "type, and the bill, on the next blueprint sync")
+
+
+def test_an_s3_compatible_endpoint_is_configurable():
+    """Durable evidence without paying anyone: R2 and B2 both have standing
+    free tiers and both speak the S3 API. That is only reachable if the client
+    can be pointed somewhere other than AWS."""
+    import inspect
+
+    from app import evidence
+    assert "endpoint_url" in inspect.getsource(evidence.EvidenceStore._init_s3)
+    from app.config import Settings
+    assert "evidence_s3_endpoint" in Settings.model_fields
 
 
 # ── the preflight ──

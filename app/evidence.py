@@ -56,7 +56,15 @@ class EvidenceStore:
 
         if not settings.evidence_s3_bucket:
             raise RuntimeError("EVIDENCE_S3_BUCKET must be set when EVIDENCE_BACKEND=s3")
-        self._s3 = boto3.client("s3", region_name=settings.aws_region)
+        # endpoint_url is what makes durable evidence storage available without
+        # paying anyone: the S3 API is implemented by several providers with a
+        # standing free tier (Cloudflare R2 at 10 GB, Backblaze B2 at 10 GB),
+        # and by MinIO if you would rather self-host it next to the app. Unset
+        # means real AWS S3, so this changes nothing for an existing
+        # deployment.
+        self._s3 = boto3.client(
+            "s3", region_name=settings.aws_region,
+            endpoint_url=settings.evidence_s3_endpoint or None)
         self._bucket = settings.evidence_s3_bucket
         self._prefix = settings.evidence_s3_prefix
 

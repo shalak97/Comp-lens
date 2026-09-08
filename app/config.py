@@ -128,6 +128,9 @@ class Settings(BaseSettings):
     evidence_local_path: str = Field(default="./evidence_store")
     evidence_s3_bucket: str | None = Field(default=None)
     evidence_s3_prefix: str = Field(default="evidence/")
+    # Custom S3 endpoint, for any S3-compatible store — Cloudflare R2,
+    # Backblaze B2, MinIO. Leave unset for real AWS S3.
+    evidence_s3_endpoint: str | None = Field(default=None)
 
     # ── AWS ──
     aws_region: str = Field(default="us-east-1")

@@ -8,24 +8,10 @@ services:
     dockerfilePath: ./Dockerfile
     autoDeployTrigger: commit
     healthCheckPath: /health/live
-    # Evidence artifacts have to outlive the container. Without this they were
-    # written to /tmp, which Render discards on every restart and every deploy
-    # — so each deploy destroyed the chain-of-custody records this product
-    # exists to produce.
-    #
-    # Two costs of a disk, both deliberate and both reversible by moving to S3
-    # (see EVIDENCE_BACKEND below): a disk attaches to exactly one instance, so
-    # it rules out running more than one, and deploys are no longer
-    # zero-downtime. Neither matters at one always-on instance; both are the
-    # reason S3 is the right answer once a second instance is wanted.
-    #
-    # Requires a paid instance type. The service plan is deliberately NOT set
-    # here — naming one would silently downgrade the service if it is on
-    # something larger than whatever this file guessed.
-    disk:
-      name: comp-lens-evidence
-      mountPath: /var/lib/complens
-      sizeGB: 5
+    # NOTE: this blueprint is deliberately free-tier. Render's persistent disks
+    # require a paid instance, so there is no disk here and the container's
+    # filesystem does not survive a restart or a deploy. See EVIDENCE_BACKEND
+    # below for what that costs and the one free way around it.
     envVars:
       - key: APP_ENV
         value: production
@@ -39,19 +25,36 @@ services:
         value: false
       - key: ENABLE_DEMO_CONNECTOR
         value: true
-      # 'local' now means the persistent disk declared above, not /tmp.
+      # ─── Evidence storage: know what you are choosing ───────────────
       #
-      # To move to S3 instead — the right call once you want more than one
-      # instance — set EVIDENCE_BACKEND=s3 and EVIDENCE_S3_BUCKET together, and
-      # give the service credentials for the bucket. Do NOT set the backend to
-      # s3 on its own: the app refuses to start without a bucket name, which
-      # would be a crash loop rather than a misconfiguration warning. The disk
-      # can then be removed.
+      # 'local' on a free instance means EPHEMERAL. /tmp is discarded on every
+      # restart and every deploy, so evidence artifacts do not survive. Findings
+      # and posture live in Postgres and are unaffected; what is lost is the
+      # stored artifact behind each one.
+      #
+      # For a hobby deployment that is a reasonable trade — but it is a trade,
+      # not an oversight, so it is written here rather than buried.
+      #
+      # The free way to get durability: any S3-compatible object store with a
+      # free tier — Cloudflare R2 gives 10 GB/month at no cost, Backblaze B2
+      # gives 10 GB. Set all three of these together and evidence outlives the
+      # container at no charge:
+      #
+      #   EVIDENCE_BACKEND=s3
+      #   EVIDENCE_S3_BUCKET=<your bucket>
+      #   EVIDENCE_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+      #
+      # plus AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for that provider.
+      # Leave EVIDENCE_S3_ENDPOINT unset for real AWS S3. Do NOT set the
+      # backend to s3 on its own — the app refuses to start without a bucket,
+      # which is a crash loop rather than a warning.
       - key: EVIDENCE_BACKEND
         value: local
       - key: EVIDENCE_LOCAL_PATH
-        value: /var/lib/complens/evidence
+        value: /tmp/evidence_store
       # - key: EVIDENCE_S3_BUCKET
+      #   sync: false
+      # - key: EVIDENCE_S3_ENDPOINT
       #   sync: false
       # Run scheduled connector syncs / assessments in-process. Render web
       # services are always-on, so the background runner ticks here. Without
@@ -86,15 +89,17 @@ services:
       #   sync: false
 
 databases:
-  # A free Render Postgres expires 30 days after creation, allows a 14-day
-  # grace period to upgrade, and is then DELETED along with all of its data.
-  # That is the whole customer dataset — findings, posture history,
-  # attestations — on a countdown, for a product sold as a system of record.
+  # Free tier, chosen deliberately for a hobby deployment — but know the clock:
+  # a free Render Postgres EXPIRES 30 days after it is created, gives 14 days'
+  # grace to upgrade, and is then deleted along with everything in it. Render
+  # emails before both deadlines.
   #
-  # basic-256mb is the smallest paid tier ($6/month at time of writing, plus
-  # $0.30/GB/month of storage) and is what makes backups and point-in-time
-  # recovery available at all.
+  # So this database is disposable by design. If a deployment ever needs to be
+  # kept, `plan: basic-256mb` is the smallest paid tier (~$6/month) and is also
+  # the point at which backups exist at all. Until then, treat anything here as
+  # reproducible: `make backup` dumps it, and re-running a sync rebuilds
+  # posture from the connectors.
   - name: comp-lens-db
-    plan: basic-256mb
+    plan: free
     databaseName: complens
     user: complens
