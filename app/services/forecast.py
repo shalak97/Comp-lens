@@ -39,6 +39,12 @@ class ForecastService:
         snaps = TrendService(self.db).trends(tenant_id)
         at_risk = self._at_risk(tenant_id)
 
+        # A snapshot with no score recorded a moment when nothing was
+        # assessable. It is not a data point on a compliance trend — fitting a
+        # line through it would read as a collapse to zero — and float(None)
+        # raises, so it is dropped before the count is checked rather than
+        # after.
+        snaps = [s for s in snaps if s.get("score") is not None]
         if len(snaps) < 2:
             return {"insufficient_data": True, "snapshots": len(snaps),
                     "at_risk_controls": at_risk, "at_risk_count": len(at_risk)}

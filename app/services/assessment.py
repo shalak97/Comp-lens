@@ -593,7 +593,16 @@ class AssessmentService:
                     risk_exposure += w
         total = sum(by_status.values())
         applicable = total - by_status["not_applicable"]
-        score = round(by_status["pass"] / applicable * 100, 2) if applicable else 0.0
+        # 0.0 here used to mean two different things: "we assessed everything
+        # and nothing passed" and "there is nothing to assess". A tenant that
+        # had never run an assessment therefore opened the dashboard on a
+        # headline reading 0% compliant — the most alarming number the product
+        # can show, for the one situation where it knows nothing at all.
+        #
+        # Same rule as risk_weighted below, and the same rule the connectors
+        # follow: an absent measurement is None, not a verdict at the bottom of
+        # the scale.
+        score = round(by_status["pass"] / applicable * 100, 2) if applicable else None
         # Higher is better: 100 means weighed exposure was measured and found to
         # be zero. No weighed rows at all is NOT that — it is "no evidence", and
         # returning 100 for it made a never-assessed tenant, an all-ERROR estate

@@ -83,9 +83,12 @@ def findings(client, t, **params):
 def test_01_a_brand_new_tenant_does_not_claim_to_be_compliant(client):
     s = summary(client, tenant("empty"))
     assert s["total"] == 0
-    assert s["compliance_score"] == 0.0, (
-        "an unassessed tenant must not report a passing score — "
-        f"nothing has been verified: {s}")
+    # This asserted 0.0, which the comment above already argues against without
+    # noticing: 0% is as confident a statement about nothing as 100% is, and it
+    # is the more alarming one. A tenant that has verified nothing has no score.
+    assert s["compliance_score"] is None, (
+        "an unassessed tenant must not report a score at all — neither a "
+        f"passing one nor a failing one: {s}")
 
 
 def test_02_a_brand_new_tenant_has_no_findings_and_no_drift(client):
