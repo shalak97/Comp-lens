@@ -48,7 +48,7 @@ def _finding(db, i: int, status: ControlStatus, severity: Severity) -> None:
     db.add(Finding(
         finding_id=f"f{i}", tenant_id=TENANT, run_id=f"r{i}", framework="NIST",
         control_id=f"AC-{i}", source_system="AWS", asset_id=f"a{i}",
-        status=status, severity=severity, reason="x"))
+        status=status, severity=severity, description="x"))
 
 
 def _summary(db, rows: list[tuple[ControlStatus, Severity]]) -> dict:

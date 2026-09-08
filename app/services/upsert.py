@@ -64,7 +64,12 @@ def get_or_create(db: Session, model: type[T], *, match: dict[str, Any],
         # Someone else inserted it between our SELECT and our INSERT. The
         # savepoint has rolled back only the failed statement, so the rest of
         # this transaction is intact and the winner's row is now readable.
-        db.expunge(row)
+        #
+        # No expunge here: rolling back to the savepoint already evicts the
+        # pending instance from the session, so asking to remove it again
+        # raises InvalidRequestError("not present in this Session") — trading
+        # the IntegrityError for a different unhandled exception, which is
+        # exactly what this function exists to stop.
         winner = db.execute(stmt).scalars().first()
         if winner is None:
             # The constraint rejected the insert but no matching row exists, so

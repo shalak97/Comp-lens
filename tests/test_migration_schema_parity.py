@@ -47,13 +47,26 @@ def migrated_schema(tmp_path_factory):
     alembic_config = pytest.importorskip("alembic.config")
     alembic_command = pytest.importorskip("alembic.command")
 
+    from app.config import settings
+
     db_path = tmp_path_factory.mktemp("migrated") / "schema.db"
     url = f"sqlite:///{db_path}"
 
     cfg = alembic_config.Config(str(ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(ROOT / "alembic"))
     cfg.set_main_option("sqlalchemy.url", url)
-    alembic_command.upgrade(cfg, "head")
+
+    # env.py does `config.set_main_option("sqlalchemy.url",
+    # settings.database_url)`, which overrides whatever is set above — so
+    # without this the migrations run against the CI database and this
+    # temporary one stays empty, making every table look unmigrated. The
+    # settings object is the only lever env.py actually reads.
+    original = settings.database_url
+    settings.database_url = url
+    try:
+        alembic_command.upgrade(cfg, "head")
+    finally:
+        settings.database_url = original
 
     engine = create_engine(url)
     try:
