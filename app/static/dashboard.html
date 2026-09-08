@@ -539,7 +539,7 @@ const ACTION_NAMES = new Set([
   "consentEssentialOnly", "insertPolicyPdfHere", "loadIngestExample",
   "navigate", "openAddConnection", "openAddConnectionFirst", "openCmd",
   "openConsentPrefs", "openPrivacy", "openPrivacyNotice", "openSettings",
-  "retryConn", "reverifyAllEvidence", "runIngest", "runPostureAsOf",
+  "retryConn", "reverifyAllEvidence", "runIngest", "runPostureAsOf", "setupTest",
   "runPostureTimeline", "saveConsentPrefs", "saveSettings", "setAcStore",
   "submitAddConnection", "syncClose", "toastMsg", "toggleDemo", "toggleOn",
   "toggleRail", "toggleTheme", "useDemo", "vpCancel",
@@ -3024,6 +3024,86 @@ DETAIL.trustcontrols=function(cn){
 
 RENDER.trustgraph = function(){ graphView("Trust graph","Vendors, the systems they touch, and the controls that depend on them — so a vendor's weakness surfaces as control risk. Switch to 3D and drag to orbit.","risk / 03",true); };
 
+/* ---------- SETUP ---------- */
+/* For someone who has just cloned the repo: what this deployment has actually
+   been given, and what each missing piece would need. The server never returns
+   a credential value — only whether the variable is set — so everything here is
+   safe to read on a shared screen. */
+const SETUP_TONE={blocked:"c-fail",attention:"c-warn",optional:"c-dim",ready:"c-pass"};
+const SETUP_WORD={blocked:"Blocking",attention:"Review",optional:"Not set up",ready:"Ready"};
+
+function setupItem(it){
+  const env=Object.entries(it.env||{});
+  return `<div class="panel" style="margin-bottom:10px">
+    <div class="panel-h">
+      <div><h3>${esc(it.title)}</h3><div class="sub">${esc(it.detail)}</div></div>
+      <div class="sp"></div>
+      <span class="chip ${SETUP_TONE[it.state]||"c-dim"}"><span class="d"></span>${esc(SETUP_WORD[it.state]||it.state)}</span>
+    </div>
+    <div style="padding:0 14px 14px">
+      ${env.length?`<div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:2px">${env.map(([k,v])=>
+        `<span style="display:inline-flex;align-items:center;gap:7px;font-size:12px">
+           <span class="tick" style="background:var(--${v?"pass":"dim"})"></span>
+           <code>${esc(k)}</code><span class="s">${v?"set":"not set"}</span></span>`).join("")}</div>`:""}
+      ${it.fix?`<div class="note" style="margin-top:10px">${esc(it.fix)}</div>`:""}
+      ${it.connector_key&&it.state!=="optional"
+        ? `<div style="margin-top:10px"><button class="btn sm" ${act("setupTest",it.key)}>Test connection</button>
+           <span id="setup-t-${esc(it.key)}" class="s"></span></div>` : ""}
+    </div></div>`;
+}
+
+RENDER.setup = async function(){
+  const m=main();
+  m.innerHTML=viewHead("Setup","What this deployment is connected to, what it still needs, and what happens if you leave it. Credentials are never shown — only whether they are set.",
+    `<button class="btn" ${act("render")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M23 4v6h-6M1 20v-6h6'/><path d='M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15'/></svg>Re-check</button>`,"setup / 00");
+  const host=el("div");m.appendChild(host);
+  host.innerHTML=`<div class="loading"><span class="spin"></span> Reading configuration…</div>`;
+
+  /* This view describes the REAL deployment, so demo data would be a lie about
+     the one thing it exists to report. `load()` short-circuits to the demo
+     payload whenever demo mode is on, so go to the API directly and say so
+     plainly when it cannot be reached. */
+  let rep;
+  try{ rep=await api("/setup"); }
+  catch(e){
+    host.innerHTML=errorState("Setup unavailable",
+      "Could not read this deployment's configuration: "+(e.message||e));
+    return;
+  }
+
+  const blocking=(rep.platform||[]).filter(i=>i.state==="blocked").length;
+  const sect=(label,extra)=>`<div class="panel-h" style="padding-left:0;margin:18px 0 8px">
+      <div><h3>${esc(label)}</h3>${extra?`<div class="sub">${esc(extra)}</div>`:""}</div></div>`;
+  host.innerHTML=`
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><div>
+        <h3>${blocking?"Needs attention before this works":"Deployment status"}</h3>
+        <div class="sub">${esc(rep.summary||"")}</div>
+      </div><div class="sp"></div>
+      <span class="chip ${blocking?"c-fail":"c-pass"}"><span class="d"></span>${esc(rep.environment||"")}</span></div>
+    </div>
+    ${sect("Platform")}
+    ${(rep.platform||[]).map(setupItem).join("")}
+    ${sect("Connectors",(rep.live_connectors||0)+" of "+(rep.total_connectors||0)
+        +" live — the rest return demo data")}
+    ${(rep.connectors||[]).map(setupItem).join("")}`;
+};
+
+/* Ask the server to actually call the connector with whatever credentials the
+   environment holds. "The variables are set" and "the credentials work" are
+   different claims, and only this settles the second. */
+async function setupTest(key){
+  const out=$("#setup-t-"+key); if(!out) return;
+  out.textContent=" testing…"; out.style.color="";
+  try{
+    const j=await api("/connectors/"+encodeURIComponent(key)+"/test",
+      {method:"POST",body:JSON.stringify(withTenantBody({}))});
+    const ok=j&&j.ok!==false&&j.status!=="error";
+    out.textContent=" "+(ok?"✓ reachable":"✗ "+(j.detail||j.message||"not reachable"));
+    out.style.color=ok?"var(--pass)":"var(--fail)";
+  }catch(e){ out.textContent=" ✗ "+(e.message||e); out.style.color="var(--fail)"; }
+}
+
 function cssvar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#888";}
 
 function graphModel(vendor){
@@ -3245,11 +3325,13 @@ const ICON={
   automation:'<path d="M4 20V10M10 20V4M16 20v-7M22 20h-20"/><circle cx="10" cy="4" r="1.6"/>',
   agentlog:'<rect x="2" y="8" width="8" height="8" rx="4"/><rect x="14" y="8" width="8" height="8" rx="4"/><path d="M9 12h6"/>',
   evidenceingest:'<path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7"/><path d="M3 12h5l2 3h4l2-3h5"/>',
+  setup:'<path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1A1.7 1.7 0 008.9 19a1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.6 8.9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>',
 };
 const GROUPS=[
   ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"],["postureasof","As-of / Timeline"],["automation","Automation Coverage"]]],
   ["Compliance as Code",[["policy","Policies"],["enforcement","Enforcement"],["agentlog","Agent Log"]]],
   ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"],["evidenceingest","Standards Ingest"]]],
+  ["Deployment",[["setup","Setup"]]],
   ["Intelligence",[["response","Response"],["inventory","AI Inventory"],["threat","Threat Intel"]]],
   ["Risk & Vendors",[["risks","Risk Register"],["vendors","Vendors"],["trusttelemetry","Trust Telemetry"],["trustgraph","Trust Graph"]]],
 ];

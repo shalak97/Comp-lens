@@ -8,6 +8,10 @@ services:
     dockerfilePath: ./Dockerfile
     autoDeployTrigger: commit
     healthCheckPath: /health/live
+    # NOTE: this blueprint is deliberately free-tier. Render's persistent disks
+    # require a paid instance, so there is no disk here and the container's
+    # filesystem does not survive a restart or a deploy. See EVIDENCE_BACKEND
+    # below for what that costs and the one free way around it.
     envVars:
       - key: APP_ENV
         value: production
@@ -21,10 +25,37 @@ services:
         value: false
       - key: ENABLE_DEMO_CONNECTOR
         value: true
+      # ─── Evidence storage: know what you are choosing ───────────────
+      #
+      # 'local' on a free instance means EPHEMERAL. /tmp is discarded on every
+      # restart and every deploy, so evidence artifacts do not survive. Findings
+      # and posture live in Postgres and are unaffected; what is lost is the
+      # stored artifact behind each one.
+      #
+      # For a hobby deployment that is a reasonable trade — but it is a trade,
+      # not an oversight, so it is written here rather than buried.
+      #
+      # The free way to get durability: any S3-compatible object store with a
+      # free tier — Cloudflare R2 gives 10 GB/month at no cost, Backblaze B2
+      # gives 10 GB. Set all three of these together and evidence outlives the
+      # container at no charge:
+      #
+      #   EVIDENCE_BACKEND=s3
+      #   EVIDENCE_S3_BUCKET=<your bucket>
+      #   EVIDENCE_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+      #
+      # plus AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for that provider.
+      # Leave EVIDENCE_S3_ENDPOINT unset for real AWS S3. Do NOT set the
+      # backend to s3 on its own — the app refuses to start without a bucket,
+      # which is a crash loop rather than a warning.
       - key: EVIDENCE_BACKEND
         value: local
       - key: EVIDENCE_LOCAL_PATH
-        value: /tmp/evidence_store          # NOTE: /tmp is ephemeral on Render — evidence artifacts reset on restart; use a persistent disk or object backend for durability
+        value: /tmp/evidence_store
+      # - key: EVIDENCE_S3_BUCKET
+      #   sync: false
+      # - key: EVIDENCE_S3_ENDPOINT
+      #   sync: false
       # Run scheduled connector syncs / assessments in-process. Render web
       # services are always-on, so the background runner ticks here. Without
       # this the runner is a no-op and schedules created in the UI/API never
@@ -58,6 +89,16 @@ services:
       #   sync: false
 
 databases:
+  # Free tier, chosen deliberately for a hobby deployment — but know the clock:
+  # a free Render Postgres EXPIRES 30 days after it is created, gives 14 days'
+  # grace to upgrade, and is then deleted along with everything in it. Render
+  # emails before both deadlines.
+  #
+  # So this database is disposable by design. If a deployment ever needs to be
+  # kept, `plan: basic-256mb` is the smallest paid tier (~$6/month) and is also
+  # the point at which backups exist at all. Until then, treat anything here as
+  # reproducible: `make backup` dumps it, and re-running a sync rebuilds
+  # posture from the connectors.
   - name: comp-lens-db
     plan: free
     databaseName: complens

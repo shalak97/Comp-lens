@@ -302,6 +302,22 @@ def connectors_safety(_: Principal = Depends(require(Permission.READ))) -> dict:
     return _sfty.safety_state()
 
 
+@app.get("/setup", tags=["setup"])
+def setup_report(_: Principal = Depends(require(Permission.READ))) -> dict:
+    """What this deployment has been given, and what it still needs.
+
+    For someone who has just cloned the repo: which storage, database and
+    connectors are configured, what each missing one would need, and what the
+    consequence of leaving it is.
+
+    Credentials are reported as set/not-set against the environment variable's
+    NAME. No value is ever returned — the report has to be safe to read on the
+    screen of whoever is doing the setup.
+    """
+    from app.services import setup_status
+    return setup_status.report()
+
+
 @app.get("/connectors/status", tags=["connectors"])
 def connectors_status(tenant_id: str = "default", db: Session = Depends(get_db),
                       p: Principal = Depends(require(Permission.READ))) -> list[dict]:
