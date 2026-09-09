@@ -176,29 +176,45 @@ rules:
       is unreadable, so the handler re-raises the error it was written to
       absorb — and this is invisible in testing, because as root every
       permission check passes. Report the path from what you already know.
+    # A handler has to be written with its `try:`. A bare `except ...:` block is
+    # not a parseable Python fragment on its own, and semgrep rejects the whole
+    # rule file rather than the one rule — which is why the workflow validates
+    # before it scans.
     patterns:
       - pattern-either:
           - pattern: |
+              try:
+                  ...
               except PermissionError:
                   ...
                   $P.exists()
           - pattern: |
-              except PermissionError:
+              try:
                   ...
-                  $P.stat()
-          - pattern: |
               except PermissionError as $E:
                   ...
                   $P.exists()
           - pattern: |
+              try:
+                  ...
+              except PermissionError:
+                  ...
+                  $P.stat()
+          - pattern: |
+              try:
+                  ...
               except PermissionError as $E:
                   ...
                   $P.stat()
           - pattern: |
+              try:
+                  ...
               except PermissionError:
                   ...
                   os.path.exists(...)
           - pattern: |
+              try:
+                  ...
               except PermissionError as $E:
                   ...
                   os.path.exists(...)
