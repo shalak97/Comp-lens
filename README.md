@@ -353,6 +353,44 @@ Before using Comp-Lens in production, review and harden:
 
 ---
 
+## Code Review Automation
+
+Three reviewers run on every pull request, with different jobs and no overlap.
+All three are free on this repository, and none of them can produce a bill.
+
+| | What it does | Blocks merge |
+|---|---|---|
+| **CI** (`.github/workflows/ci.yml`) | ruff + the full pytest suite | Yes |
+| **Semgrep** (`.github/workflows/semgrep.yml`) | Pattern-matches known defect shapes, annotates the diff | No |
+| **CodeRabbit** (`.coderabbit.yaml`) | Reads the change for intent and missing cases | No |
+
+**Semgrep** needs no setup and no account. It runs `semgrep scan` — the
+open-source engine — against the registry packs plus `.semgrep/comp-lens.yml`,
+a set of rules written backwards from bugs this codebase actually produced:
+scores collapsing "not assessed" into 0%, absent telemetry read as a failing
+control, string methods on unvalidated request-body fields, delimiter-joined
+identity keys, pagination that truncates instead of raising, naive datetimes.
+Results reach the pull request as inline annotations through GitHub code
+scanning, which is free because this repository is public.
+
+**CodeRabbit** requires one manual step, which only the repository owner can
+take:
+
+1. Go to <https://coderabbit.ai> and sign in with GitHub.
+2. Authorise the CodeRabbit app on `shalak97/Comp-lens`.
+3. Choose the **Open Source** plan — the complete feature set, free and
+   indefinite, for public repositories.
+
+`.coderabbit.yaml` is already committed and takes effect the moment the app is
+installed. It carries this codebase's review conventions, so the bot knows that
+`ERROR` counting toward the denominator is deliberate rather than a bug, that a
+model change needs a migration in the same pull request, and that `render.yaml`
+must stay on the free tier.
+
+Both tools are advisory by design. The tests are the gate.
+
+---
+
 ## Roadmap
 
 Planned or recommended future improvements:
