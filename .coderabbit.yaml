@@ -1,0 +1,157 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit's open-source plan: the full Pro feature set, free and indefinite,
+# for public repositories. This repo is public and MIT-licensed, so nothing
+# here can produce a bill. If it is ever made private the plan no longer
+# applies — that is the moment to check, not before.
+#
+# This file only takes effect once somebody authorises the CodeRabbit GitHub
+# App on the repository at coderabbit.ai — a step that needs the repo owner's
+# account and cannot be done from a commit. Until then it sits inert and
+# harmless.
+#
+# Division of labour, so three reviewers do not say the same thing three times:
+#
+#   ci.yml         ruff + pytest       the gate. Blocks merge.
+#   semgrep.yml    pattern matching    known defect shapes, inline on the diff.
+#   CodeRabbit     reading the change  intent, missing cases, the reasoning a
+#                                      pattern cannot reach.
+#
+# So CodeRabbit's own ruff and semgrep integrations are switched off below.
+# They would duplicate annotations that are already on the diff, and duplicate
+# review comments are how a review tool trains people to stop reading it.
+
+language: en-US
+early_access: false
+
+reviews:
+  # Terse. Findings, not encouragement.
+  profile: chill
+
+  # Never let the bot hold the merge button. Findings are input to a human
+  # decision — the tests are what decide whether this merges.
+  request_changes_workflow: false
+
+  high_level_summary: true
+  review_status: true
+  collapse_walkthrough: false
+  poem: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+  path_filters:
+    # One-shot scaffolding jobs carrying base64 tarballs. Nothing to review,
+    # and enormous.
+    - "!.github/workflows/add-*.yml"
+    - "!.github/workflows/fix-*.yml"
+    - "!.github/workflows/wire-*.yml"
+    - "!alembic/versions/*.py"
+
+  path_instructions:
+    - path: "app/**/*.py"
+      instructions: |
+        This is a compliance platform. Its output is an assertion about
+        whether a control holds, and the reader acts on that assertion — so
+        the expensive failure is not a crash, it is a confident wrong answer.
+
+        The defect class this codebase keeps producing, and the one worth
+        looking hardest for: a value meaning "we do not know" written down as
+        a value meaning "we know". Both directions are bugs.
+
+          - Missing telemetry read as a failing control. The connector never
+            reported the signal, and the platform records a violation against
+            an asset nobody looked at. Absent signals must produce
+            NOT_APPLICABLE, not FAIL.
+          - An empty denominator rendered as 0%. "Nothing was assessed" and
+            "everything was assessed and nothing passed" are different facts
+            and must not share a number. Scores are nullable for exactly this
+            reason; a null renders as "not assessed", never as "None%".
+          - An error swallowed so the caller cannot tell success from silence.
+          - A partial collection returned as though complete. A connector that
+            enumerates part of an estate and reports on it as the estate is
+            the failure this product exists to catch. Pagination caps and time
+            budgets RAISE here; they never truncate quietly.
+
+        Deliberate policy, so please do not "fix" it: ERROR status counts as
+        applicable-and-not-passing. Dropping unreadable assets from the
+        denominator makes ignorance look like compliance, which is the
+        dangerous direction — see tests/test_unverifiable_controls.py.
+
+        Also worth flagging:
+          - String methods called straight on request-body fields. JSON
+            supplies null, numbers and lists; `payload.get("x").lower()` is a
+            500 where a 422 belongs.
+          - Identity or idempotency keys built by joining fields with a
+            delimiter. Hash a JSON-encoded list instead — a delimiter that can
+            appear in a field lets two tuples collide, and one tenant's row
+            overwrites another's.
+          - Naive datetimes. Everything stored is timezone-aware UTC.
+          - SELECT-then-INSERT without a savepoint. Use
+            app/services/upsert.py:get_or_create.
+          - Any query on a tenant-scoped table with no tenant_id filter.
+          - Credential VALUES reaching a response body. Status endpoints
+            report presence as {VAR_NAME: bool} and never the contents.
+
+    - path: "app/models.py"
+      instructions: |
+        A column added or changed here needs a matching alembic migration in
+        the same pull request. CI builds the test schema from the models and
+        production from the migrations, so drift passes every test and fails
+        on the first request after deploy. tests/test_migration_schema_parity.py
+        compares the two — if it fails, write the migration, do not relax the
+        test.
+
+    - path: "alembic/env.py"
+      instructions: |
+        Every module defining a table must be imported here. `--autogenerate`
+        diffs the database against Base.metadata, and Base.metadata holds only
+        what has been imported — a module missing from this list makes its
+        tables look orphaned and the tool will draft op.drop_table for them.
+
+    - path: "tests/**/*.py"
+      instructions: |
+        Tests here are expected to explain themselves: the module docstring
+        should say what instrument found the bug and what the bug actually
+        was, in enough detail that someone can judge whether the fix was
+        right. Check that a test asserts against the code path production
+        uses — an earlier version of one file built Finding rows while the
+        function under test read Posture, so every assertion passed for
+        entirely the wrong reason.
+
+    - path: "render.yaml"
+      instructions: |
+        This deploys on Render's free tier and must stay there. Flag anything
+        that introduces a cost: a `plan:` other than free, a persistent disk,
+        a managed database above the free tier, or a paid add-on. The owner
+        has been explicit that this is a hobby project and must not incur
+        charges.
+
+    - path: "app/static/dashboard.html"
+      instructions: |
+        Single-file frontend with its own conventions. Helpers are `api()` and
+        `load()` — and `load()` returns a `{data, live}` envelope that has to
+        be unwrapped. CSS custom properties in use include `--pass` and
+        `--dim`; check that any class or variable referenced actually exists
+        in this file rather than looking plausible.
+
+  tools:
+    # Both of these already run in GitHub Actions and annotate the diff.
+    ruff:
+      enabled: false
+    semgrep:
+      enabled: false
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+
+chat:
+  auto_reply: true

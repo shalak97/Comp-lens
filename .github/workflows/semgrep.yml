@@ -1,0 +1,87 @@
+name: Semgrep
+
+# A second reviewer that reads every pull request and never gets tired.
+#
+# Free, permanently, with no account and no secret: `semgrep scan` runs the
+# open-source engine and fetches the registry rulesets anonymously. This is
+# deliberately NOT `semgrep ci`, which wants a SEMGREP_APP_TOKEN and pulls
+# policy from Semgrep's hosted service — that route starts free and does not
+# stay that way. Nothing in this file can produce a bill.
+#
+# Findings surface as inline annotations on the pull request diff, via GitHub
+# code scanning. That is also free here, and only because the repository is
+# public: code scanning on a private repo needs Advanced Security. If this repo
+# is ever made private, the upload step starts failing with a 403 and the fix
+# is to delete it — the scan output stays readable in the job log either way.
+#
+# Findings do NOT block merge. This is a reviewer, not a gate: ruff and pytest
+# in ci.yml are the gate. A broken RULE FILE does block, though — see below.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: semgrep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep (static analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Unpinned on purpose, unlike ruff in ci.yml. A pin is only worth having
+      # if somebody verified that exact version works, and nobody has — an
+      # invented version number is a guaranteed failed job, which is strictly
+      # worse than tracking the current release. Pin it the first time a
+      # release actually breaks something here.
+      - name: Install semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+          semgrep --version
+
+      # The one hard gate in this file. The custom rules are YAML that only
+      # semgrep can fully check, so a typo in .semgrep/ would otherwise make
+      # the scan below exit on a config error, get swallowed by
+      # continue-on-error, and leave a green tick over a linter that reviewed
+      # nothing. Fail loudly here instead.
+      - name: Validate the custom rules
+        run: semgrep scan --validate --config .semgrep/
+
+      # continue-on-error, because a finding is a comment on a pull request,
+      # not a build failure. The SARIF upload below is what makes it visible.
+      - name: Scan
+        continue-on-error: true
+        run: |
+          semgrep scan \
+            --config .semgrep/ \
+            --config p/python \
+            --config p/security-audit \
+            --config p/secrets \
+            --exclude .github/workflows \
+            --sarif --output semgrep.sarif \
+            --metrics off
+
+      # A pull request from a fork runs with a read-only token, so this would
+      # 403. Skip it there; the scan output is still in the job log.
+      - name: Upload results to code scanning
+        if: always() && github.event.pull_request.head.repo.fork != true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

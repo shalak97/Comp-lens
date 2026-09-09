@@ -1,0 +1,228 @@
+# Rules for the defect classes this codebase actually produced.
+#
+# Every rule here was written backwards from a real bug found in this repo, not
+# from a generic checklist. The registry packs (p/python, p/security-audit,
+# p/secrets) cover the usual injection/crypto/secret material; these cover the
+# thing those packs cannot know — that this product's central failure mode is a
+# value meaning "we do not know" being written down as a value meaning "we know".
+#
+# Keep that bar. A rule earns its place by naming a mistake someone here has
+# already made; a rule that only fires on hypotheticals costs review attention
+# and gets muted, which then mutes the useful ones next to it.
+
+rules:
+  # ── "we do not know" collapsing into "we know" ──
+
+  - id: comp-lens-score-collapses-unknown-to-zero
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A metric falls back to a concrete number when its denominator is empty.
+      Zero is a real, alarming result ("assessed everything, nothing passed");
+      an empty denominator means "nothing was assessed". Collapsing the second
+      into the first put a 0% headline and a pinned gauge needle in front of
+      every tenant who had never run an assessment. Return None and let the
+      renderer say "not assessed".
+    patterns:
+      - pattern-either:
+          - pattern: $M = $EXPR if $COND else 0.0
+          - pattern: $M = $EXPR if $COND else 0
+          - pattern: return $EXPR if $COND else 0.0
+      - metavariable-regex:
+          metavariable: $M
+          regex: (?i).*(score|rate|percent|pct|coverage|ratio|compliance).*
+    paths:
+      include: [app/]
+
+  - id: comp-lens-absent-signal-treated-as-false
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Telemetry that is absent is being read as a negative finding. `.get(k,
+      False)` and `.get(k) or False` both turn "the connector never reported
+      this" into "the control fails" — a fabricated verdict against an asset
+      nobody looked at. Collect the absent signals first
+      (`[s for s in check.requires if telemetry.get(s) is None]`) and return
+      NOT_APPLICABLE when any are missing.
+    patterns:
+      - pattern-either:
+          - pattern: $T.get($K, False)
+          - pattern: $T.get($K, 0)
+      - metavariable-regex:
+          metavariable: $T
+          regex: (?i).*(telemetry|signal|evidence|facts|observed).*
+    paths:
+      include: [app/]
+
+  - id: comp-lens-swallowed-exception
+    languages: [python]
+    severity: INFO
+    message: >-
+      An exception is discarded without a trace. The caller now cannot
+      distinguish "this succeeded" from "this failed and we hid it", which is
+      the same unknown-as-known collapse in control flow. Log it, re-raise it,
+      or record the failure in the result — and if it really is expected, say
+      which exception and why in a comment on the handler.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              try:
+                  ...
+              except $E:
+                  pass
+          - pattern: |
+              try:
+                  ...
+              except:
+                  pass
+    paths:
+      include: [app/]
+
+  # ── request bodies are attacker-shaped, not dict[str, str] ──
+
+  - id: comp-lens-string-method-on-unvalidated-body-field
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A string method is called straight on a value pulled out of a request
+      body. JSON gives you null, numbers, lists and dicts too, so this raises
+      AttributeError and returns a 500 for what is really a 422. Coerce first —
+      `str(payload.get("filename") or "upload").lower()` — or validate the body
+      with a pydantic model.
+    patterns:
+      - pattern-either:
+          - pattern: $BODY.get(...).lower()
+          - pattern: $BODY.get(...).upper()
+          - pattern: $BODY.get(...).strip()
+          - pattern: $BODY.get(...).split(...)
+          - pattern: $BODY.get(...).startswith(...)
+          - pattern: $BODY.get(...).endswith(...)
+          - pattern: $BODY.get(...).replace(...)
+      - metavariable-regex:
+          metavariable: $BODY
+          regex: (?i).*(payload|body|data|params|request|req|json).*
+    paths:
+      include: [app/]
+
+  # ── identity keys ──
+
+  - id: comp-lens-delimiter-joined-identity-key
+    languages: [python]
+    severity: ERROR
+    message: >-
+      An identity or idempotency key is built by joining fields with a
+      delimiter. Any field that can contain the delimiter lets two different
+      tuples produce the same key — one tenant's finding silently overwriting
+      another's. Hash a JSON-encoded list instead, which is unambiguous
+      regardless of the field contents (see `_hash_key` in
+      app/services/assessment.py).
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.$ALGO($SEP.join(...).encode(...))
+          - pattern: hashlib.$ALGO(f"...".encode(...))
+      - pattern-not: hashlib.$ALGO(json.dumps(...).encode(...))
+    paths:
+      include: [app/]
+
+  # ── partial results presented as whole ones ──
+
+  - id: comp-lens-pagination-cap-returns-partial
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A collection loop stops at a cap and returns what it has. A connector
+      that enumerates a slice of an estate and reports on it as though it were
+      the estate is precisely the failure this platform exists to catch,
+      committed by the platform itself. Raise instead — a sync that failed and
+      said so beats a compliance verdict computed over an unannounced subset.
+    patterns:
+      - pattern: |
+          while ...:
+              ...
+              if $N >= $MAX:
+                  break
+      - metavariable-regex:
+          metavariable: $MAX
+          regex: (?i).*(max_pages|page_limit|limit|cap).*
+    paths:
+      include: [app/connectors/]
+
+  # ── time ──
+
+  - id: comp-lens-naive-datetime
+    languages: [python]
+    severity: WARNING
+    message: >-
+      A naive datetime. Compared against a timezone-aware one it raises; stored
+      next to one it silently shifts by the host's offset, which turns evidence
+      freshness and token expiry into whatever the deploy region happens to be.
+      Use `datetime.now(timezone.utc)`.
+    pattern-either:
+      - pattern: datetime.utcnow()
+      - pattern: datetime.datetime.utcnow()
+      - pattern: datetime.now()
+      - pattern: datetime.datetime.now()
+    paths:
+      include: [app/]
+
+  # ── the handler that contained the bug it guarded against ──
+
+  - id: comp-lens-filesystem-probe-inside-permission-handler
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A filesystem probe inside a PermissionError handler. `exists()`, `stat()`
+      and `access()` raise PermissionError themselves when a parent directory
+      is unreadable, so the handler re-raises the error it was written to
+      absorb — and this is invisible in testing, because as root every
+      permission check passes. Report the path from what you already know.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              except PermissionError:
+                  ...
+                  $P.exists()
+          - pattern: |
+              except PermissionError:
+                  ...
+                  $P.stat()
+          - pattern: |
+              except PermissionError as $E:
+                  ...
+                  $P.exists()
+          - pattern: |
+              except PermissionError as $E:
+                  ...
+                  $P.stat()
+          - pattern: |
+              except PermissionError:
+                  ...
+                  os.path.exists(...)
+          - pattern: |
+              except PermissionError as $E:
+                  ...
+                  os.path.exists(...)
+    paths:
+      include: [app/]
+
+  # ── credentials ──
+
+  - id: comp-lens-credential-value-in-response
+    languages: [python]
+    severity: ERROR
+    message: >-
+      An environment variable's VALUE is being read where a status view builds
+      its response. app/services/setup_status.py reports configuration as
+      {VAR_NAME: bool} on purpose — it never returns a credential, so the setup
+      page is safe to show to anyone who can reach it. Report presence, not
+      contents.
+    patterns:
+      - pattern-either:
+          - pattern: os.environ[...]
+          - pattern: os.environ.get(...)
+          - pattern: os.getenv(...)
+      - pattern-not-inside: bool(...)
+      - pattern-not: os.environ.get(...) is not None
+    paths:
+      include:
+        - app/services/setup_status.py
