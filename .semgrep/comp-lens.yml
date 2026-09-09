@@ -32,7 +32,7 @@ rules:
           metavariable: $M
           regex: (?i).*(score|rate|percent|pct|coverage|ratio|compliance).*
     paths:
-      include: [app/]
+      include: [/app/]
 
   - id: comp-lens-absent-signal-treated-as-false
     languages: [python]
@@ -52,7 +52,7 @@ rules:
           metavariable: $T
           regex: (?i).*(telemetry|signal|evidence|facts|observed).*
     paths:
-      include: [app/]
+      include: [/app/]
 
   - id: comp-lens-swallowed-exception
     languages: [python]
@@ -76,7 +76,7 @@ rules:
               except:
                   pass
     paths:
-      include: [app/]
+      include: [/app/]
 
   # ── request bodies are attacker-shaped, not dict[str, str] ──
 
@@ -102,7 +102,7 @@ rules:
           metavariable: $BODY
           regex: (?i).*(payload|body|data|params|request|req|json).*
     paths:
-      include: [app/]
+      include: [/app/]
 
   # ── identity keys ──
 
@@ -122,7 +122,7 @@ rules:
           - pattern: hashlib.$ALGO(f"...".encode(...))
       - pattern-not: hashlib.$ALGO(json.dumps(...).encode(...))
     paths:
-      include: [app/]
+      include: [/app/]
 
   # ── partial results presented as whole ones ──
 
@@ -145,7 +145,7 @@ rules:
           metavariable: $MAX
           regex: (?i).*(max_pages|page_limit|limit|cap).*
     paths:
-      include: [app/connectors/]
+      include: [/app/connectors/]
 
   # ── time ──
 
@@ -163,7 +163,7 @@ rules:
       - pattern: datetime.now()
       - pattern: datetime.datetime.now()
     paths:
-      include: [app/]
+      include: [/app/]
 
   # ── the handler that contained the bug it guarded against ──
 
@@ -219,7 +219,7 @@ rules:
                   ...
                   os.path.exists(...)
     paths:
-      include: [app/]
+      include: [/app/]
 
   # ── credentials ──
 
@@ -241,4 +241,4 @@ rules:
       - pattern-not: os.environ.get(...) is not None
     paths:
       include:
-        - app/services/setup_status.py
+        - /app/services/setup_status.py

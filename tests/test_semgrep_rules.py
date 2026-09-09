@@ -120,6 +120,29 @@ def test_every_rule_explains_the_bug_it_came_from(rules):
         f"what to do instead: {thin}")
 
 
+def test_path_filters_are_anchored(rules):
+    """Semgrep warned on the first run that an unanchored `paths.include` is
+    about to change meaning:
+
+        contains an include pattern 'app/connectors/' that will soon be
+        interpreted as '/app/connectors/' to comply with the Semgrepignore v2
+        and Gitignore specifications.
+
+    Anchored is what these rules want — `app/` here means the `app/` package at
+    the repository root, not any directory called `app` at any depth. Writing
+    the leading slash makes that explicit, so a future release cannot silently
+    change which files a security rule reads.
+    """
+    unanchored = []
+    for rule in rules:
+        for pattern in rule.get("paths", {}).get("include", []):
+            if not pattern.startswith(("/", "**")):
+                unanchored.append(f"{rule['id']}: {pattern}")
+    assert not unanchored, (
+        "these path filters will change meaning in a future semgrep release; "
+        f"write '/app/...' to pin the current behaviour: {unanchored}")
+
+
 def test_the_workflow_validates_before_it_scans():
     """The scan step is `continue-on-error`, so without a separate validating
     step a configuration error would be swallowed and the job would go green
