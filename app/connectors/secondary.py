@@ -101,6 +101,20 @@ def _tri(value: Any, *, invert: bool = False) -> bool | None:
     return (not truth) if invert else truth
 
 
+def _between(text: str, start: str, end: str) -> str | None:
+    """The text between two markers, for reading a vendor's XML error fields.
+
+    Deliberately not an XML parse: this is only ever used to quote a failure
+    back in a log line or an exception message, and a malformed error document
+    should not raise a second, more confusing error while reporting the first.
+    """
+    i = text.find(start)
+    if i < 0:
+        return None
+    j = text.find(end, i + len(start))
+    return text[i + len(start):j].strip() if j > 0 else None
+
+
 def _sub_relative(resource_id: str) -> str:
     """Strip the ``/subscriptions/{id}`` prefix off a full ARM resource id.
 
@@ -1405,8 +1419,30 @@ class QualysConnector(BaseConnector):
                 f"{self._base}/api/2.0/fo/asset/host/vm/detection/",
                 intent=ReadIntent.QUERY, auth=self._auth, headers=self._headers,
                 data={"action": "list", "ips": ip, "severities": "5"})
-            critical = str(body).count("<DETECTION>")
-            return {"critical_vulnerabilities": critical, "asset": ip, "owner": "secops-team"}
+            text = str(body)
+            out: dict[str, Any] = {"asset": ip, "owner": "secops-team"}
+
+            # Qualys answers many failures — a bad login, a throttle, an
+            # unlicensed module — with HTTP 200 and a <SIMPLE_RETURN> error
+            # document. Counting <DETECTION> in that yields zero, and zero
+            # passes RA-5, so an unauthenticated scanner would certify every
+            # host as free of critical vulnerabilities. That is a failure, so
+            # it raises rather than being reported as a clean result.
+            if "<SIMPLE_RETURN" in text:
+                code = _between(text, "<CODE>", "</CODE>") or "unknown"
+                detail = _between(text, "<TEXT>", "</TEXT>") or "no detail"
+                raise ConnectorError(
+                    f"Qualys refused the detection query (code {code}): {detail}")
+            if "<HOST_LIST_VM_DETECTION_OUTPUT" not in text:
+                # A 200 in some other shape entirely. Not an error we can name,
+                # and not a scan result we can count — so the honest answer is
+                # that the count is unknown, and the check goes NOT_APPLICABLE.
+                logger.warning(
+                    "Qualys returned an unrecognised document for %s; reporting "
+                    "the vulnerability count as unknown rather than zero.", ip)
+                return out
+            out["critical_vulnerabilities"] = text.count("<DETECTION>")
+            return out
         raise ConnectorError(f"Qualys connector does not support control {control_id}")
 
 
@@ -1461,6 +1497,18 @@ class CrowdStrikeConnector(BaseConnector):
                 "/spotlight/queries/vulnerabilities/v1",
                 {"filter": f"aid:'{host_id}'+cve.severity:'CRITICAL'", "limit": 1},
             )
-            count = res.get("meta", {}).get("pagination", {}).get("total", 0)
-            return {"critical_vulnerabilities": count, "asset": host_id, "owner": "secops-team"}
+            total = ((res.get("meta") or {}).get("pagination") or {}).get("total")
+            out: dict[str, Any] = {"asset": host_id, "owner": "secops-team"}
+            # `.get("total", 0)` turned a response missing the pagination block
+            # into "no critical vulnerabilities", which passes RA-5. bool is
+            # excluded explicitly because it is a subclass of int and True
+            # would otherwise be counted as one vulnerability.
+            if isinstance(total, int) and not isinstance(total, bool):
+                out["critical_vulnerabilities"] = total
+            else:
+                logger.warning(
+                    "CrowdStrike Spotlight response for %s carried no "
+                    "meta.pagination.total; reporting the vulnerability count "
+                    "as unknown rather than zero.", host_id)
+            return out
         raise ConnectorError(f"CrowdStrike connector does not support control {control_id}")
