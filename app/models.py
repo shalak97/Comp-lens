@@ -492,7 +492,9 @@ class EvidenceDocument(Base):
         UniqueConstraint("tenant_id", "content_hash", name="uq_evidence_doc_hash"),
     )
     doc_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    # No index=True: ix_evidence_docs_tenant above already covers this column,
+    # and declaring both builds two indexes over the same single column.
+    tenant_id: Mapped[str] = mapped_column(String(128))
     name: Mapped[str] = mapped_column(String(512))
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
@@ -516,8 +518,11 @@ class EvidenceConceptHit(Base):
         Index("ix_evidence_hits_doc", "doc_id"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
-    doc_id: Mapped[str] = mapped_column(String(36), index=True)
+    # No index=True on tenant_id or doc_id: the two Index() entries above cover
+    # them. concept_id keeps its flag — nothing else indexes it, and the
+    # migration builds it under exactly the name this generates.
+    tenant_id: Mapped[str] = mapped_column(String(128))
+    doc_id: Mapped[str] = mapped_column(String(36))
     concept_id: Mapped[str] = mapped_column(String(64), index=True)
     quote: Mapped[str] = mapped_column(Text)
     confidence: Mapped[float] = mapped_column(Float, default=0.6)

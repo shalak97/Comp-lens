@@ -78,6 +78,53 @@ def migrated_schema(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
+def migrated_detail(tmp_path_factory):
+    """The same migrated database, read for nullability as well as names.
+
+    A separate fixture rather than a richer `migrated_schema`, so the four
+    original name-parity tests keep asserting exactly what they asserted
+    before — this file's own history is the argument for not quietly widening
+    a check that other tests depend on.
+    """
+    alembic_config = pytest.importorskip("alembic.config")
+    alembic_command = pytest.importorskip("alembic.command")
+
+    from app.config import settings
+
+    db_path = tmp_path_factory.mktemp("migrated_detail") / "schema.db"
+    url = f"sqlite:///{db_path}"
+
+    cfg = alembic_config.Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", url)
+
+    original = settings.database_url
+    settings.database_url = url
+    try:
+        alembic_command.upgrade(cfg, "head")
+    finally:
+        settings.database_url = original
+
+    engine = create_engine(url)
+    try:
+        insp = inspect(engine)
+        return {t: {c["name"]: bool(c["nullable"]) for c in insp.get_columns(t)}
+                for t in insp.get_table_names() if t not in ALEMBIC_TABLES}
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(scope="module")
+def model_detail():
+    """Nullability as the ORM models declare it."""
+    import app.crawler_models  # noqa: F401
+    import app.models  # noqa: F401
+    import app.policy_models  # noqa: F401
+    return {name: {c.name: bool(c.nullable) for c in table.columns}
+            for name, table in Base.metadata.tables.items()}
+
+
+@pytest.fixture(scope="module")
 def model_schema():
     """Every table and column the ORM models declare.
 
@@ -194,3 +241,87 @@ def test_alembic_env_registers_every_module_that_defines_a_table():
         "these modules define tables but alembic/env.py never imports them, so "
         "their tables are invisible to --autogenerate and it will propose "
         f"dropping them: {missing}")
+
+
+# ── nullability: the half this file could not see ──
+#
+# The four tests above compare NAMES. A column present in both schemas passes
+# them regardless of whether the database enforces the constraint the model
+# declares, and that blind spot hid 84 drifted columns across 17 tables for as
+# long as this file has existed. An unapplied patch in the repository root had
+# reported the same defect at 68 columns more than a year earlier; nothing in
+# CI could confirm or deny it, because nothing in CI looked.
+#
+# The lesson generalises past nullability: a parity test is only as good as the
+# properties it compares, and "the column exists" is the weakest of them.
+
+def test_every_model_not_null_is_enforced_by_the_database(model_detail, migrated_detail):
+    """A column the models declare NOT NULL must be NOT NULL in production.
+
+    When it is not, the application is asserting an invariant nothing enforces.
+    Tests never notice, because conftest builds the schema from the models and
+    therefore always gets the strict version; only the deployed database is
+    loose, and the first symptom is a row that could not exist.
+    """
+    drift = {}
+    for table, columns in model_detail.items():
+        if table not in migrated_detail:
+            continue
+        loose = sorted(col for col, nullable in columns.items()
+                       if nullable is False
+                       and migrated_detail[table].get(col) is True)
+        if loose:
+            drift[table] = loose
+    assert not drift, (
+        "these columns are NOT NULL in the models and nullable in the migrated "
+        "database, so the schema accepts rows the application assumes cannot "
+        f"exist: {drift}")
+
+
+def test_no_column_is_stricter_in_the_database_than_in_the_models(
+        model_detail, migrated_detail):
+    """The other direction, and the more dangerous one at runtime.
+
+    A column the models believe is optional but the database requires produces
+    an IntegrityError on a write path the type annotations say is fine — and it
+    fails in production on real data, never in a test.
+    """
+    drift = {}
+    for table, columns in model_detail.items():
+        if table not in migrated_detail:
+            continue
+        strict = sorted(col for col, nullable in columns.items()
+                        if nullable is True
+                        and migrated_detail[table].get(col) is False)
+        if strict:
+            drift[table] = strict
+    assert not drift, (
+        "these columns are optional in the models and NOT NULL in the database; "
+        f"a write the models permit will raise IntegrityError: {drift}")
+
+
+def test_no_column_asks_for_two_indexes_on_itself():
+    """`index=True` beside an explicit `Index()` on the same column.
+
+    SQLAlchemy honours both, so the table carries two indexes covering exactly
+    one column — every insert and update maintains both, for a read benefit
+    only the first provides. Found while checking a patch's claim that three
+    evidence indexes were missing: they were not missing, they were declared
+    twice under two different names, and only one spelling reached a migration.
+    """
+    import app.crawler_models  # noqa: F401
+    import app.models  # noqa: F401
+    import app.policy_models  # noqa: F401
+
+    doubled = {}
+    for name, table in Base.metadata.tables.items():
+        single = {tuple(ix.columns.keys())[0]
+                  for ix in table.indexes if len(ix.columns) == 1}
+        flagged = {c.name for c in table.columns if c.index}
+        both = sorted(flagged & single)
+        if both:
+            doubled[name] = both
+    assert not doubled, (
+        "these columns declare index=True and are also covered by an explicit "
+        "single-column Index(), so two indexes are built and maintained where "
+        f"one is read: {doubled}")

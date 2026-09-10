@@ -59,4 +59,15 @@ jobs:
       - name: Run migrations (schema builds cleanly from scratch)
         run: alembic upgrade head
       - name: Run test suite
-        run: pytest -q -p no:randomly
+        # Coverage is REPORTED, not gated. There is no --cov-fail-under, on
+        # purpose: nobody has ever measured this codebase, so any threshold
+        # picked today would be invented rather than informed. Measure first,
+        # let the number aim the next round of test writing, and add a floor
+        # later once it means something.
+        run: pytest -q -p no:randomly --cov=app --cov-report=term-missing:skip-covered
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" 2>/dev/null \
+            || echo "coverage summary unavailable" >> "$GITHUB_STEP_SUMMARY"
