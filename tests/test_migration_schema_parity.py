@@ -230,13 +230,27 @@ def test_alembic_env_registers_every_module_that_defines_a_table():
     imported = {ast.unparse(node) for node in ast.walk(ast.parse(env_src))
                 if isinstance(node, (ast.Import, ast.ImportFrom))}
 
-    defining = {path.stem for path in (ROOT / "app").glob("*.py")
-                if "__tablename__" in path.read_text()}
-    # app.models re-exports these, so importing it registers them too.
-    transitive = {"ai_governance_models", "audit_models", "grc_tprm_models"}
+    # rglob, not glob, and dotted paths, not stems. Two bugs in one line:
+    #
+    #   * the top-level-only glob never saw app/grc_platforms/models.py, which
+    #     is how seven drifted columns in grc_attestations stayed invisible to
+    #     a check written to find exactly that kind of thing;
+    #   * `path.stem` calls that file "models" — the same key as app/models.py,
+    #     so the nested one could never be distinguished from the top-level one
+    #     even once the glob found it.
+    #
+    # A search that cannot see a file reports it as clean, and a key that
+    # collides reports one file's state for another.
+    defining = {".".join(path.relative_to(ROOT).with_suffix("").parts)
+                for path in (ROOT / "app").rglob("*.py")
+                if "__pycache__" not in str(path)
+                and "__tablename__" in path.read_text(errors="ignore")}
+    # Registered transitively by importing app.models, which re-exports them.
+    transitive = {"app.ai_governance_models", "app.audit_models",
+                  "app.grc_tprm_models", "app.grc_platforms.models"}
 
     missing = sorted(module for module in defining - transitive
-                     if not any(f"app.{module}" in line for line in imported))
+                     if not any(module in line for line in imported))
     assert not missing, (
         "these modules define tables but alembic/env.py never imports them, so "
         "their tables are invisible to --autogenerate and it will propose "
@@ -247,7 +261,7 @@ def test_alembic_env_registers_every_module_that_defines_a_table():
 #
 # The four tests above compare NAMES. A column present in both schemas passes
 # them regardless of whether the database enforces the constraint the model
-# declares, and that blind spot hid 84 drifted columns across 17 tables for as
+# declares, and that blind spot hid 91 drifted columns across 18 tables for as
 # long as this file has existed. An unapplied patch in the repository root had
 # reported the same defect at 68 columns more than a year earlier; nothing in
 # CI could confirm or deny it, because nothing in CI looked.
@@ -313,15 +327,26 @@ def test_no_column_asks_for_two_indexes_on_itself():
     import app.models  # noqa: F401
     import app.policy_models  # noqa: F401
 
+    # `index=True` does not merely set a flag — SQLAlchemy synthesises an Index
+    # for it and attaches it to table.indexes under the generated name
+    # `ix_<table>_<column>`. So comparing the flagged columns against every
+    # single-column index matches each flagged column against the index it
+    # created itself, and reports the entire codebase. The duplicate is only
+    # real when a SECOND single-column index covers the column under a
+    # different name.
     doubled = {}
     for name, table in Base.metadata.tables.items():
-        single = {tuple(ix.columns.keys())[0]
-                  for ix in table.indexes if len(ix.columns) == 1}
         flagged = {c.name for c in table.columns if c.index}
-        both = sorted(flagged & single)
-        if both:
-            doubled[name] = both
+        extra = {}
+        for ix in table.indexes:
+            cols = list(ix.columns.keys())
+            if len(cols) != 1 or cols[0] not in flagged:
+                continue
+            if ix.name != f"ix_{name}_{cols[0]}":     # not the synthesised one
+                extra.setdefault(cols[0], []).append(ix.name)
+        if extra:
+            doubled[name] = {c: sorted(n) for c, n in sorted(extra.items())}
     assert not doubled, (
-        "these columns declare index=True and are also covered by an explicit "
-        "single-column Index(), so two indexes are built and maintained where "
-        f"one is read: {doubled}")
+        "these columns declare index=True and are ALSO covered by a separately "
+        "named single-column Index(), so two indexes are built and maintained "
+        f"where one is read: {doubled}")

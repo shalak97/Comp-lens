@@ -1,6 +1,6 @@
 """Align database nullability with the ORM models.
 
-84 columns across 17 tables are declared NOT NULL by the models and created
+91 columns across 18 tables are declared NOT NULL by the models and created
 NULLABLE by the migrations. The application therefore assumes an invariant the
 database does not enforce, and nothing caught it: CI builds the test schema
 with ``Base.metadata.create_all()`` (which honours the models) while production
@@ -17,10 +17,10 @@ same change that adds this migration, and it fails without it.
 
 Backfill policy, which is the whole risk of this migration:
 
-  * 65 columns declare a default. Their NULLs are backfilled from that declared
+  * 67 columns declare a default. Their NULLs are backfilled from that declared
     default before the constraint is applied, so the migration is safe on a
     populated database. A timestamp column is backfilled with CURRENT_TIMESTAMP.
-  * 19 columns declare no default. These are identifiers, names and foreign
+  * 24 columns declare no default. These are identifiers, names and foreign
     keys — audits.tenant_id, audit_controls.audit_id, tprm_vendors.name. They
     are NOT backfilled, because there is no value that is not an invention. If
     real NULLs exist the ALTER fails loudly, which is the correct outcome: a
@@ -87,6 +87,8 @@ def upgrade() -> None:
     op.execute("UPDATE crawl_targets SET tenant_id = 'default' WHERE tenant_id IS NULL")
     op.execute("UPDATE crawl_targets SET url = '' WHERE url IS NULL")
     op.execute("UPDATE grc_risks SET category = 'operational' WHERE category IS NULL")
+    op.execute("UPDATE grc_attestations SET confidence = 0.5 WHERE confidence IS NULL")
+    op.execute("UPDATE grc_attestations SET synced_at = CURRENT_TIMESTAMP WHERE synced_at IS NULL")
     op.execute("UPDATE grc_risks SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
     op.execute("UPDATE grc_risks SET impact = 3 WHERE impact IS NULL")
     op.execute("UPDATE grc_risks SET likelihood = 3 WHERE likelihood IS NULL")
@@ -192,6 +194,15 @@ def upgrade() -> None:
         batch.alter_column("tenant_id", existing_type=sa.String(128), nullable=False)
         batch.alter_column("url", existing_type=sa.String(2048), nullable=False)
 
+    with op.batch_alter_table("grc_attestations") as batch:
+        batch.alter_column("confidence", existing_type=sa.Float(), nullable=False)
+        batch.alter_column("external_control_ref", existing_type=sa.String(128), nullable=False)
+        batch.alter_column("external_test_id", existing_type=sa.String(128), nullable=False)
+        batch.alter_column("platform", existing_type=sa.String(32), nullable=False)
+        batch.alter_column("status", existing_type=sa.String(32), nullable=False)
+        batch.alter_column("synced_at", existing_type=sa.DateTime(timezone=True), nullable=False)
+        batch.alter_column("tenant_id", existing_type=sa.String(128), nullable=False)
+
     with op.batch_alter_table("grc_risks") as batch:
         batch.alter_column("category", existing_type=sa.String(64), nullable=False)
         batch.alter_column("created_at", existing_type=sa.DateTime(timezone=True), nullable=False)
@@ -238,5 +249,5 @@ def downgrade() -> None:
     Relaxing a NOT NULL is always safe in the abstract, but reversing this
     migration would restore a schema the application's own type annotations say
     cannot happen. If a downgrade is ever genuinely needed, write it against the
-    specific columns involved rather than reopening all 84.
+    specific columns involved rather than reopening all 91.
     """
