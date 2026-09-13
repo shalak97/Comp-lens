@@ -110,11 +110,28 @@ def test_an_unknown_control_is_a_400_not_a_silent_attestation(client):
     """resolve() raises ValueError for a control with no binding, and the route
     turns that into a 400. The failure mode worth guarding is the opposite:
     answering 'not_assessed' for a control the platform has never heard of,
-    which reads like a real assessment of a real control."""
+    which reads like a real assessment of a real control.
+
+    The body is checked through the app's own error envelope rather than
+    FastAPI's default `detail` key. install_exception_handlers (app/hardening.py)
+    reshapes every HTTPException into
+
+        {"error": {"type": ..., "message": ..., "request_id": ...}}
+
+    so an operator can correlate a client-side failure with a server log line.
+    Asserting `detail` — which is what this test did first — passes the status
+    check and then dies on a KeyError, testing FastAPI's defaults rather than
+    this application's actual contract.
+    """
     response = client.post("/resolve", json={
         "tenant_id": TENANT, "control_id": "NOT-A-REAL-CONTROL", "dry_run": True})
     assert response.status_code == 400
-    assert "NOT-A-REAL-CONTROL" in response.json()["detail"]
+    error = response.json()["error"]
+    assert "NOT-A-REAL-CONTROL" in error["message"]
+    assert error["type"] == "bad_request"
+    assert "request_id" in error, (
+        "the error envelope lost its request_id, so a user reporting this "
+        "failure has nothing to correlate against the logs")
 
 
 def test_an_unknown_binding_lookup_is_a_404(client):
