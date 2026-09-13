@@ -274,9 +274,9 @@ Example API areas include:
 | `/v1/policy/list` | Control and policy catalog |
 | `/evidence/verify` | Evidence verification |
 | `/evidence/anchors` | Evidence integrity anchors |
-| `/ai/systems` | AI governance register |
+| `/ai-systems` | AI governance register |
 | `/reports/pdf` | PDF report export |
-| `/reports.csv` | CSV report export |
+| `/reports/csv` | CSV report export |
 
 ---
 
