@@ -77,8 +77,40 @@ jobs:
             --sarif --output semgrep.sarif \
             --metrics off
 
+      # Findings went ONLY to the Security tab, which needs security_events
+      # access to read. Anyone without it — a fork, a CI log reader, a
+      # contributor triaging a run — saw "20 findings" and no way to learn what
+      # they were. Rendering the SARIF back out costs nothing (no second scan)
+      # and puts them in the log and the run summary where the count already is.
+      - name: Report findings
+        if: always()
+        run: |
+          python - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import collections, json, pathlib
+          sarif = pathlib.Path("semgrep.sarif")
+          if not sarif.exists():
+              print("no SARIF produced — the scan step did not complete")
+              raise SystemExit(0)
+          runs = json.loads(sarif.read_text()).get("runs", [])
+          results = [r for run in runs for r in run.get("results", [])]
+          print(f"## Semgrep: {len(results)} finding(s)\n")
+          by_rule = collections.defaultdict(list)
+          for r in results:
+              loc = (r.get("locations") or [{}])[0].get("physicalLocation", {})
+              by_rule[r.get("ruleId", "?")].append((
+                  loc.get("artifactLocation", {}).get("uri", "?"),
+                  loc.get("region", {}).get("startLine", "?"),
+                  (r.get("message", {}).get("text") or "").split("\n")[0][:160]))
+          for rule, hits in sorted(by_rule.items(), key=lambda kv: -len(kv[1])):
+              print(f"\n### {rule}  ({len(hits)})")
+              for path, line, msg in sorted(hits)[:25]:
+                  print(f"- `{path}:{line}` — {msg}")
+              if len(hits) > 25:
+                  print(f"- ...and {len(hits) - 25} more")
+          PY
+
       # A pull request from a fork runs with a read-only token, so this would
-      # 403. Skip it there; the scan output is still in the job log.
+      # 403. Skip it there; the findings are in the log via the step above.
       - name: Upload results to code scanning
         if: always() && github.event.pull_request.head.repo.fork != true
         uses: github/codeql-action/upload-sarif@v3
