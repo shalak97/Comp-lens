@@ -40,6 +40,27 @@ def _count_by_severity(items: list[dict[str, Any]], key: str = "severity") -> in
                if str((i or {}).get(key, "")).strip().lower() in _CRITICAL)
 
 
+# ── why every count below is guarded ──
+#
+# `critical_vulnerabilities: 0` is not a neutral value. The checks that read it
+# are `critical_vulnerabilities == 0`, so a zero is a PASS on RA-5 — the control
+# whose entire job is to know an asset's exposure.
+#
+# Every vendor here answers with a nested container: data[], assets[],
+# issues.nodes[]. Reaching into one with a default of [] or 0 means a response
+# that is not the shape we expected — an expired token, a throttle, a schema
+# change, an error document served with HTTP 200 — produces "no critical
+# vulnerabilities found" and the asset passes.
+#
+# The signal is declared `requires: ["critical_vulnerabilities"]` in
+# control_checks.json, so OMITTING it yields NOT_APPLICABLE: the platform says
+# it does not know, which is the truth. That is what these guards buy. An empty
+# list still counts as zero, because an empty list is an answer.
+def _counted(container: Any) -> int | None:
+    """`len()` when the vendor actually returned a list, otherwise None."""
+    return len(container) if isinstance(container, list) else None
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Snyk — REST API (token auth)
 # ──────────────────────────────────────────────────────────────────────────
@@ -98,18 +119,24 @@ class SnykConnector(BaseConnector):
             f"/rest/orgs/{settings.snyk_org_id}/issues",
             {"scan_item.id": project, "scan_item.type": "project",
              "status": "open", "limit": 100},
-        ).get("data", []) or []
-        severities = [
-            {"severity": (i.get("attributes", {}) or {}).get("effective_severity_level")}
-            for i in issues
-        ]
-        return {
-            "critical_vulnerabilities": _count_by_severity(severities),
+        ).get("data")
+        out: dict[str, Any] = {
             # A project that Snyk is scanning at all is under code scanning.
             "code_scanning_enabled": True,
             "asset": project,
             "owner": "appsec-team",
         }
+        if isinstance(issues, list):
+            out["critical_vulnerabilities"] = _count_by_severity([
+                {"severity": (i.get("attributes", {}) or {}).get("effective_severity_level")}
+                for i in issues if isinstance(i, dict)
+            ])
+        else:
+            logger.warning(
+                "Snyk issues response for project %s carried no 'data' list; "
+                "reporting the vulnerability count as unknown rather than zero.",
+                project)
+        return out
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -170,14 +197,21 @@ class TenableConnector(BaseConnector):
         body = self._get("/workbenches/assets/vulnerabilities",
                          {"filter.0.filter": "asset.name", "filter.0.quality": "eq",
                           "filter.0.value": host, "severity": 4})
-        assets = body.get("assets", []) or []
-        critical = sum(int((a.get("severities", {}) or {}).get("critical", 0) or 0)
-                       for a in assets) if assets else 0
-        return {
-            "critical_vulnerabilities": critical,
+        assets = body.get("assets")
+        out: dict[str, Any] = {
             "asset": host,
             "owner": "secops-team",
         }
+        if isinstance(assets, list):
+            out["critical_vulnerabilities"] = sum(
+                int((a.get("severities", {}) or {}).get("critical", 0) or 0)
+                for a in assets if isinstance(a, dict))
+        else:
+            logger.warning(
+                "Tenable workbench response for %s carried no 'assets' list; "
+                "reporting the vulnerability count as unknown rather than zero.",
+                host)
+        return out
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -262,12 +296,20 @@ class WizConnector(BaseConnector):
                          "severity": ["CRITICAL"],
                          "relatedEntity": {"name": resource}},
         })
-        nodes = ((data.get("issues") or {}).get("nodes")) or []
-        return {
-            "critical_vulnerabilities": len(nodes),
+        issues = data.get("issues")
+        nodes = issues.get("nodes") if isinstance(issues, dict) else None
+        out: dict[str, Any] = {
             "asset": resource,
             "owner": "cloud-security-team",
         }
+        count = _counted(nodes)
+        if count is not None:
+            out["critical_vulnerabilities"] = count
+        else:
+            logger.warning(
+                "Wiz issues query for %s returned no 'nodes' list; reporting the "
+                "vulnerability count as unknown rather than zero.", resource)
+        return out
 
 
 # ──────────────────────────────────────────────────────────────────────────
