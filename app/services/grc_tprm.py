@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import builtins
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.grc_tprm_models import Risk, RiskIn, RiskPatch, Vendor, VendorIn, VendorPatch
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -119,7 +122,13 @@ class RiskService:
                     if datetime.fromisoformat(r["review_date"]) < now:
                         overdue += 1
                 except ValueError:
-                    pass
+                    # An unparseable review_date silently drops this risk out
+                    # of the overdue count instead of raising, so it must be
+                    # logged or a genuinely overdue risk goes unreported.
+                    logger.warning(
+                        "risk %s has unparseable review_date %r; excluded from overdue count",
+                        r.get("id"), r["review_date"],
+                    )
         return {"total": len(rows), "by_band": by_band, "by_status": by_status,
                 "by_treatment": by_treatment, "overdue_reviews": overdue,
                 "top_risks": rows[:5]}
@@ -220,7 +229,13 @@ class VendorService:
                     if datetime.fromisoformat(v["next_review"]) < now:
                         overdue += 1
                 except ValueError:
-                    pass
+                    # Same failure mode as RiskService.summary above: an
+                    # unparseable date must not silently vanish from the
+                    # overdue count.
+                    logger.warning(
+                        "vendor %s has unparseable next_review %r; excluded from overdue count",
+                        v.get("id"), v["next_review"],
+                    )
         return {"total": len(rows), "by_stage": by_stage, "by_risk": by_risk,
                 "needs_assessment": needs_assessment, "missing_dpa": missing_dpa,
                 "overdue_reviews": overdue}

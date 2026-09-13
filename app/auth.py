@@ -29,6 +29,7 @@ Generate a key:  python -c "import secrets; print(secrets.token_urlsafe(32))"
 from __future__ import annotations
 
 import enum
+import hashlib
 import hmac
 import logging
 import os
@@ -98,7 +99,7 @@ def _parse_keys() -> dict[str, tuple[set[str], str]]:
             continue
         if ":" not in entry:
             logger.warning(
-                "API key %s is configured with no tenant scope at all; it reaches "
+                "API key %r is configured with no tenant scope at all; it reaches "
                 "EVERY tenant with the admin role. Write it as `key:tenant[,tenant][:role]` "
                 "to scope it.", _mask(entry))
             mapping[entry] = ({ALL}, "admin")
@@ -117,8 +118,8 @@ def _parse_keys() -> dict[str, tuple[set[str], str]]:
             # every tenant — and, via `not tset` in default_role, usually to
             # admin as well. A typo must never widen access: refuse the entry.
             logger.error(
-                "API key %s declares a tenant scope but names no tenants (%r); refusing "
-                "the entry. Use `%s:*` if all-tenant reach is genuinely intended.",
+                "API key %r declares a tenant scope but names no tenants (%r); refusing "
+                "the entry. Use `%r:*` if all-tenant reach is genuinely intended.",
                 _mask(key), entry, _mask(key))
             continue
 
@@ -133,7 +134,7 @@ def _parse_keys() -> dict[str, tuple[set[str], str]]:
         if role not in ROLE_PERMISSIONS:
             # Fail closed on a typo: a misspelled role must not silently widen
             # access, and must not silently grant the default either.
-            logger.error("API key %s names unknown role %r; granting viewer only.",
+            logger.error("API key %r names unknown role %r; granting viewer only.",
                          _mask(key), role)
             role = "viewer"
         mapping[key] = (tset, role)
@@ -145,7 +146,16 @@ def auth_enabled() -> bool:
 
 
 def _mask(key: str) -> str:
-    return key[:4] + "\u2026" + key[-2:] if len(key) > 6 else "key"
+    """A safe-to-log stand-in for a configured key.
+
+    Never reveals any of the key's own characters \u2014 a "first 4 + last 2"
+    style partial reveal still hands a chunk of a short, high-entropy secret
+    to anyone who can read the logs. A short hash lets the same key produce
+    the same tag across log lines (useful for correlation) without being
+    reversible.
+    """
+    digest = hashlib.sha256(key.encode()).hexdigest()[:8]
+    return f"<key:{digest}>"
 
 
 def require_principal(x_api_key: str | None = Header(default=None)) -> Principal:

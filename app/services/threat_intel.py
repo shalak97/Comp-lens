@@ -26,10 +26,10 @@ fall back to a small seed of real, famous KEV entries so the feature still shows
 """
 from __future__ import annotations
 
-import json
 import time
-import urllib.request
 from typing import Any
+
+import requests
 
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_URL = "https://api.first.org/data/v1/epss"
@@ -70,13 +70,21 @@ _SEED_KEV = [
 _cache: dict[str, Any] = {"kev": None, "kev_ts": 0.0, "epss": {}, "source": "none"}
 
 
-def _fetch_json(url: str, timeout: float = 12.0) -> Any | None:
+def _fetch_json(url: str, params: dict[str, str] | None = None,
+                timeout: float = 12.0) -> Any | None:
+    """GET `url` (always one of the hardcoded KEV/EPSS/NVD constants above,
+    never attacker-influenced) and decode the JSON body.
+
+    Uses `requests` with `params=` (rather than building the query string by
+    hand) so any caller-supplied value — a CVE id, say — is safely encoded
+    into the query string instead of concatenated into the URL.
+    """
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Comp-Lens/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status != 200:
-                return None
-            return json.loads(resp.read())
+        resp = requests.get(url, params=params, headers={"User-Agent": "Comp-Lens/1.0"},
+                            timeout=timeout)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
     except Exception:
         return None
 
@@ -135,7 +143,7 @@ def get_epss(cve_ids: list[str]) -> dict[str, float]:
             missing.append(c)
     if missing:
         q = ",".join(missing[:100])
-        data = _fetch_json(f"{EPSS_URL}?cve={q}")
+        data = _fetch_json(EPSS_URL, params={"cve": q})
         if data and isinstance(data, dict):
             for row in data.get("data", []):
                 cve = row.get("cve")
@@ -151,7 +159,7 @@ def get_epss(cve_ids: list[str]) -> dict[str, float]:
 
 # ── NVD severity (optional, single CVE) ──
 def get_nvd_severity(cve_id: str) -> dict[str, Any] | None:
-    data = _fetch_json(f"{NVD_URL}?cveId={cve_id}")
+    data = _fetch_json(NVD_URL, params={"cveId": cve_id})
     if not data:
         return None
     try:

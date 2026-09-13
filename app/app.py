@@ -94,7 +94,8 @@ def get_bundle():
 @app.post("/enforcement/logs")
 async def decision_logs(request: Request):
     raw = await request.body()
-    if request.headers.get("content-encoding", "").lower() == "gzip" or raw[:2] == b"\x1f\x8b":
+    content_encoding = str(request.headers.get("content-encoding") or "").lower()
+    if content_encoding == "gzip" or raw[:2] == b"\x1f\x8b":
         with contextlib.suppress(OSError):
             raw = gzip.decompress(raw)
     try:

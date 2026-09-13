@@ -155,8 +155,15 @@ class Policy:
                     esc.get("severity", "high"), 0
                 ) > _SEV_ORDER.get(sev, 0):
                     sev = esc["severity"]
-            except PolicyExpressionError:
-                pass
+            except PolicyExpressionError as exc:
+                # A malformed escalation expression must not block the
+                # decision (severity simply doesn't escalate), but a silent
+                # `pass` here hides a broken policy config from whoever wrote
+                # it — log it so it gets fixed.
+                logger.warning(
+                    "severity_escalation expression failed for control %s: %s",
+                    self.control_id, exc,
+                )
 
         reasons = [r.reason for r in failed_rules if r.reason]
         if failed_deps:
