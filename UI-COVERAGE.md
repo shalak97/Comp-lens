@@ -1,12 +1,33 @@
 # Is the UI showing what it needs to?
 
-An audit of `app/static/dashboard.html` (3,437 lines, 24 views) against the
-166 distinct operations the FastAPI app exposes.
+An audit of `app/static/dashboard.html` (3,723 lines, 25 views) against
+the 166 distinct operations the FastAPI app exposes.
 
-**Answer in one line: 60 of 166 operations are wired into the dashboard.** Most
+**Answer in one line: 60 of 166 operations were wired into the dashboard.** Most
 of the other 106 do not need a UI — but about 40 of them are product features a
-user cannot reach at all, and five places in the UI *promise* a capability it
-does not provide.
+user cannot reach at all, and five places in the UI *promised* a capability it
+did not provide. A sixth turned up while fixing them: the Vendors view was
+reading fields the API does not return.
+
+## Status
+
+The defects in §1 and the waivers gap in §2.1 are **fixed**; the coverage
+figure is now **66 of 166**. Everything in §2.2 and §3 still stands.
+
+| | |
+|---|---|
+| §1.1 "Insert PDF" claimed an import that never happened | fixed — sends the document to `/v1/documents/upload` and shows what was extracted |
+| §1.2 Audits empty state instructed the impossible | fixed — "New audit" in the view head and in the empty state |
+| §1.4 Register tiles counted one page | fixed — both registers ask `…/summary` for totals |
+| §1.6 Vendors view read the wrong field names | fixed — `normVendors()` bridges both shapes |
+| §2.1 Waivers had demo data and no view | fixed — a Waivers view with grant and revoke |
+| §1.3 "Multi-source agreement" links to a placeholder | open |
+| §1.5 `evidence-map.html` links from nowhere | open |
+| §2.2 Schedules had demo data and no view | open |
+
+Guarded by `tests/test_dashboard_promises.py` (15 assertions; 14 of them fail
+against the pre-fix file, checked) and `tools/ui_interactions.py`, which drives
+each new control in a real browser and prints what it sent.
 
 ---
 
@@ -25,17 +46,19 @@ checked against each other:
    replaced by a recorder that answers with a proxy behaving like both an empty
    array and an any-property object, so a view does not die on its first
    `.filter()` and stop before its second wave of requests. Every
-   `RENDER.<view>()` is then invoked. **24 of 24 views ran to completion**; they
-   made 28 distinct requests.
+   `RENDER.<view>()` is then invoked. **25 of 25 views ran to completion**;
+   they made 31 distinct requests.
 2. **Manual.** Every `api` / `apiGET` / `apiPOST` / `apiPATCH` call site and
    every `<a href>` download link, read out of the file with the line number
-   each was found on (58 entries).
+   each was found on (66 entries).
 
 The script refuses to report if anything the browser actually requested is
 missing from the manual list. It is not missing anything.
 
 Reproduce: `python tools/ui_coverage.py` (add `--static` to skip the browser and
-use the manual list alone — it says so in its output when you do).
+use the manual list alone — it says so in its output when you do), and
+`python tools/ui_interactions.py` for the write paths, which no render pass
+touches.
 
 **Limit of the method:** a path built entirely from runtime values with no
 literal fragment would be invisible to both halves. None was found, but that is
@@ -49,6 +72,8 @@ These are not coverage gaps. They are places where the interface makes a claim
 the system does not honour.
 
 ### 1.1 "Insert PDF" in the Policies view reports success and does nothing
+
+> **Fixed.** What follows is the defect as found.
 
 `dashboard.html:2407-2419`. The handler reads the chosen file, then sends:
 
@@ -83,6 +108,8 @@ wired, but to a body that carries no document.
 
 ### 1.2 The Audits empty state tells you to do something you cannot do
 
+> **Fixed.** What follows is the defect as found.
+
 `dashboard.html:2771`:
 
 > "No audit engagements yet — Create one to start tracking evidence requests and
@@ -109,6 +136,8 @@ sources — agreement vs conflict"* — is the real thing and is never called.
 
 ### 1.4 Risk and vendor readout tiles are computed from one page
 
+> **Fixed.** What follows is the defect as found.
+
 `RENDER.risks` (`dashboard.html:1502`) loads `/grc/risks` with no `limit`, so it
 gets the server default of **100** rows (`app/pagination.py:47`), then computes
 *Open risks*, *High exposure*, *Accepted*, *Avg score* and the entire 5×5 heat
@@ -119,6 +148,37 @@ The dashboard does warn that the *list* was truncated (`notePage` /
 `renderPageBanner`), which is good — but the tiles still read as totals.
 `GET /grc/risks/summary` and `GET /tprm/vendors/summary` exist precisely to give
 the true figures and are never called.
+
+### 1.6 The Vendors view read fields the API does not return
+
+> **Fixed.** What follows is the defect as found.
+
+Found while fixing §1.4, and the worst of the six.
+
+`GET /tprm/vendors` returns what `VendorService._ser` builds: `stage`,
+`risk_tier`, `assessment_score`, `next_review`, `has_soc2`, `has_dpa`. The view
+was written against the demo fixture, which uses `status`, `tier`, `score`,
+`review_due`, `frameworks`. Nothing errored — every read just missed:
+
+- **Trust score** `v.score || 0` → **0** for every vendor, drawn as a full-width
+  red bar. An unassessed vendor (`assessment_score` is null until somebody
+  assesses one) was rendered as the worst possible score rather than as unknown.
+- **Review due** `fmtDate(undefined)` → **"Invalid Date"**, and
+  `new Date(undefined) < Date.now()` is true, so **every vendor showed as review
+  overdue** — including ones with no review scheduled at all.
+- **Tier**, **Status** and **Certs** rendered blank / "none".
+- The readout tiles followed: Approved **0**, Reviews overdue **all**, Avg trust
+  score **0**.
+
+Live, the vendor register looked like a real screen full of zero-trust, overdue
+vendors. In demo it looked perfect, because the demo fixture is the shape the
+view was written for. The write path was never affected —
+`vendorRequestReport` and `vendorMarkReviewed` PATCH `assessment_state` and
+`next_review`, the correct API names — which is the clearest sign the read path
+was built against the fixture and never checked against a live tenant.
+
+`normFrameworks()` already existed to solve exactly this for
+`/catalog/frameworks`. `normVendors()` is the vendor half.
 
 ### 1.5 A second console exists that nothing links to
 
@@ -141,6 +201,9 @@ Of the 15 keys in the demo dataset `D`, three are never read by any view:
 `D.inventory` (a stale duplicate of `D.aisystems`), and:
 
 ### 2.1 Waivers — `D.waivers` at `dashboard.html:703`
+
+> **Fixed** — there is now a Waivers view under Posture. What follows is the
+> gap as found.
 
 ```js
 waivers:[
@@ -217,13 +280,13 @@ Ordered by how much a GRC user would miss them.
 
 | Capability | Operations with no UI | Why it matters |
 |---|---|---|
-| **Waivers** | `POST/GET /waivers`, `DELETE /waivers/{id}` | §2.1 — the exception workflow, promised in the Reports copy |
+| ~~**Waivers**~~ | ~~`POST/GET /waivers`, `DELETE /waivers/{id}`~~ | **fixed** — §2.1, now a view under Posture |
 | **Schedules** | `POST/GET /schedules`, `POST /schedules/{id}/run`, `DELETE /schedules/{id}` | §2.2 — continuous monitoring, promised in the credentials copy |
-| **Audit workspace** | 10 ops: `POST /audits`, `GET/PATCH/DELETE /audits/{id}`, `GET/POST /audits/{id}/requests`, `PATCH/DELETE /audits/requests/{id}`, `GET /audits/{id}/controls`, `PATCH /audits/controls/{id}` | The view shows *counts* of evidence requests; you cannot open, add, or answer one. Only list + refresh-posture + export are wired |
+| **Audit workspace** | 9 ops (`POST /audits` is now wired): `GET/PATCH/DELETE /audits/{id}`, `GET/POST /audits/{id}/requests`, `PATCH/DELETE /audits/requests/{id}`, `GET /audits/{id}/controls`, `PATCH /audits/controls/{id}` | The view shows *counts* of evidence requests; you cannot open, add, or answer one. Only list + refresh-posture + export are wired |
 | **Manual attestations** | `POST/GET /attestations`, `GET /coverage`, `GET /catalog/families` | The resolver routes controls with no telemetry to an "attestation floor" — and nothing can record one |
 | **Evidence integrity (audit-grade)** | `GET /evidence/verify` (bulk), `POST /evidence/anchor`, `GET /evidence/anchors`, `GET /evidence/proof` | The UI re-hashes one record at a time (`reverifyEvidence`). Merkle anchoring and inclusion proofs — the part an auditor actually wants — are unreachable |
 | **Register writes** | `POST /grc/risks`, `DELETE /grc/risks/{id}`, `POST /tprm/vendors`, `DELETE /tprm/vendors/{id}`, `POST /ai-systems` | You cannot add a risk, a vendor, or an AI system. Only `PATCH` (treatment, review date) is wired — the registers are read-mostly |
-| **Document → control extraction** | `POST /v1/documents/{upload,ingest,extract}` | §1.1 — the endpoints the PDF button should be calling |
+| **Document → control extraction** | `POST /v1/documents/{ingest,extract}` | `upload` is now wired to the PDF button (§1.1); the two text endpoints have no surface |
 | **Policy drafting & approval** | `POST /policy/draft`, `GET /policy/drafts`, `POST /policy/{id}/approve` | "New policy" is a toast saying to use the CLI, while a draft/approve API exists |
 | **Control simulation** | `POST /simulate`, `GET /controls/{id}/{dependencies,fragility,remediation}`, `POST /remediation/plan` | "What else breaks if this control fails" — a differentiator with no surface |
 | **Evidence graph** | 10 ops incl. `GET /evidence/graph`, `/documents`, `/lexicon`, `/crosswalk`, `/compliance`, `/export/oscal`, `POST /evidence/hits/{id}/confirm` | The Graph view says so itself, in live mode, and names the endpoint |
@@ -252,19 +315,34 @@ items. Three of them, however, are thinner than the nav implies:
 
 ---
 
-## 5. Suggested order
+## 5. Order of work
 
 Ranked by (user impact) ÷ (work), assuming the goal is an honest interface
-rather than a complete one:
+rather than a complete one.
 
-1. **§1.1** — either send the PDF to `/v1/documents/upload`, or stop claiming
-   the import succeeded. A silent success is worse than a disabled button.
-2. **§1.2** — add a create-audit form, or reword the empty state.
-3. **§1.4** — two extra calls to the `…/summary` endpoints that already exist.
-4. **§2.1 Waivers** — one list view + create/revoke. The demo fixture already
-   describes the shape.
-5. **§2.2 Schedules** — one panel inside the Connectors view. Same.
-6. **§1.3** — point the link at a view backed by `/v1/grc-sync/multi-source`.
-7. **§1.5** — link `evidence-map.html` from the nav, or note in the README that
+**Done**
+
+1. ~~**§1.1**~~ — the PDF now goes to `/v1/documents/upload` and the dialog
+   shows the controls the document asserts, each with its justifying quote,
+   above the server's own explanation of why nothing was persisted.
+2. ~~**§1.2**~~ — "New audit" in the view head and in the empty state, posting
+   to `/audits`; the framework is omitted rather than blanked when unknown.
+3. ~~**§1.4**~~ — both registers call their `…/summary` endpoint for totals and
+   mark any figure that could only come from the rows on screen.
+4. ~~**§1.6**~~ — `normVendors()` bridges the API's vendor shape; an unassessed
+   vendor reads "not assessed" rather than 0, and an unscheduled review reads
+   "not scheduled" rather than overdue.
+5. ~~**§2.1 Waivers**~~ — a Waivers view under Posture: list, grant (control,
+   asset, reason, approver, expiry) and revoke, with open-ended waivers called
+   out separately because nothing else will ever bring them back for review.
+
+**Next**
+
+6. **§2.2 Schedules** — one panel inside the Connectors view. The demo fixture
+   already describes the shape, as the waivers one did.
+7. **§1.3** — point "multi-source agreement" at a view backed by
+   `/v1/grc-sync/multi-source` instead of at the Trust Graph placeholder.
+8. **§1.5** — link `evidence-map.html` from the nav, or note in the README that
    it is a standalone page.
-8. Register writes (create risk / vendor / AI system), then the audit workspace.
+9. Register writes (create risk / vendor / AI system), then the audit
+   workspace (§3c) — evidence requests are the part an auditor actually uses.

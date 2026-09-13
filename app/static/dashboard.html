@@ -529,7 +529,9 @@ const ACTION_NAMES = new Set([
   "openAddConnection", "syncAllOfType", "openTreatmentPicker",
   "vendorRequestReport", "vendorMarkReviewed", "promoteAiToRisk",
   "reverifyEvidence", "evaluatePolicyNow", "syncGrcPlatform",
-  "refreshAuditPosture", "enfSetMode", "submitTreatment", "instSync",
+  "refreshAuditPosture", "openNewAudit", "submitNewAudit",
+  "openNewWaiver", "submitNewWaiver", "revokeWaiver",
+  "enfSetMode", "submitTreatment", "instSync",
   "instTestInline", "instDelete", "openAuditDetail", "openFindingByControl",
   "openControlByIdFromDrawer", "graphNodeByIndex", "syncCloseThenSync",
   "closeDrawerThenAddConnection", "__vpOk", "render",
@@ -1494,31 +1496,149 @@ RENDER.inventory = async function(){
       <td>${statusChip(r.status||"pending")}</td></tr>`;}).join("")}</tbody>
   </table></div></div></div>`;
 };
+
+/* A readout tile states a total, so it must not be computed from one page.
+   /grc/risks and /tprm/vendors return at most `limit` rows (default 100,
+   app/pagination.py), and both registers have a /summary endpoint that counts
+   every row server-side. Without this the tiles silently reported the first
+   page as the whole register.
+
+   Returns null in demo mode and on any failure — the caller then falls back to
+   counting the rows it has, which is the old behaviour and is correct whenever
+   the page is not truncated. */
+async function loadTotals(path){
+  if(STATE.demo)return null;
+  try{ return await apiGET(withTenant(path)); }catch(e){ return null; }
+}
+
+/* "…of N shown" whenever a figure could only be derived from the rows on
+   screen and there are more rows than that. Says nothing when the page is
+   complete, so it does not nag. */
+function partialNote(shown,total){
+  return (total!=null&&total>shown)?`<div class="s">across ${shown} of ${total} shown</div>`:"";
+}
+
+/* ---------- WAIVERS / EXCEPTIONS ---------- */
+/* The dashboard shipped a D.waivers demo fixture that no view read, and the
+   Reports view told the reader that active exceptions are "excluded from the
+   failing count" — so the product asserted that waivers exist and shape the
+   numbers, while offering no way to see, grant or revoke one. The whole
+   lifecycle was already on the API: POST /waivers (Permission.APPROVE),
+   GET /waivers, DELETE /waivers/{id}. This is the missing surface. */
+const WAIVER_CHIP={active:"c-pass",expired:"c-warn",revoked:"c-dim"};
+
+RENDER.waivers = async function(){
+  const m=main();
+  m.innerHTML=viewHead("Waivers","Accepted exceptions: a control the organisation has consciously decided not to satisfy yet, who approved that, and when the decision runs out.",
+    `<button class="btn primary" ${act("openNewWaiver")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New waiver</button>`,"posture / 03");
+  const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
+  const[wv]=await Promise.all([load(withTenant("/waivers"),D.waivers)]);
+  const _i=loadIssue(wv,{title:"Couldn't load waivers"});if(_i){host.innerHTML=_i;return;}
+  const rows=wv.data||(STATE.demo?D.waivers:[]);CACHE.waivers=rows;
+  const now=Date.now(), SOON=30*864e5;
+  const active=rows.filter(w=>w.status==="active");
+  /* An open-ended waiver never expires, so it is not "expiring soon" — and it
+     is the one worth flagging, because nothing will ever prompt a review. */
+  const soon=active.filter(w=>w.expires_at&&new Date(w.expires_at)-now<SOON);
+  const forever=active.filter(w=>!w.expires_at);
+  host.innerHTML=`
+  <div class="readouts">
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Active</div><div class="v num">${active.length}</div><div class="s">excluded from the failing count</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--warn)"></span>Expiring in 30d</div><div class="v num">${soon.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>No expiry set</div><div class="v num">${forever.length}</div><div class="s">${forever.length?"nothing will prompt a review":"every waiver has an end date"}</div></div>
+    <div class="ro"><div class="k">Lapsed</div><div class="v num">${rows.filter(w=>w.status!=="active").length}</div><div class="s">expired or revoked</div></div>
+  </div>
+  <div class="note"><b>A waiver is a decision, not a fix.</b> While one is active the control stops counting as failing, so the posture score reflects a choice somebody made and signed for. That is why every row carries an approver and an expiry — an exception nobody revisits is how a temporary gap becomes permanent.</div>
+  <div class="panel"><div class="panel-h"><h3>Exception register</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
+    <thead><tr><th>Control</th><th>Asset</th><th>Reason</th><th>Approver</th><th>Status</th><th>Expires</th><th class="right"></th></tr></thead>
+    <tbody>${rows.map(w=>{const exp=w.expires_at?new Date(w.expires_at):null;const late=exp&&exp<now;return `<tr>
+      <td class="id">${esc(w.control_id)}</td>
+      <td class="mono" style="font-size:11px;color:var(--steel)">${esc(w.asset_id||"all assets")}</td>
+      <td style="font-size:12px;color:var(--body);line-height:1.5;max-width:380px">${esc(w.reason)}</td>
+      <td style="color:var(--body)">${esc(w.approver)}</td>
+      <td><span class="chip ${WAIVER_CHIP[w.status]||'c-out'}"><span class="d"></span>${esc(w.status)}</span></td>
+      <td class="mono" style="font-size:11px;color:${late?'var(--fail)':'var(--steel)'}">${exp?esc(fmtDate(w.expires_at)):'<span style="color:var(--fail)">never</span>'}</td>
+      <td class="right">${w.status==="active"?`<button class="btn sm ghost" ${act("revokeWaiver", w.waiver_id||w.control_id, w.control_id)}>Revoke</button>`:""}</td></tr>`;}).join("")
+      ||`<tr><td colspan="7">${emptyState("No exceptions on file","Nothing is being waived — every failing control is counted. Grant a waiver when a gap is consciously accepted, so the decision is recorded rather than implied.")}</td></tr>`}</tbody>
+  </table></div></div></div>`;
+};
+
+function openNewWaiver(){
+  const s=$("#settings");
+  const in90=new Date(Date.now()+90*864e5).toISOString().slice(0,10);
+  s.innerHTML=`<div class="dialog" style="max-width:560px"><div class="dialog-h"><h3>Grant a waiver</h3></div>
+  <div class="dialog-b">
+    <div class="grid g-2">
+      <div class="fld"><label>Control</label><input type="text" id="nw-control" placeholder="e.g. CP-9"></div>
+      <div class="fld"><label>Asset <span style="color:var(--faint)">(optional)</span></label><input type="text" id="nw-asset" placeholder="blank = every asset"></div>
+    </div>
+    <div class="fld"><label>Reason</label><textarea id="nw-reason" rows="3" placeholder="What compensating control is in place, and why is the residual risk acceptable?"></textarea></div>
+    <div class="grid g-2">
+      <div class="fld"><label>Approver</label><input type="text" id="nw-approver" placeholder="who signed this off"></div>
+      <div class="fld"><label>Expires</label><input type="date" id="nw-expires" value="${esc(in90)}"></div>
+    </div>
+    <div class="note" style="margin-top:4px">Clearing the date grants an exception with no end. Nothing will bring it back for review, so prefer a date you are willing to defend.</div>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" ${act("closeSettings")}>Cancel</button><button class="btn primary" ${act("submitNewWaiver")}>Grant waiver</button></div></div>`;
+  s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+
+async function submitNewWaiver(){
+  const control=$("#nw-control").value.trim();
+  const reason=$("#nw-reason").value.trim();
+  const approver=$("#nw-approver").value.trim();
+  if(!control){toast("Which control is being waived?","warn");return;}
+  if(!reason){toast("A waiver without a reason is an untracked gap","warn");return;}
+  if(!approver){toast("Name the approver — a waiver is somebody's decision","warn");return;}
+  const exp=$("#nw-expires").value;
+  if(STATE.demo){closeSettings();toast("Demo mode sends no request — turn demo off to grant this waiver","warn");return;}
+  try{
+    await apiPOST("/waivers",{tenant_id:CFG.tenant,control_id:control,
+      asset_id:$("#nw-asset").value.trim()||null,reason,approver,
+      expires_at:exp?new Date(exp).toISOString():null});
+    closeSettings();toast("Waiver granted for "+control,"pass");render();
+  }catch(e){toast("Could not grant it: "+(e.message||e),"warn");}
+}
+
+async function revokeWaiver(waiverId,controlId){
+  if(STATE.demo){toast("Demo mode sends no request — turn demo off to revoke","warn");return;}
+  try{await api("/waivers/"+encodeURIComponent(waiverId)+withTenantQS(),{method:"DELETE"});
+    toast("Waiver revoked — "+controlId+" counts as failing again","pass");render();}
+  catch(e){toast("Revoke failed: "+(e.message||e),"warn");}
+}
+
 /* ---------- RISK REGISTER ---------- */
 RENDER.risks = async function(){
   const m=main();
   m.innerHTML=viewHead("Risk register","Identified risks scored by likelihood and impact, with a treatment decision and an owner.","","risk / 01");
   const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
-  const[rk]=await Promise.all([load(withTenant("/grc/risks"),D.risks)]);
+  const[rk,tot]=await Promise.all([load(withTenant("/grc/risks"),D.risks),loadTotals("/grc/risks/summary")]);
   const _i=loadIssue(rk,{title:"Couldn't load risks"});if(_i){host.innerHTML=_i;return;}
   const rows=rk.data||(STATE.demo?D.risks:[]);
   const score=r=>(r.likelihood||0)*(r.impact||0);CACHE.risks=rows;
-  const high=rows.filter(r=>score(r)>=12).length;
+  /* _risk_band() in app/services/grc_tprm.py bands inherent_score = L×I at
+     >=20 critical, >=12 high — so high+critical is exactly "score >= 12". */
+  const band=(tot&&tot.by_band)||null, byStatus=(tot&&tot.by_status)||null;
+  const total=tot&&tot.total!=null?tot.total:null;
+  const accepted=byStatus?(byStatus.accepted||0):rows.filter(r=>r.status==="accepted").length;
+  const open=total!=null?total-accepted:rows.filter(r=>r.status!=="accepted").length;
+  const high=band?((band.high||0)+(band.critical||0)):rows.filter(r=>score(r)>=12).length;
+  const truncated=total!=null&&total>rows.length;
   const cell=(l,i)=>{const s=l*i;const c=s>=15?'var(--fail)':s>=8?'var(--warn)':s>=4?'var(--focus)':'var(--pass)';
     const n=rows.filter(r=>r.likelihood===l&&r.impact===i).length;
     return `<div style="aspect-ratio:1;border:1px solid var(--rule);border-radius:3px;background:${n?c:'var(--field)'};opacity:${n?1:.35};display:flex;align-items:center;justify-content:center;font-family:var(--grot);font-weight:600;font-size:13px;color:${n?'#fff':'var(--faint)'}">${n||""}</div>`;};
   let heat="";for(let i=5;i>=1;i--){heat+=`<div style="font-family:var(--mono);font-size:9px;color:var(--steel);display:flex;align-items:center;justify-content:flex-end;padding-right:6px">${i}</div>`;for(let l=1;l<=5;l++)heat+=cell(l,i);}
   host.innerHTML=`
   <div class="readouts">
-    <div class="ro"><div class="k">Open risks</div><div class="v num">${rows.filter(r=>r.status!=="accepted").length}</div></div>
+    <div class="ro"><div class="k">Open risks</div><div class="v num">${open}</div>${total!=null?`<div class="s">of ${total} in the register</div>`:""}</div>
     <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>High exposure</div><div class="v num">${high}</div><div class="s">score ≥ 12</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Accepted</div><div class="v num">${rows.filter(r=>r.status==="accepted").length}</div></div>
-    <div class="ro"><div class="k">Avg score</div><div class="v num">${(rows.reduce((a,r)=>a+score(r),0)/Math.max(1,rows.length)).toFixed(1)}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--focus)"></span>Accepted</div><div class="v num">${accepted}</div></div>
+    <div class="ro"><div class="k">Avg score</div><div class="v num">${(rows.reduce((a,r)=>a+score(r),0)/Math.max(1,rows.length)).toFixed(1)}</div>${partialNote(rows.length,total)}</div>
   </div>
   <div class="cols">
     <div class="panel"><div class="panel-h"><div><h3>Heat map</h3><div class="sub">likelihood × impact</div></div></div>
       <div class="panel-b"><div style="display:grid;grid-template-columns:18px repeat(5,1fr);gap:4px">${heat}<div></div>${[1,2,3,4,5].map(l=>`<div style="font-family:var(--mono);font-size:9px;color:var(--steel);text-align:center;padding-top:4px">${l}</div>`).join("")}</div>
-      <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:8px"><span>↑ impact · likelihood →</span></div></div></div>
+      <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:8px"><span>↑ impact · likelihood →</span>${truncated?`<span>${rows.length} of ${total} plotted</span>`:""}</div></div></div>
     <div class="panel"><div class="panel-h"><h3>Register</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
       <thead><tr><th>ID</th><th>Risk</th><th>Owner</th><th>L×I</th><th>Treatment</th><th>Status</th></tr></thead>
       <tbody data-ent="risks">${rows.sort((a,b)=>score(b)-score(a)).map(r=>{const s=score(r);const c=s>=15?'c-fail':s>=8?'c-warn':s>=4?'c-focus':'c-pass';return `<tr>
@@ -1533,31 +1653,72 @@ RENDER.risks = async function(){
 };
 
 /* ---------- VENDORS / TPRM ---------- */
+/* GET /tprm/vendors returns the shape VendorService._ser builds — stage,
+   risk_tier, assessment_score, next_review, has_soc2/has_dpa. This view was
+   written against the demo fixture, which uses status/tier/score/review_due/
+   frameworks, so in LIVE mode every row rendered a blank tier, a trust score of
+   0, no certs, a blank status and "Invalid Date" — and, because
+   `new Date(null) < Date.now()` is 1970, every vendor was flagged review
+   overdue. Nothing looked broken; it looked like a register full of
+   zero-trust, overdue vendors.
+
+   normFrameworks above solves the same problem for /catalog/frameworks; this
+   is the vendor half. Both shapes in, one shape out. */
+function normVendors(rows){
+  return (rows||[]).map(v=>{
+    if(!v || v.review_due!==undefined || v.score!==undefined) return v;   /* demo shape */
+    const certs=[];
+    if(v.has_soc2)certs.push("SOC2");
+    if(v.has_dpa)certs.push("DPA");
+    return Object.assign({},v,{
+      tier:v.risk_tier||v.computed_risk||null,
+      /* assessment_score is null until somebody assesses the vendor. It must
+         NOT become 0 — that is a score, and the worst one. */
+      score:(v.assessment_score==null?null:v.assessment_score),
+      status:v.stage||v.assessment_state||null,
+      review_due:v.next_review||null,
+      frameworks:certs,
+    });
+  });
+}
+
 RENDER.vendors = async function(){
   const m=main();
   m.innerHTML=viewHead("Vendors","Third-party risk: each vendor scored, tiered by criticality, with a recurring review date and the certifications they hold.","","risk / 02");
   const host=el("div");m.appendChild(host);host.innerHTML=skelView({cols:5});
-  const[vd]=await Promise.all([load(withTenant("/tprm/vendors"),D.vendors)]);
+  const[vd,tot]=await Promise.all([load(withTenant("/tprm/vendors"),D.vendors),loadTotals("/tprm/vendors/summary")]);
   const _i=loadIssue(vd,{title:"Couldn't load vendors"});if(_i){host.innerHTML=_i;return;}
-  const rows=vd.data||(STATE.demo?D.vendors:[]);
-  const overdue=rows.filter(v=>new Date(v.review_due)<Date.now()).length;CACHE.vendors=rows;
+  const rows=normVendors(vd.data||(STATE.demo?D.vendors:[]));
+  CACHE.vendors=rows;
+  const total=tot&&tot.total!=null?tot.total:null;
+  /* A vendor with no review date has not been scheduled; that is not overdue. */
+  const dated=rows.filter(v=>v.review_due);
+  const overdue=(tot&&tot.overdue_reviews!=null)?tot.overdue_reviews
+    :dated.filter(v=>new Date(v.review_due)<Date.now()).length;
+  const stages=(tot&&tot.by_stage)||null;
+  const liveStage=stages?((stages.active||0)):null;
+  const inPlay=liveStage!=null?liveStage:rows.filter(v=>v.status==="approved"||v.status==="active").length;
+  const scored=rows.filter(v=>v.score!=null);
+  const avg=scored.length?Math.round(scored.reduce((a,v)=>a+v.score,0)/scored.length):null;
   host.innerHTML=`
   <div class="readouts">
-    <div class="ro"><div class="k">Vendors</div><div class="v num">${rows.length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>Approved</div><div class="v num">${rows.filter(v=>v.status==="approved").length}</div></div>
-    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Reviews overdue</div><div class="v num">${overdue}</div></div>
-    <div class="ro"><div class="k">Avg trust score</div><div class="v num">${Math.round(rows.reduce((a,v)=>a+(v.score||0),0)/Math.max(1,rows.length))}</div></div>
+    <div class="ro"><div class="k">Vendors</div><div class="v num">${total!=null?total:rows.length}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--pass)"></span>${stages?"Active":"Approved"}</div><div class="v num">${inPlay}</div></div>
+    <div class="ro"><div class="k"><span class="tick" style="background:var(--fail)"></span>Reviews overdue</div><div class="v num">${overdue}</div>${(!tot&&dated.length<rows.length)?`<div class="s">${rows.length-dated.length} not scheduled</div>`:""}</div>
+    <div class="ro"><div class="k">Avg trust score</div><div class="v num">${avg==null?'—':avg}</div><div class="s">${avg==null?'none assessed yet':`${scored.length} of ${total!=null?total:rows.length} assessed`}</div></div>
   </div>
   <div class="panel"><div class="panel-h"><h3>Vendor register</h3></div><div class="panel-b flush"><div class="tbl-scroll"><table>
     <thead><tr><th>Vendor</th><th>Category</th><th>Tier</th><th>Trust score</th><th>Certs</th><th>Status</th><th class="right">Review due</th></tr></thead>
-    <tbody data-ent="vendors">${rows.sort((a,b)=>(a.score||0)-(b.score||0)).map(v=>{const sc=v.score||0;const c=sc>=80?'var(--pass)':sc>=60?'var(--warn)':'var(--fail)';const od=new Date(v.review_due)<Date.now();return `<tr>
+    <tbody data-ent="vendors">${rows.slice().sort((a,b)=>(a.score==null?1:0)-(b.score==null?1:0)||(a.score||0)-(b.score||0)).map(v=>{const sc=v.score;const c=sc>=80?'var(--pass)':sc>=60?'var(--warn)':'var(--fail)';const od=!!v.review_due&&new Date(v.review_due)<Date.now();return `<tr>
       <td><b>${esc(v.name)}</b></td>
       <td style="color:var(--body)">${esc(v.category)}</td>
-      <td>${sevChip(v.tier)}</td>
-      <td><div class="flex"><div style="width:54px;height:6px;background:var(--field);border:1px solid var(--rule);border-radius:2px;overflow:hidden"><i style="display:block;height:100%;width:${sc}%;background:${c}"></i></div><span class="num" style="font-weight:600">${sc}</span></div></td>
+      <td>${v.tier?sevChip(v.tier):'<span class="chip c-dim"><span class="d"></span>untiered</span>'}</td>
+      <td>${sc==null
+        ? '<span style="color:var(--faint);font-size:11.5px">not assessed</span>'
+        : `<div class="flex"><div style="width:54px;height:6px;background:var(--field);border:1px solid var(--rule);border-radius:2px;overflow:hidden"><i style="display:block;height:100%;width:${sc}%;background:${c}"></i></div><span class="num" style="font-weight:600">${sc}</span></div>`}</td>
       <td>${(v.frameworks||[]).map(f=>`<span class="chip c-out">${esc(f)}</span>`).join(" ")||'<span style="color:var(--faint)">none</span>'}</td>
-      <td>${statusChip(v.status)}</td>
-      <td class="right mono" style="font-size:11px;color:${od?'var(--fail)':'var(--steel)'}">${od?'overdue · ':''}${fmtDate(v.review_due)}</td></tr>`;}).join("")}</tbody>
+      <td>${v.status?statusChip(v.status):'<span class="chip c-dim"><span class="d"></span>—</span>'}</td>
+      <td class="right mono" style="font-size:11px;color:${od?'var(--fail)':'var(--steel)'}">${!v.review_due?'<span style="color:var(--faint)">not scheduled</span>':(od?'overdue · ':'')+esc(fmtDate(v.review_due))}</td></tr>`;}).join("")}</tbody>
   </table></div></div></div>`;
 };
 
@@ -1750,13 +1911,17 @@ DETAIL.risks=function(r){
     actions:`<button class="btn sm primary" ${act("openTreatmentPicker", r.id, r.treatment)}>Update treatment</button><div style="flex:1"></div>${closeBtn}`});
 };
 DETAIL.vendors=function(v){
-  const sc=v.score||0;const col=sc>=80?'var(--pass)':sc>=60?'var(--warn)':'var(--fail)';
-  const od=new Date(v.review_due)<Date.now();
+  /* Same absent-is-not-zero rule as the table: an unassessed vendor has no
+     trust score, and a vendor with no review date is not overdue. */
+  const sc=v.score;const col=sc>=80?'var(--pass)':sc>=60?'var(--warn)':'var(--fail)';
+  const od=!!v.review_due&&new Date(v.review_due)<Date.now();
   openDrawer({eyebrow:"vendor · "+v.name,title:esc(v.name),sub:esc(v.category),
-    badges:sevChip(v.tier)+statusChip(v.status),
+    badges:(v.tier?sevChip(v.tier):"")+(v.status?statusChip(v.status):""),
     body:
-      dsec("Trust score",`<div class="flex"><div class="scorebar"><i style="width:${sc}%;background:${col}"></i></div><span class="num" style="font-size:20px;font-weight:600">${sc}</span></div>`)+
-      dsec("Assurance",kvlist([["Criticality tier",titlecase(v.tier)],["Status",titlecase(v.status)],["Certifications",(v.frameworks||[]).join(", ")||"none on file"],["Next review",(od?"overdue · ":"")+fmtDate(v.review_due)]]))+
+      dsec("Trust score",sc==null
+        ?`<div style="font-size:12.5px;color:var(--steel);line-height:1.5">Not assessed yet. Request an assurance report to score this vendor — an unassessed vendor is an unknown, not a zero.</div>`
+        :`<div class="flex"><div class="scorebar"><i style="width:${sc}%;background:${col}"></i></div><span class="num" style="font-size:20px;font-weight:600">${sc}</span></div>`)+
+      dsec("Assurance",kvlist([["Criticality tier",v.tier?titlecase(v.tier):"—"],["Status",v.status?titlecase(v.status):"—"],["Certifications",(v.frameworks||[]).join(", ")||"none on file"],["Next review",v.review_due?((od?"overdue · ":"")+fmtDate(v.review_due)):"not scheduled"]]))+
       (od?dsec("Action needed",`<div class="note" style="margin:0;border-left-color:var(--fail)">This vendor's review is <b>past due</b>. Request a current assurance report before renewing.</div>`):""),
     actions:`<button class="btn sm primary" ${act("vendorRequestReport", v.id||v.name, v.name)}>Request report</button><button class="btn sm" ${act("vendorMarkReviewed", v.id||v.name, v.name)}>Mark reviewed</button><div style="flex:1"></div>${closeBtn}`});
 };
@@ -2216,6 +2381,51 @@ async function refreshAuditPosture(auditId){
   catch(e){toast("Refresh failed: "+(e.message||e),"warn");}
 }
 
+/* Create an audit engagement. The Audits empty state has always told the
+   reader to "create one"; until now nothing in the dashboard could, and
+   POST /audits sat unreachable behind that sentence. */
+async function openNewAudit(){
+  const s=$("#settings");
+  let fws=D.frameworks;
+  if(!STATE.demo){ try{ fws=normFrameworks(await apiGET("/catalog/frameworks")); }catch(e){ fws=null; } }
+  /* An empty catalog would otherwise render an empty <select>, whose value is
+     "" — and posting framework:"" overrides the server's own default instead of
+     leaving it alone. Fall back to the known framework ids rather than to
+     nothing. */
+  if(!fws||!fws.length)fws=D.frameworks;
+  const opts=(fws||[]).map(f=>`<option value="${esc(f.id)}">${esc(f.name||f.id)}</option>`).join("");
+  const today=new Date().toISOString().slice(0,10);
+  const in90=new Date(Date.now()+90*864e5).toISOString().slice(0,10);
+  s.innerHTML=`<div class="dialog" style="max-width:520px"><div class="dialog-h"><h3>New audit engagement</h3></div>
+  <div class="dialog-b">
+    <div class="fld"><label>Name</label><input type="text" id="na-name" placeholder="e.g. SOC 2 Type II"></div>
+    <div class="fld"><label>Framework</label><select id="na-fw">${opts}</select></div>
+    <div class="fld"><label>Auditor</label><input type="text" id="na-auditor" placeholder="e.g. Prescott &amp; Vale LLP, or 'internal'"></div>
+    <div class="grid g-2">
+      <div class="fld"><label>Period start</label><input type="date" id="na-start" value="${esc(today)}"></div>
+      <div class="fld"><label>Period end</label><input type="date" id="na-end" value="${esc(in90)}"></div>
+    </div>
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn" ${act("closeSettings")}>Cancel</button><button class="btn primary" ${act("submitNewAudit")}>Create</button></div></div>`;
+  s.classList.add("on");s.onclick=e=>{if(e.target===s)closeSettings();};
+}
+
+async function submitNewAudit(){
+  const name=$("#na-name").value.trim();
+  if(!name){toast("Give the engagement a name","warn");return;}
+  const start=$("#na-start").value, end=$("#na-end").value;
+  if(start&&end&&end<start){toast("The period ends before it starts","warn");return;}
+  const body={name,auditor:$("#na-auditor").value.trim()||null,
+    period_start:start?new Date(start).toISOString():null,
+    period_end:end?new Date(end).toISOString():null};
+  const fw=$("#na-fw").value;
+  if(fw)body.framework=fw;      /* omitted, not blanked — the server defaults it */
+  if(STATE.demo){closeSettings();toast("Demo mode sends no request \u2014 turn demo off to create this engagement","warn");return;}
+  try{await apiPOST(withTenant("/audits"),body);closeSettings();
+    toast('Created "'+name+'"',"pass");render();}
+  catch(e){toast("Could not create it: "+(e.message||e),"warn");}
+}
+
 const LOCAL_CONN_KEY="cl-local-connections";
 function loadLocalConns(){try{return JSON.parse(localStorage.getItem(LOCAL_CONN_KEY)||"[]");}catch(e){return [];}}
 function saveLocalConns(a){try{localStorage.setItem(LOCAL_CONN_KEY,JSON.stringify(a||[]));}catch(e){}}
@@ -2401,21 +2611,90 @@ RENDER.policy = async function(){
 };
 
 /* PDF policies inserted this session (persist across re-renders; merged into the
-   live library above). Wiring a POST /policies/import endpoint would persist them
-   server-side and run extraction. */
+   live library above). */
 var PDF_POLICIES=[];
+var PDF_MAX_BYTES=8*1024*1024;
+
+/* This used to POST {name: f.name} to /policies/import and then toast
+   'Imported "x.pdf" as a draft policy'. The file's bytes were never read. That
+   endpoint takes an optional `yaml` key; given only a name it replies
+
+     {"imported": true, "name": "x.pdf",
+      "note": "acknowledged; supply 'yaml' to validate and load a policy"}
+
+   — and the UI dropped the note, claimed success, and re-rendered a list that
+   was unchanged. Nothing was stored, nothing was extracted, and nothing said
+   so. Worse, in demo mode the same click DID add a visible row, so the feature
+   demonstrated correctly and no-oped in production.
+
+   /v1/documents/upload is the endpoint that does what the button says: it
+   takes the base64 file, pulls text out of the PDF, and returns the controls
+   the document asserts, each with the quote that justifies it. It deliberately
+   does NOT write to posture — a document asserting a control is not the control
+   working — and it says so in its own `persisted.reason`, which the dialog
+   below quotes verbatim rather than paraphrasing into "imported". */
+function fileToBase64(file){
+  return new Promise(function(resolve,reject){
+    var r=new FileReader();
+    r.onerror=function(){reject(new Error("could not read the file"));};
+    /* readAsDataURL, not a manual byte loop: String.fromCharCode.apply over a
+       multi-megabyte array overflows the argument stack. */
+    r.onload=function(){var s=String(r.result||"");var i=s.indexOf(",");resolve(i<0?"":s.slice(i+1));};
+    r.readAsDataURL(file);
+  });
+}
+
 function insertPolicyPdf(input){
   var f=input&&input.files&&input.files[0]; if(input)input.value="";
   if(!f)return;
   if(f.type!=="application/pdf" && !/\.pdf$/i.test(f.name)){toast("Please choose a PDF file","warn");return;}
+  if(f.size>PDF_MAX_BYTES){
+    toast("That file is "+(f.size/1048576).toFixed(1)+" MB — the limit is "+(PDF_MAX_BYTES/1048576)+" MB","warn");return;
+  }
   var title=f.name.replace(/\.pdf$/i,"").replace(/[_-]+/g," ").trim();
   if(STATE.demo){
-    PDF_POLICIES.unshift({id:"PDF · "+f.name,title:title||f.name,lang:"PDF",version:"0.1-draft",coverage:["uploaded"],status:"draft",last_eval:null,source:"pdf",size_kb:Math.max(1,Math.round(f.size/1024))});
-    toast('Inserted "'+f.name+'" as a draft policy (demo)','pass');render();return;
+    PDF_POLICIES.unshift({id:"PDF · "+f.name,title:title||f.name,lang:"PDF",version:"0.1-draft",coverage:["not extracted"],status:"draft",last_eval:null,source:"pdf",size_kb:Math.max(1,Math.round(f.size/1024))});
+    showDocExtract(f.name,null,"Demo mode sends no request, so nothing was read out of this file. It is listed below as a placeholder only. Turn demo off to extract the controls it asserts.");
+    render();return;
   }
-  apiPOST(withTenant("/policies/import"),{name:f.name})
-    .then(()=>{toast('Imported "'+f.name+'" as a draft policy','pass');render();})
-    .catch(e=>toast("Import failed: "+((e&&e.message)||e),"warn"));
+  toast("Reading "+f.name+"…");
+  fileToBase64(f)
+    .then(function(b64){
+      if(!b64)throw new Error("the file came back empty");
+      return apiPOST(withTenant("/v1/documents/upload"),{filename:f.name,content_base64:b64});
+    })
+    .then(function(r){ showDocExtract(f.name,r,""); })
+    .catch(function(e){ toast("Extraction failed: "+((e&&e.message)||e),"warn"); });
+}
+
+/* What came out of the document, and — just as important — what did not happen
+   to it. `note` carries the demo caveat; for a live result the server's own
+   `persisted.reason` is shown instead. */
+function showDocExtract(filename,result,note){
+  var controls=(result&&result.controls)||[];
+  var s=$("#settings");
+  var readouts = result ? `<div class="readouts" style="margin:0 0 12px">
+      <div class="ro"><div class="k">Controls asserted</div><div class="v num">${controls.length}</div></div>
+      <div class="ro"><div class="k">Extraction</div><div class="v" style="font-size:16px;font-family:var(--mono)">${esc(result.extraction_method||"—")}</div></div>
+      <div class="ro"><div class="k">Text extracted</div><div class="v num">${Number(result.markdown_chars||0).toLocaleString()}<small> chars</small></div></div>
+    </div>` : "";
+  var table = controls.length ? `<div class="tbl-scroll" style="max-height:320px"><table>
+      <thead><tr><th>Control</th><th>Frameworks</th><th>Confidence</th><th>Justifying quote</th></tr></thead>
+      <tbody>${controls.map(function(c){return `<tr>
+        <td class="id">${esc(c.control_id)}</td>
+        <td>${(c.frameworks||[]).map(function(fw){return `<span class="chip c-out">${esc(fw)}</span>`;}).join(" ")}</td>
+        <td class="num">${Math.round((c.confidence||0)*100)}%</td>
+        <td style="font-size:11.5px;color:var(--steel);line-height:1.5">${esc(c.quote||"")}</td></tr>`;}).join("")}</tbody>
+    </table></div>`
+    : (result ? emptyState("No controls recognised",
+        "The text was read, but nothing in it matched a control concept. A scanned PDF with no text layer is the usual reason.") : "");
+  var why = note || ((result&&result.persisted&&result.persisted.reason) || "");
+  s.innerHTML=`<div class="dialog" style="max-width:760px"><div class="dialog-h"><h3>Controls asserted by ${esc(filename)}</h3></div>
+  <div class="dialog-b">${readouts}${table}
+    ${why?`<div class="note" style="margin-top:12px"><b>Nothing was written to posture.</b> ${esc(why)}</div>`:""}
+  </div>
+  <div class="dialog-f"><div style="flex:1"></div><button class="btn primary" ${act("closeSettings")}>Close</button></div></div>`;
+  s.classList.add("on");s.onclick=function(e){if(e.target===s)closeSettings();};
 }
 
 /* ---------- AGENT LOG ---------- */
@@ -2749,7 +3028,8 @@ RENDER.response = async function(){
 /* ---------- AUDITS ---------- */
 RENDER.audits = async function(){
   const m=main();
-  m.innerHTML=viewHead("Audits","Active and historical audit engagements, the auditor's read-only access window, and request status.","","posture / 05");
+  m.innerHTML=viewHead("Audits","Active and historical audit engagements, the auditor's read-only access window, and request status.",
+    `<button class="btn primary" ${act("openNewAudit")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New audit</button>`,"posture / 05");
   const m2=el("div");m.appendChild(m2);m2.innerHTML=`<div class="loading"><span class="spin"></span> Loading…</div>`;
   let audits;
   if(STATE.demo){
@@ -2768,7 +3048,12 @@ RENDER.audits = async function(){
     }catch(e){audits=[];}
   }
   CACHE.audits=audits;
-  if(!audits.length){m2.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("No audit engagements yet","Create one to start tracking evidence requests and auditor readiness.")}</div></div>`;return;}
+  /* The empty state used to say "Create one to start tracking…" while the
+     dashboard had no action that created an audit — POST /audits existed and
+     was unreachable. An instruction you cannot follow is worse than no
+     instruction, so the button is here as well as in the view head. */
+  if(!audits.length){m2.innerHTML=`<div class="panel"><div class="panel-b">${emptyState("No audit engagements yet","Create one to start tracking evidence requests and auditor readiness.")}
+    <div style="display:flex;justify-content:center;margin-top:-8px;padding-bottom:18px"><button class="btn primary" ${act("openNewAudit")}><svg viewBox='0 0 24 24' fill='none' stroke-width='2'><path d='M12 5v14M5 12h14'/></svg>New audit</button></div></div></div>`;return;}
   m2.innerHTML=`
   <div class="readouts">
     <div class="ro"><div class="k">Engagements</div><div class="v num">${audits.length}</div></div>
@@ -3336,7 +3621,7 @@ const ICON={
   setup:'<path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1A1.7 1.7 0 008.9 19a1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.6 8.9a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>',
 };
 const GROUPS=[
-  ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"],["postureasof","As-of / Timeline"],["automation","Automation Coverage"]]],
+  ["Posture",[["overview","Overview"],["controls","Controls"],["findings","Findings"],["waivers","Waivers"],["frameworks","Frameworks"],["audits","Audits"],["reports","Reports"],["postureasof","As-of / Timeline"],["automation","Automation Coverage"]]],
   ["Compliance as Code",[["policy","Policies"],["enforcement","Enforcement"],["agentlog","Agent Log"]]],
   ["Evidence",[["connectors","Connectors"],["grcplatforms","GRC Platforms"],["graph","Knowledge Graph"],["evidencehub","Evidence"],["evidenceingest","Standards Ingest"]]],
   ["Deployment",[["setup","Setup"]]],
