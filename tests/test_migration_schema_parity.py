@@ -78,6 +78,53 @@ def migrated_schema(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
+def migrated_detail(tmp_path_factory):
+    """The same migrated database, read for nullability as well as names.
+
+    A separate fixture rather than a richer `migrated_schema`, so the four
+    original name-parity tests keep asserting exactly what they asserted
+    before — this file's own history is the argument for not quietly widening
+    a check that other tests depend on.
+    """
+    alembic_config = pytest.importorskip("alembic.config")
+    alembic_command = pytest.importorskip("alembic.command")
+
+    from app.config import settings
+
+    db_path = tmp_path_factory.mktemp("migrated_detail") / "schema.db"
+    url = f"sqlite:///{db_path}"
+
+    cfg = alembic_config.Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", url)
+
+    original = settings.database_url
+    settings.database_url = url
+    try:
+        alembic_command.upgrade(cfg, "head")
+    finally:
+        settings.database_url = original
+
+    engine = create_engine(url)
+    try:
+        insp = inspect(engine)
+        return {t: {c["name"]: bool(c["nullable"]) for c in insp.get_columns(t)}
+                for t in insp.get_table_names() if t not in ALEMBIC_TABLES}
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(scope="module")
+def model_detail():
+    """Nullability as the ORM models declare it."""
+    import app.crawler_models  # noqa: F401
+    import app.models  # noqa: F401
+    import app.policy_models  # noqa: F401
+    return {name: {c.name: bool(c.nullable) for c in table.columns}
+            for name, table in Base.metadata.tables.items()}
+
+
+@pytest.fixture(scope="module")
 def model_schema():
     """Every table and column the ORM models declare.
 
@@ -183,14 +230,123 @@ def test_alembic_env_registers_every_module_that_defines_a_table():
     imported = {ast.unparse(node) for node in ast.walk(ast.parse(env_src))
                 if isinstance(node, (ast.Import, ast.ImportFrom))}
 
-    defining = {path.stem for path in (ROOT / "app").glob("*.py")
-                if "__tablename__" in path.read_text()}
-    # app.models re-exports these, so importing it registers them too.
-    transitive = {"ai_governance_models", "audit_models", "grc_tprm_models"}
+    # rglob, not glob, and dotted paths, not stems. Two bugs in one line:
+    #
+    #   * the top-level-only glob never saw app/grc_platforms/models.py, which
+    #     is how seven drifted columns in grc_attestations stayed invisible to
+    #     a check written to find exactly that kind of thing;
+    #   * `path.stem` calls that file "models" — the same key as app/models.py,
+    #     so the nested one could never be distinguished from the top-level one
+    #     even once the glob found it.
+    #
+    # A search that cannot see a file reports it as clean, and a key that
+    # collides reports one file's state for another.
+    defining = {".".join(path.relative_to(ROOT).with_suffix("").parts)
+                for path in (ROOT / "app").rglob("*.py")
+                if "__pycache__" not in str(path)
+                and "__tablename__" in path.read_text(errors="ignore")}
+    # Registered transitively by importing app.models, which re-exports them.
+    transitive = {"app.ai_governance_models", "app.audit_models",
+                  "app.grc_tprm_models", "app.grc_platforms.models"}
 
     missing = sorted(module for module in defining - transitive
-                     if not any(f"app.{module}" in line for line in imported))
+                     if not any(module in line for line in imported))
     assert not missing, (
         "these modules define tables but alembic/env.py never imports them, so "
         "their tables are invisible to --autogenerate and it will propose "
         f"dropping them: {missing}")
+
+
+# ── nullability: the half this file could not see ──
+#
+# The four tests above compare NAMES. A column present in both schemas passes
+# them regardless of whether the database enforces the constraint the model
+# declares, and that blind spot hid 91 drifted columns across 18 tables for as
+# long as this file has existed. An unapplied patch in the repository root had
+# reported the same defect at 68 columns more than a year earlier; nothing in
+# CI could confirm or deny it, because nothing in CI looked.
+#
+# The lesson generalises past nullability: a parity test is only as good as the
+# properties it compares, and "the column exists" is the weakest of them.
+
+def test_every_model_not_null_is_enforced_by_the_database(model_detail, migrated_detail):
+    """A column the models declare NOT NULL must be NOT NULL in production.
+
+    When it is not, the application is asserting an invariant nothing enforces.
+    Tests never notice, because conftest builds the schema from the models and
+    therefore always gets the strict version; only the deployed database is
+    loose, and the first symptom is a row that could not exist.
+    """
+    drift = {}
+    for table, columns in model_detail.items():
+        if table not in migrated_detail:
+            continue
+        loose = sorted(col for col, nullable in columns.items()
+                       if nullable is False
+                       and migrated_detail[table].get(col) is True)
+        if loose:
+            drift[table] = loose
+    assert not drift, (
+        "these columns are NOT NULL in the models and nullable in the migrated "
+        "database, so the schema accepts rows the application assumes cannot "
+        f"exist: {drift}")
+
+
+def test_no_column_is_stricter_in_the_database_than_in_the_models(
+        model_detail, migrated_detail):
+    """The other direction, and the more dangerous one at runtime.
+
+    A column the models believe is optional but the database requires produces
+    an IntegrityError on a write path the type annotations say is fine — and it
+    fails in production on real data, never in a test.
+    """
+    drift = {}
+    for table, columns in model_detail.items():
+        if table not in migrated_detail:
+            continue
+        strict = sorted(col for col, nullable in columns.items()
+                        if nullable is True
+                        and migrated_detail[table].get(col) is False)
+        if strict:
+            drift[table] = strict
+    assert not drift, (
+        "these columns are optional in the models and NOT NULL in the database; "
+        f"a write the models permit will raise IntegrityError: {drift}")
+
+
+def test_no_column_asks_for_two_indexes_on_itself():
+    """`index=True` beside an explicit `Index()` on the same column.
+
+    SQLAlchemy honours both, so the table carries two indexes covering exactly
+    one column — every insert and update maintains both, for a read benefit
+    only the first provides. Found while checking a patch's claim that three
+    evidence indexes were missing: they were not missing, they were declared
+    twice under two different names, and only one spelling reached a migration.
+    """
+    import app.crawler_models  # noqa: F401
+    import app.models  # noqa: F401
+    import app.policy_models  # noqa: F401
+
+    # `index=True` does not merely set a flag — SQLAlchemy synthesises an Index
+    # for it and attaches it to table.indexes under the generated name
+    # `ix_<table>_<column>`. So comparing the flagged columns against every
+    # single-column index matches each flagged column against the index it
+    # created itself, and reports the entire codebase. The duplicate is only
+    # real when a SECOND single-column index covers the column under a
+    # different name.
+    doubled = {}
+    for name, table in Base.metadata.tables.items():
+        flagged = {c.name for c in table.columns if c.index}
+        extra = {}
+        for ix in table.indexes:
+            cols = list(ix.columns.keys())
+            if len(cols) != 1 or cols[0] not in flagged:
+                continue
+            if ix.name != f"ix_{name}_{cols[0]}":     # not the synthesised one
+                extra.setdefault(cols[0], []).append(ix.name)
+        if extra:
+            doubled[name] = {c: sorted(n) for c, n in sorted(extra.items())}
+    assert not doubled, (
+        "these columns declare index=True and are ALSO covered by a separately "
+        "named single-column Index(), so two indexes are built and maintained "
+        f"where one is read: {doubled}")

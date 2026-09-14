@@ -99,9 +99,28 @@ gen_secret() {
 
 if [ -f "$ENV_FILE" ]; then
   ok "Using existing $ENV_FILE (not overwriting)"
+  # An .env written by an earlier version of this script pairs APP_ENV=production
+  # with a blank COMP_LENS_API_KEYS, which app/main.py refuses to start on. Say
+  # so here, with the fix, rather than letting it surface as a health-check
+  # timeout three minutes from now.
+  if grep -q '^APP_ENV=production' "$ENV_FILE" 2>/dev/null \
+     && ! grep -qE '^COMP_LENS_API_KEYS=.+' "$ENV_FILE" 2>/dev/null; then
+    warn "$ENV_FILE sets APP_ENV=production but COMP_LENS_API_KEYS is empty."
+    say  "Comp-Lens refuses to start in production without authentication,"
+    say  "because an empty key list would make every request an all-tenant admin."
+    say  ""
+    say  "Add a key to $ENV_FILE, for example:"
+    say  "  ${c_bold}COMP_LENS_API_KEYS=$(gen_secret):*${c_reset}"
+    say  ""
+    say  "Then re-run ./install.sh"
+    exit 1
+  fi
 elif [ "$DB_CHOICE" = "own" ]; then
   info "Generating secrets and writing $ENV_FILE (using your database)…"
   SIGNING_KEY="$(gen_secret)"
+  # APP_ENV=production below makes app/main.py refuse to start without an API
+  # key, so the installer mints one rather than writing a blank it will reject.
+  ADMIN_KEY="$(gen_secret)"
   cat > "$ENV_FILE" <<ENVEOF
 # ─── Comp-Lens configuration (generated $(date -u +%Y-%m-%dT%H:%MZ)) ───
 # Secrets below were auto-generated. Keep this file private — do NOT commit it.
@@ -120,9 +139,11 @@ HOST_PORT=${HOST_PORT}
 ENABLE_SCHEDULER=false
 EVIDENCE_BACKEND=local
 
-# ─── Optional: API auth ───────────────────────────────────────────
-# Leave blank for no auth (fine behind a VPN). Format: "key:tenant,key2:*"
-COMP_LENS_API_KEYS=
+# ─── API auth (required when APP_ENV=production) ──────────────────
+# Format: "key:tenant,key2:*" — ":*" grants access to every tenant.
+# This admin key was generated for you. Add more keys by appending them,
+# comma-separated. Blanking this line will stop the app from starting.
+COMP_LENS_API_KEYS=${ADMIN_KEY}:*
 
 # ─── Optional: activate live connectors ───────────────────────────
 # Only connectors listed here make real API calls. e.g. OKTA,GITHUB,AWS
@@ -142,6 +163,9 @@ ENVEOF
 else
   info "Generating secrets and writing $ENV_FILE…"
   SIGNING_KEY="$(gen_secret)"
+  # APP_ENV=production below makes app/main.py refuse to start without an API
+  # key, so the installer mints one rather than writing a blank it will reject.
+  ADMIN_KEY="$(gen_secret)"
   DB_PASS="$(gen_secret | cut -c1-24)"
   cat > "$ENV_FILE" <<ENVEOF
 # ─── Comp-Lens configuration (generated $(date -u +%Y-%m-%dT%H:%MZ)) ───
@@ -161,9 +185,11 @@ HOST_PORT=${HOST_PORT}
 ENABLE_SCHEDULER=false
 EVIDENCE_BACKEND=local
 
-# ─── Optional: API auth ───────────────────────────────────────────
-# Leave blank for no auth (fine behind a VPN). Format: "key:tenant,key2:*"
-COMP_LENS_API_KEYS=
+# ─── API auth (required when APP_ENV=production) ──────────────────
+# Format: "key:tenant,key2:*" — ":*" grants access to every tenant.
+# This admin key was generated for you. Add more keys by appending them,
+# comma-separated. Blanking this line will stop the app from starting.
+COMP_LENS_API_KEYS=${ADMIN_KEY}:*
 
 # ─── Optional: activate live connectors ───────────────────────────
 # Only connectors listed here make real API calls. e.g. OKTA,GITHUB,AWS
@@ -226,8 +252,17 @@ else
   printf "              Back it up with ${c_bold}make backup${c_reset} — nothing else will.\n\n"
 fi
 printf "  Dashboard   ${c_bold}http://%s:%s/dashboard${c_reset}\n" "$HOST_ADDR" "$HOST_PORT"
-printf "  API docs    http://%s:%s/docs\n" "$HOST_ADDR" "$HOST_PORT"
 printf "  Health      http://%s:%s/health/ready\n\n" "$HOST_ADDR" "$HOST_PORT"
+
+# The API key is the one thing here that cannot be recovered from a running
+# container, so print it where it cannot be missed.
+if [ -n "${ADMIN_KEY:-}" ]; then
+  printf "  ${c_bold}Your admin API key${c_reset} (stored in %s — it is not shown again):\n" "$ENV_FILE"
+  printf "    ${c_bold}%s${c_reset}\n\n" "$ADMIN_KEY"
+  printf "  Try it:\n"
+  printf "    curl -H 'X-API-Key: %s' http://%s:%s/health/ready\n\n" \
+         "$ADMIN_KEY" "$HOST_ADDR" "$HOST_PORT"
+fi
 printf "Useful commands:\n"
 printf "  View logs       ${c_bold}%s logs -f app${c_reset}\n" "$COMPOSE"
 printf "  Stop            ${c_bold}%s down${c_reset}\n" "$COMPOSE"
