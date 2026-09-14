@@ -12,8 +12,9 @@ Usage:
     python tools/extract_scf_crosswalk.py \\
         --xlsx securecontrolsframework/secure-controls-framework-scf-2026-2.xlsx
 
-Parsed with the stdlib only (zipfile + ElementTree) — an .xlsx is a zip of XML,
-and neither openpyxl nor pandas is a dependency of this project.
+Parsed with zipfile + defusedxml's ElementTree (a hardened drop-in for the
+stdlib parser) — an .xlsx is a zip of XML, and neither openpyxl nor pandas is
+a dependency of this project.
 
 TWO NORMALIZATION DECISIONS, both verified against the workbook and both easy
 to get silently wrong on a naive regeneration:
@@ -47,9 +48,13 @@ import argparse
 import json
 import re
 import sys
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+
+# Parsing with defusedxml, not the stdlib parser: an SCF workbook is external
+# input, and the stdlib XML parser is vulnerable to entity-expansion ("billion
+# laughs") and external-entity attacks on untrusted documents.
+import defusedxml.ElementTree as ET
 
 NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 RELS_NS = {"r": "http://schemas.openxmlformats.org/package/2006/relationships"}

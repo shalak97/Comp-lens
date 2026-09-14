@@ -15,12 +15,15 @@ hard edges can cause a downstream control to be reported as failed.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from functools import lru_cache
 from typing import Any
 
 from app.services import evidence_graph as evg
 from app.services.control_identity import canonical_control_id
+
+logger = logging.getLogger(__name__)
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
@@ -80,7 +83,11 @@ def _graph() -> dict[str, list[dict[str, Any]]]:
                 put(src, tgt, "soft", SOFT_WEIGHT_NIST, "nist_related",
                     "NIST 800-53 lists these as related controls.")
     except FileNotFoundError:
-        pass
+        # nist_related.json is an optional soft-edge dataset; its absence just
+        # means the graph has fewer weak/associative edges, not a bug — but
+        # log it so a genuinely missing data file isn't mistaken for "loaded
+        # zero related-controls".
+        logger.info("nist_related.json not found; skipping NIST related-control soft edges")
 
     return {src: list(b.values()) for src, b in adj.items()}
 

@@ -21,12 +21,12 @@ import logging
 from typing import Any
 from urllib.parse import urlparse
 
-try:  # defused parser blocks entity-expansion ("billion laughs") / external entities
-    from defusedxml.ElementTree import fromstring as _xml_fromstring
-except ImportError:  # pragma: no cover — falls back to stdlib if defusedxml absent
-    from xml.etree.ElementTree import fromstring as _xml_fromstring
-
 import requests
+
+# defusedxml is a hard dependency (see requirements.txt): the stdlib XML parser
+# is vulnerable to entity-expansion ("billion laughs") / external-entity attacks
+# on the untrusted SOAP responses this module parses, so there is no fallback.
+from defusedxml.ElementTree import fromstring as _xml_fromstring
 
 from app.config import settings
 from app.connectors.base import ConnectorError
@@ -36,6 +36,16 @@ logger = logging.getLogger(__name__)
 
 # cache SQLAlchemy engines per url so we reuse connection pools
 _engines: dict[str, Any] = {}
+
+
+def _xml_escape(text: str) -> str:
+    """Escape &, <, > so `text` is safe as XML element content.
+
+    Equivalent to xml.sax.saxutils.escape's default behavior, reimplemented
+    here so this module has no dependency on the stdlib xml package outside
+    the hardened defusedxml parser used for parsing SOAP responses above.
+    """
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _engine(url: str):
@@ -150,9 +160,10 @@ def _fetch_file(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
 def _fetch_soap(source: LegacySource, asset_id: str | None) -> dict[str, Any]:
     if not source.template or not source.field_paths:
         raise ConnectorError("soap source needs 'template' and 'field_paths'")
-    from xml.sax.saxutils import escape as _xml_escape
     # asset_id is client-controlled: XML-escape it so it can't break out of the
-    # envelope element or inject markup into the request body.
+    # envelope element or inject markup into the request body. Escaped by hand
+    # (rather than xml.sax.saxutils.escape) to avoid any dependency on the
+    # stdlib xml package outside the hardened defusedxml parser used below.
     envelope = source.template.replace("{asset_id}", _xml_escape(str(asset_id or "")))
     headers = {"Content-Type": "text/xml; charset=utf-8"}
     if source.soap_action:

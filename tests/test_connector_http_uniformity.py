@@ -216,6 +216,8 @@ _NON_CONNECTOR_HTTP = {
     "policy/engine.py": "OPA decision endpoint — normally a localhost sidecar",
     "legacy/transports.py": "legacy envelope POST to an operator-configured endpoint",
     "notifications.py": "Slack / generic webhook — a POST is the whole point",
+    "services/threat_intel.py": "CISA KEV / EPSS / NVD public feeds — hardcoded hosts, "
+                                "own cache + graceful fallback on any failure",
 }
 
 APP_DIR = pathlib.Path(__file__).resolve().parent.parent / "app"

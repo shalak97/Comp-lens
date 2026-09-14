@@ -338,7 +338,7 @@ class AWSConnector(BaseConnector):
                     "password_max_age_days": 0,
                 })
             else:
-                logger.info("AWS password policy unavailable: %s", exc)
+                logger.info("AWS password policy unavailable: %r", exc)
         return out
 
     # ── IAM ──
@@ -356,8 +356,8 @@ class AWSConnector(BaseConnector):
         try:
             user = iam.get_user(UserName=username)["User"]
             days_since = _days_since(user.get("PasswordLastUsed"))
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.info("IAM get_user unavailable for %s: %s", username, exc)
 
         try:
             iam.get_login_profile(UserName=username)
@@ -373,8 +373,8 @@ class AWSConnector(BaseConnector):
             ages = [_days_since(k.get("CreateDate")) for k in keys]
             ages = [a for a in ages if a is not None]
             key_age = max(ages) if ages else 0
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.info("IAM list_access_keys unavailable for %s: %s", username, exc)
 
         inline = None
         admin = None
@@ -383,8 +383,8 @@ class AWSConnector(BaseConnector):
             attached = iam.list_attached_user_policies(UserName=username).get(
                 "AttachedPolicies", [])
             admin = any(p.get("PolicyName") == "AdministratorAccess" for p in attached)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.info("IAM policy lookup unavailable for %s: %s", username, exc)
 
         return {
             # legacy field names preserved for the original AC-2-* controls

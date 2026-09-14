@@ -101,7 +101,11 @@ def evaluate(db: Session, tenant_id: str, framework: str, control_id: str) -> di
         if result.get("satisfied"):
             result["propagated_to"] = mapped_controls(control_id, framework)[:10]
     except Exception:
-        pass
+        # Crosswalk propagation is a nice-to-have add-on to the decision, not
+        # part of it — but a silent failure here shouldn't look identical to
+        # "this control just has no mapped controls".
+        logger.warning(
+            "crosswalk propagation failed for %s/%s", framework, control_id, exc_info=True)
     return result
 
 

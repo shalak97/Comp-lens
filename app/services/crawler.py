@@ -25,6 +25,7 @@ hop, caps size/time/redirects) and layers crawler-specific guardrails on top:
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 import urllib.robotparser
 from datetime import UTC
@@ -43,6 +44,8 @@ EXCERPT_CHARS = 500
 _ROBOTS_CACHE: dict[str, tuple] = {}   # domain -> (RobotFileParser, cached_at)
 _ROBOTS_TTL_SEC = 3600
 _UA = "CompLens-Crawler/1.0 (guardrailed, public-page-only)"
+
+logger = logging.getLogger(__name__)
 
 
 def _aware(dt):
@@ -191,8 +194,8 @@ def _record(db: Session, tenant_id: str, target: CrawlTarget, status: str, *,
                          entity_id=target.id,
                          summary=f"{target.kind}:{target.name} — {status}",
                          meta={"url": target.url, "domain": target.domain})
-    except Exception:  # noqa: BLE001 — audit logging must never break a crawl
-        pass
+    except Exception as exc:  # noqa: BLE001 — audit logging must never break a crawl
+        logger.warning("audit event write failed for crawl target %s: %s", target.id, exc)
     db.commit()
     return _result_dict(r)
 
@@ -228,8 +231,9 @@ def run_target(db: Session, tenant_id: str, target_id: str, *, force: bool = Fal
     try:
         if not _robots_allowed(t.url):
             return _record(db, tenant_id, t, "robots_disallowed")
-    except Exception:  # noqa: BLE001
-        pass  # never let a robots-check failure block a crawl; default allow
+    except Exception as exc:  # noqa: BLE001
+        # never let a robots-check failure block a crawl; default allow
+        logger.info("robots.txt check failed for %s, defaulting to allow: %s", t.url, exc)
 
     # the guarded fetch itself
     start = time.monotonic()

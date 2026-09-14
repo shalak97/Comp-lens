@@ -1378,7 +1378,10 @@ def simulate_blast_radius(req: _SimRequest,
             result["threat_intel"] = {"enriched": len(enrichment),
                                       "pressure": _ti.threat_pressure()}
     except Exception:
-        pass
+        # Threat-intel enrichment is best-effort and must never fail the
+        # simulation itself, but a silent failure here just means the response
+        # quietly lacks threat_intel with no trace of why — log it.
+        logger.exception("threat-intel enrichment failed for blast-radius simulation")
     return result
 
 
